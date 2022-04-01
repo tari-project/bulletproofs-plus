@@ -1,0 +1,44 @@
+[package]
+name = "tari_bulletproofs_plus"
+version = "0.0.1"
+authors = ["The Tari Development Community"]
+edition = "2018"
+license = "BSD-3-Clause"
+description = "A smaller faster implementation of Bulletproofs"
+
+[dependencies]
+curve25519-dalek = { package = "curve25519-dalek-ng", version = "4.1", default-features = false, features = ["u64_backend", "serde", "alloc"] }
+#subtle = { package = "subtle-ng", version = "2.5", default-features = false }
+sha3 = { version = "0.9.1", default-features = false }
+blake2 = "0.9.1"
+digest = { version = "0.9.0", default-features = false }
+rand_core = { version = "0.6", default-features = false, features = ["alloc"] }
+rand = "0.8"
+byteorder = { version = "1", default-features = false }
+#serde = { version = "1", default-features = false, features = ["alloc"] }
+#serde_derive = { version = "1", default-features = false }
+thiserror = { version = "1"}
+merlin = { version = "3", default-features = false }
+#zeroize = "1.5.3"
+non-empty-vec = "0.2.3"
+derivative = "2.2.0"
+
+# for testing only
+hex = "0.3"
+
+[dev-dependencies]
+#hex = "0.3"
+#criterion = "0.3"
+#bincode = "1"
+#rand_chacha = "0.3"
+
+[features]
+#default = ["std"]
+#simd_backend = ["curve25519-dalek/simd_backend"]
+#avx2_backend = ["simd_backend"] # deprecated alias for simd_backend
+#std = ["rand", "rand/std", "rand/std_rng", "thiserror", "curve25519-dalek/std"]
+#nightly = ["curve25519-dalek/nightly", "curve25519-dalek/alloc", "subtle/nightly"]
+
+
+[[test]]
+name = "main_test"
