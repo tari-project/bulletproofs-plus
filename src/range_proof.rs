@@ -5,7 +5,8 @@ use crate::errors::ProofError;
 use crate::inner_product_round::InnerProductRound;
 use crate::range_statement::RangeStatement;
 use crate::range_witness::RangeWitness;
-use crate::transcript::TranscriptProtocol;
+use crate::scalar_protocol::ScalarProtocol;
+use crate::transcript_protocol::TranscriptProtocol;
 use crate::utils::{bit_vector_of_scalars, nonce};
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
@@ -138,17 +139,11 @@ impl RangeProof {
 
         transcript.domain_separator(b"Bulletproof+", b"Range Proof");
         transcript.validate_and_append_point(b"H", &h_base.compress())?;
-        transcript.validate_and_append_point(b"G", &h_base.compress())?;
+        transcript.validate_and_append_point(b"G", &g_base.compress())?;
         transcript.append_u64(b"N", bit_length as u64);
         transcript.append_u64(b"M", batch_size as u64);
-        for item in hi_base.clone() {
-            transcript.validate_and_append_point(b"Hi", &item.compress())?;
-        }
-        for item in gi_base.clone() {
-            transcript.validate_and_append_point(b"Gi", &item.compress())?;
-        }
         for item in statement.commitments.clone() {
-            transcript.validate_and_append_point(b"Ci", &item.compress())?;
+            transcript.append_point(b"Ci", &item.compress());
         }
 
         // Set bit arrays
@@ -164,10 +159,10 @@ impl RangeProof {
 
         // Compute A by multi-scalar multiplication
         let rng = &mut thread_rng();
-        let alpha = if let Some(seed) = statement.seed {
-            nonce(&seed, "alpha", None)?
+        let alpha = if let Some(seed_nonce) = statement.seed_nonce {
+            nonce(&seed_nonce, "alpha", None)?
         } else {
-            Scalar::random(rng)
+            Scalar::random_not_zero(rng)
         };
         let mut ai_scalars = vec![alpha];
         let mut ai_points = vec![g_base];
@@ -179,11 +174,11 @@ impl RangeProof {
             ai_points.push(hi_base[i]);
         }
         let a = RistrettoPoint::multiscalar_mul(ai_scalars, ai_points);
-        transcript.validate_and_append_point(b"H", &a.compress())?;
+        transcript.validate_and_append_point(b"A", &a.compress())?;
 
         // Get challenges
-        let y = transcript.challenge_scalar(b"y");
-        let z = transcript.challenge_scalar(b"z");
+        let y = transcript.challenge_scalar(b"y")?;
+        let z = transcript.challenge_scalar(b"z")?;
         let z_square = z * z;
 
         // Compute powers of the challenge
@@ -231,7 +226,7 @@ impl RangeProof {
             alpha1,
             y_powers,
             transcript,
-            statement.seed,
+            statement.seed_nonce,
         )?;
         loop {
             let _ = ip_data.inner_product(rng);
@@ -383,51 +378,36 @@ impl RangeProof {
             let rounds = li.len();
 
             // Batch weight (may not be equal to a zero valued scalar)
-            let weight = Scalar::random(rng);
+            let weight = Scalar::random_not_zero(rng);
 
             // Start the transcript
             let mut transcript = Transcript::new(transcript_label.as_bytes());
             transcript.domain_separator(b"Bulletproof+", b"Range Proof");
             transcript.validate_and_append_point(b"H", &h_base.compress())?;
-            transcript.validate_and_append_point(b"G", &h_base.compress())?;
+            transcript.validate_and_append_point(b"G", &g_base.compress())?;
             transcript.append_u64(b"N", bit_length as u64);
             transcript.append_u64(b"M", batch_size as u64);
-            for i in 0..statements[index].generators.hi_base().len() {
-                transcript.validate_and_append_point(
-                    b"Hi",
-                    &statements[index].generators.hi_base()[i].compress(),
-                )?;
-            }
-            for i in 0..statements[index].generators.gi_base().len() {
-                transcript.validate_and_append_point(
-                    b"Gi",
-                    &statements[index].generators.gi_base()[i].compress(),
-                )?;
-            }
             for i in 0..(statements[index].commitments.len()) {
-                transcript.validate_and_append_point(
-                    b"Ci",
-                    &statements[index].commitments[i].compress(),
-                )?;
+                transcript.append_point(b"Ci", &statements[index].commitments[i].compress());
             }
 
             // Reconstruct challenges
-            transcript.validate_and_append_point(b"H", &proof.a)?;
-            let y = transcript.challenge_scalar(b"y");
-            let z = transcript.challenge_scalar(b"z");
+            transcript.validate_and_append_point(b"A", &proof.a)?;
+            let y = transcript.challenge_scalar(b"y")?;
+            let z = transcript.challenge_scalar(b"z")?;
             transcript.domain_separator(b"Bulletproof+", b"Inner Product Proof");
             let mut challenges = vec![];
-            let mut challenges_inv = vec![];
             for j in 0..rounds {
                 transcript.validate_and_append_point(b"L", &li[j].compress())?;
                 transcript.validate_and_append_point(b"R", &ri[j].compress())?;
-                let e = transcript.challenge_scalar(b"e");
+                let e = transcript.challenge_scalar(b"e")?;
                 challenges.push(e);
-                challenges_inv.push(e.invert());
             }
+            let mut challenges_inv = challenges.clone();
+            let _ = Scalar::batch_invert(&mut challenges_inv);
             transcript.validate_and_append_point(b"A1", &a1.compress())?;
             transcript.validate_and_append_point(b"B", &b.compress())?;
-            let e = transcript.challenge_scalar(b"e");
+            let e = transcript.challenge_scalar(b"e")?;
 
             // Compute useful challenge values
             let z_square = z * z;
@@ -468,14 +448,16 @@ impl RangeProof {
             d_sum *= two_n_minus_one;
 
             // Recover the mask if possible (only for non-aggregated proofs)
-            if let Some(seed) = statements[index].seed {
-                let mut mask = (d1 - nonce(&seed, "eta", None)? - e * nonce(&seed, "d", None)?)
-                    * e.invert()
-                    * e.invert();
-                mask -= nonce(&seed, "alpha", None)?;
+            if let Some(seed_nonce) = statements[index].seed_nonce {
+                let mut mask =
+                    (d1 - nonce(&seed_nonce, "eta", None)? - e * nonce(&seed_nonce, "d", None)?)
+                        * e.invert()
+                        * e.invert();
+                mask -= nonce(&seed_nonce, "alpha", None)?;
                 for j in 0..rounds {
-                    mask -= challenges[j] * challenges[j] * nonce(&seed, "dL", Some(j))?;
-                    mask -= challenges_inv[j] * challenges_inv[j] * nonce(&seed, "dR", Some(j))?;
+                    mask -= challenges[j] * challenges[j] * nonce(&seed_nonce, "dL", Some(j))?;
+                    mask -=
+                        challenges_inv[j] * challenges_inv[j] * nonce(&seed_nonce, "dR", Some(j))?;
                 }
                 mask *= (z_square * y_nm_1).invert();
                 masks.push(Some(mask));

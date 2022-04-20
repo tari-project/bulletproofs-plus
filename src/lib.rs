@@ -17,12 +17,14 @@
 pub mod commitment_opening;
 mod errors;
 pub mod generators;
+pub mod hidden;
 mod inner_product_round;
 pub mod range_parameters;
 pub mod range_proof;
 pub mod range_statement;
 pub mod range_witness;
-mod transcript;
+pub mod scalar_protocol;
+mod transcript_protocol;
 mod utils;
 
 pub use crate::generators::{BulletproofGens, PedersenGens};

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use crate::errors::ProofError;
-use crate::transcript::TranscriptProtocol;
+use crate::hidden::Hidden;
+use crate::scalar_protocol::ScalarProtocol;
+use crate::transcript_protocol::TranscriptProtocol;
 use crate::utils::{
     add_point_vec, add_scalar_vec, mul_point_vec_with_scalar, mul_scalar_vec_with_scalar, nonce,
 };
@@ -15,8 +17,7 @@ use rand_core::{CryptoRng, RngCore};
 use std::convert::TryFrom;
 use std::ops::Div;
 
-#[derive(derivative::Derivative)]
-#[derivative(Debug)]
+#[derive(Debug)]
 pub struct InnerProductRound<'a> {
     // Common data
     gi_base: NonEmpty<RistrettoPoint>,
@@ -41,12 +42,11 @@ pub struct InnerProductRound<'a> {
     ri: Vec<RistrettoPoint>,
 
     // Transcript
-    #[derivative(Debug = "ignore")]
-    transcript: &'a mut Transcript,
+    transcript: Hidden<&'a mut Transcript>,
 
     //Seed for mask recovery
     round: usize,
-    seed: Option<Scalar>,
+    seed_nonce: Option<Scalar>,
 }
 
 impl<'a> InnerProductRound<'a> {
@@ -60,7 +60,7 @@ impl<'a> InnerProductRound<'a> {
         alpha: Scalar,
         y_powers: Vec<Scalar>,
         transcript: &'a mut Transcript,
-        seed: Option<Scalar>,
+        seed_nonce: Option<Scalar>,
     ) -> Result<Self, ProofError> {
         let gi_base = NonEmpty::try_from(gi_base)
             .map_err(|e| ProofError::InvalidLength(format!("Gi - {:?}", e)))?;
@@ -97,9 +97,9 @@ impl<'a> InnerProductRound<'a> {
             d1: None,
             li: Vec::new(),
             ri: Vec::new(),
-            transcript,
+            transcript: transcript.into(),
             round: 0,
-            seed,
+            seed_nonce,
         })
     }
 
@@ -109,12 +109,15 @@ impl<'a> InnerProductRound<'a> {
             self.done = true;
 
             // Random masks
-            let r = Scalar::random(rng);
-            let s = Scalar::random(rng);
-            let (d, eta) = if let Some(seed) = self.seed {
-                (nonce(&seed, "d", None)?, nonce(&seed, "eta", None)?)
+            let r = Scalar::random_not_zero(rng);
+            let s = Scalar::random_not_zero(rng);
+            let (d, eta) = if let Some(seed_nonce) = self.seed_nonce {
+                (
+                    nonce(&seed_nonce, "d", None)?,
+                    nonce(&seed_nonce, "eta", None)?,
+                )
             } else {
-                (Scalar::random(rng), Scalar::random(rng))
+                (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng))
             };
 
             let a1 = self.gi_base[0] * r
@@ -130,7 +133,7 @@ impl<'a> InnerProductRound<'a> {
                 .validate_and_append_point(b"A1", &a1.compress())?;
             self.transcript
                 .validate_and_append_point(b"B", &b.compress())?;
-            let e = self.transcript.challenge_scalar(b"e");
+            let e = self.transcript.challenge_scalar(b"e")?;
 
             self.r1 = Some(r + self.ai[0] * e);
             self.s1 = Some(s + self.bi[0] * e);
@@ -180,13 +183,13 @@ impl<'a> InnerProductRound<'a> {
             ));
         };
 
-        let (d_l, d_r) = if let Some(seed) = self.seed {
+        let (d_l, d_r) = if let Some(seed_nonce) = self.seed_nonce {
             (
-                nonce(&seed, "dL", Some(self.round))?,
-                nonce(&seed, "dR", Some(self.round))?,
+                nonce(&seed_nonce, "dL", Some(self.round))?,
+                nonce(&seed_nonce, "dR", Some(self.round))?,
             )
         } else {
-            (Scalar::random(rng), Scalar::random(rng))
+            (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng))
         };
         self.round += 1;
 
@@ -221,7 +224,7 @@ impl<'a> InnerProductRound<'a> {
             .validate_and_append_point(b"L", &self.li[self.li.len() - 1].compress())?;
         self.transcript
             .validate_and_append_point(b"R", &self.ri[self.ri.len() - 1].compress())?;
-        let e = self.transcript.challenge_scalar(b"e");
+        let e = self.transcript.challenge_scalar(b"e")?;
         let e_inverse = e.invert();
 
         self.gi_base = NonEmpty::try_from(add_point_vec(

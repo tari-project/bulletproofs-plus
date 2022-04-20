@@ -22,6 +22,7 @@ merlin = { version = "3", default-features = false }
 #zeroize = "1.5.3"
 non-empty-vec = "0.2.3"
 derivative = "2.2.0"
+derive_more = "0.99.17"
 
 # for testing only
 hex = "0.3"

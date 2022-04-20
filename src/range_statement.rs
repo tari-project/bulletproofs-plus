@@ -12,14 +12,14 @@ use curve25519_dalek::scalar::Scalar;
 pub struct RangeStatement {
     pub generators: RangeParameters,
     pub commitments: Vec<RistrettoPoint>, // range statement
-    pub seed: Option<Scalar>,
+    pub seed_nonce: Option<Scalar>,
 }
 
 impl RangeStatement {
     pub fn init(
         generators: RangeParameters,
         commitments: Vec<RistrettoPoint>,
-        seed: Option<Scalar>,
+        seed_nonce: Option<Scalar>,
     ) -> Result<RangeStatement, ProofError> {
         if !commitments.len().is_power_of_two() {
             return Err(ProofError::InternalDataInconsistent(
@@ -31,7 +31,7 @@ impl RangeStatement {
                 "Not enough generators for this statement".to_string(),
             ));
         }
-        if seed.is_some() && commitments.len() > 1 {
+        if seed_nonce.is_some() && commitments.len() > 1 {
             return Err(ProofError::InternalDataInconsistent(
                 "Mask recovery is not supported with an aggregated statement".to_string(),
             ));
@@ -39,7 +39,7 @@ impl RangeStatement {
         Ok(Self {
             generators,
             commitments,
-            seed,
+            seed_nonce,
         })
     }
 }

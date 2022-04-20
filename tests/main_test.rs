@@ -4,6 +4,7 @@
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand::Rng;
+use tari_bulletproofs_plus::scalar_protocol::ScalarProtocol;
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening, range_parameters::RangeParameters,
     range_proof::RangeProof, range_statement::RangeStatement, range_witness::RangeWitness,
@@ -59,7 +60,7 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>) {
             let mut commitments = vec![];
             for m in 0..batch_size {
                 let value = rng.gen_range(value_min..value_max);
-                let blinding = Scalar::random(&mut rng);
+                let blinding = Scalar::random_not_zero(&mut rng);
                 commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
                 witness
                     .openings
@@ -76,13 +77,13 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>) {
             }
 
             // 3. Generate the statement
-            let seed = if batch_size == 1 {
-                Some(Scalar::random(&mut rng))
+            let seed_nonce = if batch_size == 1 {
+                Some(Scalar::random_not_zero(&mut rng))
             } else {
                 None
             };
             let private_statement =
-                RangeStatement::init(generators.clone(), commitments.clone(), seed).unwrap();
+                RangeStatement::init(generators.clone(), commitments.clone(), seed_nonce).unwrap();
             statements_private.push(private_statement.clone());
             let public_statement =
                 RangeStatement::init(generators.clone(), commitments, None).unwrap();
@@ -108,10 +109,10 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>) {
             RangeProof::verify(transcript_label, &statements_public, &proofs).unwrap();
         assert_eq!(public_masks, recovered_public_masks);
 
-        // 7. Try to recover the masks with incorrect seed values
+        // 7. Try to recover the masks with incorrect seed_nonce values
         let mut compare = false;
         for statement in statements_private.clone() {
-            if statement.seed.is_some() {
+            if statement.seed_nonce.is_some() {
                 compare = true;
                 break;
             }
@@ -122,7 +123,9 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>) {
                 statements_private_changed.push(RangeStatement {
                     generators: statement.generators,
                     commitments: statement.commitments,
-                    seed: statement.seed.map(|seed| seed + Scalar::one()),
+                    seed_nonce: statement
+                        .seed_nonce
+                        .map(|seed_nonce| seed_nonce + Scalar::one()),
                 });
             }
             let recovered_private_masks_changed = RangeProof::verify(

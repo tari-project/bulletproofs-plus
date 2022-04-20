@@ -7,7 +7,7 @@ use blake2::Blake2b;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 
-pub fn nonce(seed: &Scalar, label: &str, index: Option<usize>) -> Result<Scalar, ProofError> {
+pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<Scalar, ProofError> {
     let encoded_label = label.as_bytes();
     if encoded_label.len() > 16 {
         // See https://www.blake2.net/blake2.pdf section 2.8
@@ -19,9 +19,9 @@ pub fn nonce(seed: &Scalar, label: &str, index: Option<usize>) -> Result<Scalar,
             // See https://www.blake2.net/blake2.pdf section 2.8
             return Err(ProofError::InvalidLength("nonce index".to_string()));
         };
-        Blake2b::with_params(&seed.to_bytes(), &encoded_index, encoded_label)
+        Blake2b::with_params(&seed_nonce.to_bytes(), &encoded_index, encoded_label)
     } else {
-        Blake2b::with_params(&seed.to_bytes(), &[], encoded_label)
+        Blake2b::with_params(&seed_nonce.to_bytes(), &[], encoded_label)
     };
     Ok(Scalar::from_hash(hasher))
 }
@@ -113,6 +113,7 @@ pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar
 mod tests {
     use crate::errors::ProofError;
     use crate::range_proof::RangeProof;
+    use crate::scalar_protocol::ScalarProtocol;
     use crate::utils::{bit_vector_of_scalars, nonce};
     use curve25519_dalek::scalar::Scalar;
     use rand::thread_rng;
@@ -120,34 +121,40 @@ mod tests {
     #[test]
     fn test_nonce() {
         let rng = &mut thread_rng();
-        let seed = Scalar::random(rng);
+        let seed_nonce = Scalar::random_not_zero(rng);
 
         // Create personalized nonces
-        let ref_nonce_eta = nonce(&seed, "eta", None).unwrap();
-        let ref_nonce_a = nonce(&seed, "a", None).unwrap();
+        let ref_nonce_eta = nonce(&seed_nonce, "eta", None).unwrap();
+        let ref_nonce_a = nonce(&seed_nonce, "a", None).unwrap();
         let mut ref_nonces_dl = vec![];
         let mut ref_nonces_dr = vec![];
         for i in 0..16 {
-            ref_nonces_dl.push(nonce(&seed, "dL", Some(i)).unwrap());
-            ref_nonces_dr.push(nonce(&seed, "dR", Some(i)).unwrap());
+            ref_nonces_dl.push(nonce(&seed_nonce, "dL", Some(i)).unwrap());
+            ref_nonces_dr.push(nonce(&seed_nonce, "dR", Some(i)).unwrap());
         }
 
         // Verify
         for i in 0..16 {
-            assert_ne!(ref_nonces_dl[i], nonce(&seed, "dR", Some(i)).unwrap());
-            assert_ne!(ref_nonces_dr[i], nonce(&seed, "dL", Some(i)).unwrap());
-            assert_ne!(ref_nonces_dl[i], nonce(&seed, "dL", Some(i + 1)).unwrap());
-            assert_ne!(ref_nonces_dr[i], nonce(&seed, "dR", Some(i + 1)).unwrap());
+            assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dR", Some(i)).unwrap());
+            assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dL", Some(i)).unwrap());
+            assert_ne!(
+                ref_nonces_dl[i],
+                nonce(&seed_nonce, "dL", Some(i + 1)).unwrap()
+            );
+            assert_ne!(
+                ref_nonces_dr[i],
+                nonce(&seed_nonce, "dR", Some(i + 1)).unwrap()
+            );
         }
-        assert_ne!(ref_nonce_eta, nonce(&seed, "a", None).unwrap());
-        assert_ne!(ref_nonce_a, nonce(&seed, "eta", None).unwrap());
+        assert_ne!(ref_nonce_eta, nonce(&seed_nonce, "a", None).unwrap());
+        assert_ne!(ref_nonce_a, nonce(&seed_nonce, "eta", None).unwrap());
 
         for i in (0..16).rev() {
-            assert_eq!(ref_nonces_dr[i], nonce(&seed, "dR", Some(i)).unwrap());
-            assert_eq!(ref_nonces_dl[i], nonce(&seed, "dL", Some(i)).unwrap());
+            assert_eq!(ref_nonces_dr[i], nonce(&seed_nonce, "dR", Some(i)).unwrap());
+            assert_eq!(ref_nonces_dl[i], nonce(&seed_nonce, "dL", Some(i)).unwrap());
         }
-        assert_eq!(ref_nonce_a, nonce(&seed, "a", None).unwrap());
-        assert_eq!(ref_nonce_eta, nonce(&seed, "eta", None).unwrap());
+        assert_eq!(ref_nonce_a, nonce(&seed_nonce, "a", None).unwrap());
+        assert_eq!(ref_nonce_eta, nonce(&seed_nonce, "eta", None).unwrap());
     }
 
     fn bit_vector_to_value(bit_vector: Vec<Scalar>) -> Result<u64, ProofError> {

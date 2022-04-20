@@ -33,6 +33,7 @@ impl RangeParameters {
                 RangeProof::MAX_BIT_LENGTH
             )));
         }
+
         Ok(Self {
             bp_gens: BulletproofGens::new(bit_length, batch_size),
             pc_gens: PedersenGens::default(),

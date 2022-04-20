@@ -31,7 +31,7 @@ pub trait TranscriptProtocol {
     ) -> Result<(), ProofError>;
 
     /// Compute a `label`ed challenge variable.
-    fn challenge_scalar(&mut self, label: &'static [u8]) -> Scalar;
+    fn challenge_scalar(&mut self, label: &'static [u8]) -> Result<Scalar, ProofError>;
 }
 
 impl TranscriptProtocol for Transcript {
@@ -64,10 +64,16 @@ impl TranscriptProtocol for Transcript {
         }
     }
 
-    fn challenge_scalar(&mut self, label: &'static [u8]) -> Scalar {
+    fn challenge_scalar(&mut self, label: &'static [u8]) -> Result<Scalar, ProofError> {
         let mut buf = [0u8; 64];
         self.challenge_bytes(label, &mut buf);
-
-        Scalar::from_bytes_mod_order_wide(&buf)
+        let value = Scalar::from_bytes_mod_order_wide(&buf);
+        if value == Scalar::zero() {
+            Err(ProofError::VerificationFailed(
+                "Transcript challenge cannot be zero".to_string(),
+            ))
+        } else {
+            Ok(value)
+        }
     }
 }
