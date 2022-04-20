@@ -58,8 +58,10 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>) {
             // 2. Create witness data
             let mut witness = RangeWitness::new(vec![]);
             let mut commitments = vec![];
+            let mut offsets = vec![];
             for m in 0..batch_size {
                 let value = rng.gen_range(value_min..value_max);
+                offsets.push(rng.gen_range(value_min..value+1));
                 let blinding = Scalar::random_not_zero(&mut rng);
                 commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
                 witness
@@ -83,10 +85,10 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>) {
                 None
             };
             let private_statement =
-                RangeStatement::init(generators.clone(), commitments.clone(), seed_nonce).unwrap();
+                RangeStatement::init(generators.clone(), commitments.clone(), offsets.clone(), seed_nonce).unwrap();
             statements_private.push(private_statement.clone());
             let public_statement =
-                RangeStatement::init(generators.clone(), commitments, None).unwrap();
+                RangeStatement::init(generators.clone(), commitments, offsets.clone(), None).unwrap();
             statements_public.push(public_statement);
 
             // 4. Create the proofs
@@ -123,6 +125,7 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>) {
                 statements_private_changed.push(RangeStatement {
                     generators: statement.generators,
                     commitments: statement.commitments,
+                    offsets: statement.offsets,
                     seed_nonce: statement
                         .seed_nonce
                         .map(|seed_nonce| seed_nonce + Scalar::one()),

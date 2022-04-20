@@ -12,6 +12,7 @@ use curve25519_dalek::scalar::Scalar;
 pub struct RangeStatement {
     pub generators: RangeParameters,
     pub commitments: Vec<RistrettoPoint>, // range statement
+    pub offsets: Vec<u64>,
     pub seed_nonce: Option<Scalar>,
 }
 
@@ -19,11 +20,17 @@ impl RangeStatement {
     pub fn init(
         generators: RangeParameters,
         commitments: Vec<RistrettoPoint>,
+        offsets: Vec<u64>,
         seed_nonce: Option<Scalar>,
     ) -> Result<RangeStatement, ProofError> {
         if !commitments.len().is_power_of_two() {
             return Err(ProofError::InternalDataInconsistent(
                 "Number of commitments must be a power of two".to_string(),
+            ));
+        }
+        if !offsets.len() == commitments.len() {
+            return Err(ProofError::InternalDataInconsistent(
+                "Incorrect number of offsets".to_string(),
             ));
         }
         if generators.batch_size() < commitments.len() {
@@ -39,6 +46,7 @@ impl RangeStatement {
         Ok(Self {
             generators,
             commitments,
+            offsets,
             seed_nonce,
         })
     }
