@@ -109,7 +109,9 @@ impl<'a> InnerProductRound<'a> {
             self.done = true;
 
             // Random masks
+            // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
             let r = Scalar::random_not_zero(rng);
+            // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
             let s = Scalar::random_not_zero(rng);
             let (d, eta) = if let Some(seed_nonce) = self.seed_nonce {
                 (
@@ -117,6 +119,7 @@ impl<'a> InnerProductRound<'a> {
                     nonce(&seed_nonce, "eta", None)?,
                 )
             } else {
+                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
                 (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng))
             };
 
@@ -189,6 +192,7 @@ impl<'a> InnerProductRound<'a> {
                 nonce(&seed_nonce, "dR", Some(self.round))?,
             )
         } else {
+            // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
             (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng))
         };
         self.round += 1;

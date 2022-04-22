@@ -162,6 +162,7 @@ impl RangeProof {
         let alpha = if let Some(seed_nonce) = statement.seed_nonce {
             nonce(&seed_nonce, "alpha", None)?
         } else {
+            // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
             Scalar::random_not_zero(rng)
         };
         let mut ai_scalars = vec![alpha];
@@ -377,7 +378,7 @@ impl RangeProof {
             let batch_size = commitments.len();
             let rounds = li.len();
 
-            // Batch weight (may not be equal to a zero valued scalar)
+            // Batch weight (may not be equal to a zero valued scalar) - this may not be zero ever
             let weight = Scalar::random_not_zero(rng);
 
             // Start the transcript

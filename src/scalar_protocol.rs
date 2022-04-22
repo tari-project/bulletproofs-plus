@@ -15,6 +15,8 @@ pub trait ScalarProtocol {
 }
 
 impl ScalarProtocol for Scalar {
+    // 'Scalar::random(rng)' in most cases will not return zero due to the intent of the implementation, but this is
+    // not guaranteed. This function make sit clear that zero will never be returned
     fn random_not_zero<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
         loop {
             let value = Scalar::random(rng);
