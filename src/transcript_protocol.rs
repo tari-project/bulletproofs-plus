@@ -4,14 +4,15 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Defines a `TranscriptProtocol` trait for using a Merlin transcript.
+#![deny(missing_docs)]
 
-use curve25519_dalek::ristretto::CompressedRistretto;
-use curve25519_dalek::scalar::Scalar;
+/// Bulletproof+ `TranscriptProtocol` trait for using a Scalar
+use curve25519_dalek::{ristretto::CompressedRistretto, scalar::Scalar};
 use merlin::Transcript;
 
 use crate::errors::ProofError;
 
+/// Defines a `TranscriptProtocol` trait for using a Merlin transcript.
 pub trait TranscriptProtocol {
     /// Append a domain separator for the range proof with the given `label` and `message`.
     fn domain_separator(&mut self, label: &'static [u8], message: &[u8]);

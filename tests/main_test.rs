@@ -1,15 +1,19 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use std::ops::Div;
+
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand::Rng;
-use std::ops::Div;
-use tari_bulletproofs_plus::errors::ProofError;
-use tari_bulletproofs_plus::scalar_protocol::ScalarProtocol;
 use tari_bulletproofs_plus::{
-    commitment_opening::CommitmentOpening, range_parameters::RangeParameters,
-    range_proof::RangeProof, range_statement::RangeStatement, range_witness::RangeWitness,
+    commitment_opening::CommitmentOpening,
+    errors::ProofError,
+    range_parameters::RangeParameters,
+    range_proof::RangeProof,
+    range_statement::RangeStatement,
+    range_witness::RangeWitness,
+    scalar_protocol::ScalarProtocol,
 };
 
 #[test]
@@ -31,11 +35,7 @@ fn test_non_aggregated_single_batch_multiple_bit_lengths() {
         batches.clone(),
         ProofOfMinimumValueStrategy::EqualToValue,
     );
-    proof_batches(
-        bit_lengths,
-        batches,
-        ProofOfMinimumValueStrategy::LargerThanValue,
-    );
+    proof_batches(bit_lengths, batches, ProofOfMinimumValueStrategy::LargerThanValue);
 }
 
 #[test]
@@ -57,11 +57,7 @@ fn test_aggregated_single_batch_multiple_bit_lengths() {
         batches.clone(),
         ProofOfMinimumValueStrategy::EqualToValue,
     );
-    proof_batches(
-        bit_lengths,
-        batches,
-        ProofOfMinimumValueStrategy::LargerThanValue,
-    );
+    proof_batches(bit_lengths, batches, ProofOfMinimumValueStrategy::LargerThanValue);
 }
 
 #[test]
@@ -83,11 +79,7 @@ fn test_non_aggregated_multiple_batches_single_bit_length() {
         batches.clone(),
         ProofOfMinimumValueStrategy::EqualToValue,
     );
-    proof_batches(
-        bit_lengths,
-        batches,
-        ProofOfMinimumValueStrategy::LargerThanValue,
-    );
+    proof_batches(bit_lengths, batches, ProofOfMinimumValueStrategy::LargerThanValue);
 }
 
 #[test]
@@ -109,11 +101,7 @@ fn test_mixed_aggregation_multiple_batches_single_bit_length() {
         batches.clone(),
         ProofOfMinimumValueStrategy::EqualToValue,
     );
-    proof_batches(
-        bit_lengths,
-        batches,
-        ProofOfMinimumValueStrategy::LargerThanValue,
-    );
+    proof_batches(bit_lengths, batches, ProofOfMinimumValueStrategy::LargerThanValue);
 }
 
 enum ProofOfMinimumValueStrategy {
@@ -127,11 +115,7 @@ fn div_floor_u64(value: f64, divisor: f64) -> u64 {
     f64::floor((value as f64).div(divisor)) as u64
 }
 
-fn proof_batches(
-    bit_lengths: Vec<usize>,
-    batches: Vec<usize>,
-    promise_strategy: ProofOfMinimumValueStrategy,
-) {
+fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>, promise_strategy: ProofOfMinimumValueStrategy) {
     let mut rng = rand::thread_rng();
     let transcript_label: &'static str = "BatchedRangeProofTest";
 
@@ -156,18 +140,14 @@ fn proof_batches(
                 let value = rng.gen_range(value_min..value_max);
                 let minimum_value = match promise_strategy {
                     ProofOfMinimumValueStrategy::NoOffset => None,
-                    ProofOfMinimumValueStrategy::Intermediate => {
-                        Some(div_floor_u64(value as f64, 3f64))
-                    }
+                    ProofOfMinimumValueStrategy::Intermediate => Some(div_floor_u64(value as f64, 3f64)),
                     ProofOfMinimumValueStrategy::EqualToValue => Some(value),
                     ProofOfMinimumValueStrategy::LargerThanValue => Some(value + 1),
                 };
                 minimum_values.push(minimum_value);
                 let blinding = Scalar::random_not_zero(&mut rng);
                 commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
-                witness
-                    .openings
-                    .push(CommitmentOpening::new(value, blinding));
+                witness.openings.push(CommitmentOpening::new(value, blinding));
                 if m == 0 {
                     if batch_size == 1 {
                         private_masks.push(Some(blinding));
@@ -192,13 +172,8 @@ fn proof_batches(
                 seed_nonce,
             )
             .unwrap();
-            let public_statement = RangeStatement::init(
-                generators.clone(),
-                commitments,
-                minimum_values.clone(),
-                None,
-            )
-            .unwrap();
+            let public_statement =
+                RangeStatement::init(generators.clone(), commitments, minimum_values.clone(), None).unwrap();
 
             // 4. Create the proofs
             let mut transcript = Transcript::new(transcript_label.as_bytes());
@@ -208,35 +183,30 @@ fn proof_batches(
                 ProofOfMinimumValueStrategy::LargerThanValue => match proof {
                     Ok(_) => {
                         panic!("Expected an error here")
-                    }
+                    },
                     Err(e) => match e {
-                        ProofError::InternalDataInconsistent(_) => {}
+                        ProofError::InternalDataInconsistent(_) => {},
                         _ => {
                             panic!("Expected 'ProofError::InternalDataInconsistent'")
-                        }
+                        },
                     },
                 },
                 _ => {
                     statements_private.push(private_statement);
                     statements_public.push(public_statement);
                     proofs.push(proof.unwrap());
-                }
+                },
             };
         }
 
         if !proofs.is_empty() {
             // 5. Verify the entire batch as the commitment owner, i.e. the prover self
-            let recovered_private_masks = RangeProof::verify(
-                transcript_label,
-                &statements_private.clone(),
-                &proofs.clone(),
-            )
-            .unwrap();
+            let recovered_private_masks =
+                RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone()).unwrap();
             assert_eq!(private_masks, recovered_private_masks);
 
             // 6. Verify the entire batch as public entity
-            let recovered_public_masks =
-                RangeProof::verify(transcript_label, &statements_public, &proofs).unwrap();
+            let recovered_public_masks = RangeProof::verify(transcript_label, &statements_public, &proofs).unwrap();
             assert_eq!(public_masks, recovered_public_masks);
 
             // 7. Try to recover the masks with incorrect seed_nonce values
@@ -251,20 +221,14 @@ fn proof_batches(
                 let mut statements_private_changed = vec![];
                 for statement in statements_private.clone() {
                     statements_private_changed.push(RangeStatement {
-                        generators: statement.generators,
-                        commitments: statement.commitments,
-                        minimum_value_promises: statement.minimum_value_promises,
-                        seed_nonce: statement
-                            .seed_nonce
-                            .map(|seed_nonce| seed_nonce + Scalar::one()),
+                        generators: statement.generators.clone(),
+                        commitments: statement.commitments.clone(),
+                        minimum_value_promises: statement.minimum_value_promises.clone(),
+                        seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::one()),
                     });
                 }
-                let recovered_private_masks_changed = RangeProof::verify(
-                    transcript_label,
-                    &statements_private_changed,
-                    &proofs.clone(),
-                )
-                .unwrap();
+                let recovered_private_masks_changed =
+                    RangeProof::verify(transcript_label, &statements_private_changed, &proofs.clone()).unwrap();
                 assert_ne!(private_masks, recovered_private_masks_changed);
             }
         }

@@ -1,13 +1,18 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::errors::ProofError;
-use crate::range_proof::RangeProof;
-use blake2::Blake2b;
-use curve25519_dalek::ristretto::RistrettoPoint;
-use curve25519_dalek::scalar::Scalar;
+#![deny(missing_docs)]
+
+//! Bulletproof+ utilities
+
 use std::ops::Div;
 
+use blake2::Blake2b;
+use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
+
+use crate::{errors::ProofError, range_proof::RangeProof};
+
+/// Create a Blake2B deterministic nonce given a seed, label and index
 pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<Scalar, ProofError> {
     let encoded_label = label.as_bytes();
     if encoded_label.len() > 16 {
@@ -27,6 +32,7 @@ pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<S
     Ok(Scalar::from_hash(hasher))
 }
 
+/// Multiply a point vector with a scalar vector
 pub fn mul_point_vec_with_scalar(
     point_vec: &[RistrettoPoint],
     scalar: &Scalar,
@@ -43,14 +49,10 @@ pub fn mul_point_vec_with_scalar(
     Ok(out)
 }
 
-pub fn add_point_vec(
-    a: &[RistrettoPoint],
-    b: &[RistrettoPoint],
-) -> Result<Vec<RistrettoPoint>, ProofError> {
+/// Add two point vectors
+pub fn add_point_vec(a: &[RistrettoPoint], b: &[RistrettoPoint]) -> Result<Vec<RistrettoPoint>, ProofError> {
     if a.len() != b.len() || a.is_empty() {
-        return Err(ProofError::InvalidLength(
-            "Cannot add empty point vectors".to_string(),
-        ));
+        return Err(ProofError::InvalidLength("Cannot add empty point vectors".to_string()));
     }
     let mut out = vec![RistrettoPoint::default(); a.len()];
     for i in 0..a.len() {
@@ -59,10 +61,8 @@ pub fn add_point_vec(
     Ok(out)
 }
 
-pub fn mul_scalar_vec_with_scalar(
-    scalar_vec: &[Scalar],
-    scalar: &Scalar,
-) -> Result<Vec<Scalar>, ProofError> {
+/// Multiply one scalar vector with another scalar vector
+pub fn mul_scalar_vec_with_scalar(scalar_vec: &[Scalar], scalar: &Scalar) -> Result<Vec<Scalar>, ProofError> {
     if scalar_vec.is_empty() {
         return Err(ProofError::InvalidLength(
             "Cannot multiply empty scalar vector with scalar".to_string(),
@@ -75,11 +75,10 @@ pub fn mul_scalar_vec_with_scalar(
     Ok(out)
 }
 
+/// Add two scalar vectors
 pub fn add_scalar_vec(a: &[Scalar], b: &[Scalar]) -> Result<Vec<Scalar>, ProofError> {
     if a.len() != b.len() || a.is_empty() {
-        return Err(ProofError::InvalidLength(
-            "Cannot add empty scalar vectors".to_string(),
-        ));
+        return Err(ProofError::InvalidLength("Cannot add empty scalar vectors".to_string()));
     }
     let mut out = vec![Scalar::default(); a.len()];
     for i in 0..a.len() {
@@ -88,6 +87,7 @@ pub fn add_scalar_vec(a: &[Scalar], b: &[Scalar]) -> Result<Vec<Scalar>, ProofEr
     Ok(out)
 }
 
+/// Decompose a given value into a vector of scalars for the required bit length
 pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar>, ProofError> {
     if !bit_length.is_power_of_two() || bit_length > RangeProof::MAX_BIT_LENGTH {
         return Err(ProofError::InvalidLength(
@@ -110,18 +110,22 @@ pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar
     Ok(result)
 }
 
+/// A convenience function ot calculate division and return the rounded down value
 pub fn div_floor_usize(value: f32, divisor: f32) -> usize {
     f32::floor((value as f32).div(divisor)) as usize
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::errors::ProofError;
-    use crate::range_proof::RangeProof;
-    use crate::scalar_protocol::ScalarProtocol;
-    use crate::utils::{bit_vector_of_scalars, nonce};
     use curve25519_dalek::scalar::Scalar;
     use rand::thread_rng;
+
+    use crate::{
+        errors::ProofError,
+        range_proof::RangeProof,
+        scalar_protocol::ScalarProtocol,
+        utils::{bit_vector_of_scalars, nonce},
+    };
 
     #[test]
     fn test_nonce() {
@@ -142,14 +146,8 @@ mod tests {
         for i in 0..16 {
             assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dR", Some(i)).unwrap());
             assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dL", Some(i)).unwrap());
-            assert_ne!(
-                ref_nonces_dl[i],
-                nonce(&seed_nonce, "dL", Some(i + 1)).unwrap()
-            );
-            assert_ne!(
-                ref_nonces_dr[i],
-                nonce(&seed_nonce, "dR", Some(i + 1)).unwrap()
-            );
+            assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dL", Some(i + 1)).unwrap());
+            assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dR", Some(i + 1)).unwrap());
         }
         assert_ne!(ref_nonce_eta, nonce(&seed_nonce, "a", None).unwrap());
         assert_ne!(ref_nonce_a, nonce(&seed_nonce, "eta", None).unwrap());
@@ -182,18 +180,18 @@ mod tests {
         match bit_vector_of_scalars(11, 4) {
             Ok(values) => {
                 assert_eq!(11, bit_vector_to_value(values).unwrap());
-            }
+            },
             Err(_) => {
                 panic!("Should not err")
-            }
+            },
         }
         match bit_vector_of_scalars(15, 4) {
             Ok(values) => {
                 assert_eq!(15, bit_vector_to_value(values).unwrap());
-            }
+            },
             Err(_) => {
                 panic!("Should not err")
-            }
+            },
         }
         if bit_vector_of_scalars(15, 5).is_ok() {
             panic!("Should panic");
@@ -207,18 +205,18 @@ mod tests {
         match bit_vector_of_scalars(u64::MAX - 12187, RangeProof::MAX_BIT_LENGTH) {
             Ok(values) => {
                 assert_eq!(u64::MAX - 12187, bit_vector_to_value(values).unwrap());
-            }
+            },
             Err(_) => {
                 panic!("Should not err")
-            }
+            },
         }
         match bit_vector_of_scalars(u64::MAX, RangeProof::MAX_BIT_LENGTH) {
             Ok(values) => {
                 assert_eq!(u64::MAX, bit_vector_to_value(values).unwrap());
-            }
+            },
             Err(_) => {
                 panic!("Should not err")
-            }
+            },
         }
     }
 }

@@ -19,24 +19,18 @@ byteorder = { version = "1", default-features = false }
 #serde_derive = { version = "1", default-features = false }
 thiserror = { version = "1"}
 merlin = { version = "3", default-features = false }
-#zeroize = "1.5.3"
+zeroize = "1.5.3"
 non-empty-vec = "0.2.3"
 derivative = "2.2.0"
 derive_more = "0.99.17"
 
-# for testing only
-hex = "0.3"
-
 [dev-dependencies]
-#hex = "0.3"
-#criterion = "0.3"
-#bincode = "1"
-#rand_chacha = "0.3"
 
 [features]
-#default = ["std"]
-#simd_backend = ["curve25519-dalek/simd_backend"]
-#avx2_backend = ["simd_backend"] # deprecated alias for simd_backend
+default = []
+simd_backend = ["curve25519-dalek/simd_backend"]
+simd = ["simd_backend"]
+avx2 = ["simd_backend"] # deprecated alias for simd_backend
 #std = ["rand", "rand/std", "rand/std_rng", "thiserror", "curve25519-dalek/std"]
 #nightly = ["curve25519-dalek/nightly", "curve25519-dalek/alloc", "subtle/nightly"]
 

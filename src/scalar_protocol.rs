@@ -4,13 +4,16 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Defines a `` trait for using a Scalar.
+#![deny(missing_docs)]
+
+//! Bulletproof+ `ScalarProtocol` trait for using a Scalar
 
 use curve25519_dalek::scalar::Scalar;
 use rand_core::{CryptoRng, RngCore};
 
+/// Defines a `ScalarProtocol` trait for using a Scalar
 pub trait ScalarProtocol {
-    /// Returns a non-zero random Scalar.
+    /// Returns a non-zero random Scalar
     fn random_not_zero<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar;
 }
 

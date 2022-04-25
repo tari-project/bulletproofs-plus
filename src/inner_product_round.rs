@@ -1,22 +1,38 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::errors::ProofError;
-use crate::hidden::Hidden;
-use crate::scalar_protocol::ScalarProtocol;
-use crate::transcript_protocol::TranscriptProtocol;
-use crate::utils::{
-    add_point_vec, add_scalar_vec, div_floor_usize, mul_point_vec_with_scalar,
-    mul_scalar_vec_with_scalar, nonce,
+#![deny(missing_docs)]
+
+//! Bulletproof+ inner product calculation for each round
+
+use std::convert::TryFrom;
+
+use curve25519_dalek::{
+    ristretto::{CompressedRistretto, RistrettoPoint},
+    scalar::Scalar,
+    traits::MultiscalarMul,
 };
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::MultiscalarMul;
 use merlin::Transcript;
 use non_empty_vec::NonEmpty;
 use rand_core::{CryptoRng, RngCore};
-use std::convert::TryFrom;
+use zeroize::Zeroize;
 
+use crate::{
+    errors::ProofError,
+    hidden::Hidden,
+    scalar_protocol::ScalarProtocol,
+    transcript_protocol::TranscriptProtocol,
+    utils::{
+        add_point_vec,
+        add_scalar_vec,
+        div_floor_usize,
+        mul_point_vec_with_scalar,
+        mul_scalar_vec_with_scalar,
+        nonce,
+    },
+};
+
+/// The struct that will hold the inner product calculation for each round, called consecutively
 #[derive(Debug)]
 pub struct InnerProductRound<'a> {
     // Common data
@@ -44,12 +60,13 @@ pub struct InnerProductRound<'a> {
     // Transcript
     transcript: Hidden<&'a mut Transcript>,
 
-    //Seed for mask recovery
+    // Seed for mask recovery
     round: usize,
     seed_nonce: Option<Scalar>,
 }
 
 impl<'a> InnerProductRound<'a> {
+    /// Initialize a new 'InnerProductRound' with sanity checks
     pub fn init(
         gi_base: Vec<RistrettoPoint>,
         hi_base: Vec<RistrettoPoint>,
@@ -62,19 +79,13 @@ impl<'a> InnerProductRound<'a> {
         transcript: &'a mut Transcript,
         seed_nonce: Option<Scalar>,
     ) -> Result<Self, ProofError> {
-        let gi_base = NonEmpty::try_from(gi_base)
-            .map_err(|e| ProofError::InvalidLength(format!("Gi - {:?}", e)))?;
-        let hi_base = NonEmpty::try_from(hi_base)
-            .map_err(|e| ProofError::InvalidLength(format!("Hi - {:?}", e)))?;
-        let a = NonEmpty::try_from(ai)
-            .map_err(|e| ProofError::InvalidLength(format!("a - {:?}", e)))?;
-        let b = NonEmpty::try_from(bi)
-            .map_err(|e| ProofError::InvalidLength(format!("b - {:?}", e)))?;
-        let y_powers = NonEmpty::try_from(y_powers)
-            .map_err(|e| ProofError::InvalidLength(format!("{:?}", e)))?;
+        let gi_base = NonEmpty::try_from(gi_base).map_err(|e| ProofError::InvalidLength(format!("Gi - {:?}", e)))?;
+        let hi_base = NonEmpty::try_from(hi_base).map_err(|e| ProofError::InvalidLength(format!("Hi - {:?}", e)))?;
+        let a = NonEmpty::try_from(ai).map_err(|e| ProofError::InvalidLength(format!("a - {:?}", e)))?;
+        let b = NonEmpty::try_from(bi).map_err(|e| ProofError::InvalidLength(format!("b - {:?}", e)))?;
+        let y_powers = NonEmpty::try_from(y_powers).map_err(|e| ProofError::InvalidLength(format!("{:?}", e)))?;
         let n = gi_base.len().get();
-        if !(hi_base.len().get() == n && a.len().get() == n && b.len().get() == n)
-            || (y_powers.len().get() != (n + 2))
+        if !(hi_base.len().get() == n && a.len().get() == n && b.len().get() == n) || (y_powers.len().get() != (n + 2))
         {
             return Err(ProofError::InternalDataInconsistent(
                 "Vector length for inner product round".to_string(),
@@ -103,6 +114,7 @@ impl<'a> InnerProductRound<'a> {
         })
     }
 
+    /// Calculate the inner product, updating 'self' for each round
     pub fn inner_product<T: RngCore + CryptoRng>(&mut self, rng: &mut T) -> Result<(), ProofError> {
         let mut n = self.gi_base.len().get();
         if n == 1 {
@@ -114,28 +126,22 @@ impl<'a> InnerProductRound<'a> {
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
             let s = Scalar::random_not_zero(rng);
             let (d, eta) = if let Some(seed_nonce) = self.seed_nonce {
-                (
-                    nonce(&seed_nonce, "d", None)?,
-                    nonce(&seed_nonce, "eta", None)?,
-                )
+                (nonce(&seed_nonce, "d", None)?, nonce(&seed_nonce, "eta", None)?)
             } else {
                 // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
                 (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng))
             };
 
-            let a1 = self.gi_base[0] * r
-                + self.hi_base[0] * s
-                + self.h_base
-                    * (r * self.y_powers[1] * self.bi[0] + s * self.y_powers[1] * self.ai[0])
-                + self.g_base * d;
+            let a1 = self.gi_base[0] * r +
+                self.hi_base[0] * s +
+                self.h_base * (r * self.y_powers[1] * self.bi[0] + s * self.y_powers[1] * self.ai[0]) +
+                self.g_base * d;
             self.a1 = Some(a1);
             let b = self.h_base * (r * self.y_powers[1] * s) + self.g_base * eta;
             self.b = Some(b);
 
-            self.transcript
-                .validate_and_append_point(b"A1", &a1.compress())?;
-            self.transcript
-                .validate_and_append_point(b"B", &b.compress())?;
+            self.transcript.validate_and_append_point(b"A1", &a1.compress())?;
+            self.transcript.validate_and_append_point(b"B", &b.compress())?;
             let e = self.transcript.challenge_scalar(b"e")?;
 
             self.r1 = Some(r + self.ai[0] * e);
@@ -219,10 +225,8 @@ impl<'a> InnerProductRound<'a> {
             ri_scalars.push(b1[i]);
             ri_points.push(hi_base_hi[i]);
         }
-        self.li
-            .push(RistrettoPoint::multiscalar_mul(li_scalars, li_points));
-        self.ri
-            .push(RistrettoPoint::multiscalar_mul(ri_scalars, ri_points));
+        self.li.push(RistrettoPoint::multiscalar_mul(li_scalars, li_points));
+        self.ri.push(RistrettoPoint::multiscalar_mul(ri_scalars, ri_points));
 
         self.transcript
             .validate_and_append_point(b"L", &self.li[self.li.len() - 1].compress())?;
@@ -337,5 +341,19 @@ impl<'a> InnerProductRound<'a> {
                 "Vector 'R' not assigned yet".to_string(),
             ))
         }
+    }
+}
+
+/// Overwrite secrets with null bytes when they go out of scope.
+impl<'a> Drop for InnerProductRound<'a> {
+    fn drop(&mut self) {
+        for mut item in self.ai.clone() {
+            item.zeroize();
+        }
+        for mut item in self.bi.clone() {
+            item.zeroize();
+        }
+        self.alpha.zeroize();
+        self.seed_nonce.zeroize();
     }
 }

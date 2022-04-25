@@ -1,10 +1,17 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::errors::ProofError;
-use crate::range_proof::RangeProof;
-use crate::{BulletproofGens, PedersenGens};
+#![deny(missing_docs)]
+
+//! Bulletproof+ range parameters (generators and base points) needed for a batch of range proofs
+
 use curve25519_dalek::ristretto::RistrettoPoint;
+
+use crate::{
+    errors::ProofError,
+    generators::{bulletproof_gens::BulletproofGens, pedersen_gens::PedersenGens},
+    range_proof::RangeProof,
+};
 
 /// Contains all the generators and base points needed for a batch of range proofs
 #[derive(Clone, Debug)]
@@ -16,6 +23,7 @@ pub struct RangeParameters {
 }
 
 impl RangeParameters {
+    /// Initialize a new 'RangeParameters' with sanity checks
     pub fn init(bit_length: usize, batch_size: usize) -> Result<RangeParameters, ProofError> {
         if !batch_size.is_power_of_two() {
             return Err(ProofError::InternalDataInconsistent(
@@ -40,30 +48,37 @@ impl RangeParameters {
         })
     }
 
+    /// Return a reference to the protected bulletproof generators
     pub fn bp_gens(&self) -> &BulletproofGens {
         &self.bp_gens
     }
 
+    /// Return a reference to the protected base point generators
     pub fn pc_gens(&self) -> &PedersenGens {
         &self.pc_gens
     }
 
+    /// Returns the
     pub fn batch_size(&self) -> usize {
         self.bp_gens.party_capacity
     }
 
+    /// Returns the
     pub fn bit_length(&self) -> usize {
         self.bp_gens.gens_capacity
     }
 
+    /// Return the protected value base point
     pub fn h_base(&self) -> RistrettoPoint {
         self.pc_gens.b_base
     }
 
+    /// Return the protected mask base point
     pub fn g_base(&self) -> RistrettoPoint {
         self.pc_gens.b_base_blinding
     }
 
+    /// Return the protected value bulletproof generators
     pub fn hi_base(&self) -> Vec<RistrettoPoint> {
         let hi_base: Vec<RistrettoPoint> = self
             .bp_gens
@@ -73,6 +88,7 @@ impl RangeParameters {
         hi_base
     }
 
+    /// Return the protected mask bulletproof generators
     pub fn gi_base(&self) -> Vec<RistrettoPoint> {
         let gi_base: Vec<RistrettoPoint> = self
             .bp_gens

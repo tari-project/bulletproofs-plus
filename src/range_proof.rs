@@ -1,19 +1,29 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::errors::ProofError;
-use crate::inner_product_round::InnerProductRound;
-use crate::range_statement::RangeStatement;
-use crate::range_witness::RangeWitness;
-use crate::scalar_protocol::ScalarProtocol;
-use crate::transcript_protocol::TranscriptProtocol;
-use crate::utils::{bit_vector_of_scalars, div_floor_usize, nonce};
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::{Identity, MultiscalarMul};
+#![deny(missing_docs)]
+
+//! Bulletproof+ public range proof parameters intended for a verifier
+
+use curve25519_dalek::{
+    ristretto::{CompressedRistretto, RistrettoPoint},
+    scalar::Scalar,
+    traits::{Identity, MultiscalarMul},
+};
 use merlin::Transcript;
 use rand::thread_rng;
 
+use crate::{
+    errors::ProofError,
+    inner_product_round::InnerProductRound,
+    range_statement::RangeStatement,
+    range_witness::RangeWitness,
+    scalar_protocol::ScalarProtocol,
+    transcript_protocol::TranscriptProtocol,
+    utils::{bit_vector_of_scalars, div_floor_usize, nonce},
+};
+
+/// Contains the public range proof parameters intended for a verifier
 #[derive(Clone, Debug)]
 pub struct RangeProof {
     a: CompressedRistretto,
@@ -27,29 +37,24 @@ pub struct RangeProof {
 }
 
 impl RangeProof {
+    /// The maximum bit length that proofs can be generated for
     pub const MAX_BIT_LENGTH: usize = 64;
 
     fn get_a(&self) -> Result<RistrettoPoint, ProofError> {
         self.a.decompress().ok_or_else(|| {
-            ProofError::InternalDataInconsistent(
-                "Member 'a' was not the canonical encoding of a point".to_string(),
-            )
+            ProofError::InternalDataInconsistent("Member 'a' was not the canonical encoding of a point".to_string())
         })
     }
 
     fn get_a1(&self) -> Result<RistrettoPoint, ProofError> {
         self.a1.decompress().ok_or_else(|| {
-            ProofError::InternalDataInconsistent(
-                "Member 'a1' was not the canonical encoding of a point".to_string(),
-            )
+            ProofError::InternalDataInconsistent("Member 'a1' was not the canonical encoding of a point".to_string())
         })
     }
 
     fn get_b(&self) -> Result<RistrettoPoint, ProofError> {
         self.b.decompress().ok_or_else(|| {
-            ProofError::InternalDataInconsistent(
-                "Member 'b' was not the canonical encoding of a point".to_string(),
-            )
+            ProofError::InternalDataInconsistent("Member 'b' was not the canonical encoding of a point".to_string())
         })
     }
 
@@ -71,8 +76,7 @@ impl RangeProof {
             for item in self.li.clone() {
                 li.push(item.decompress().ok_or_else(|| {
                     ProofError::InternalDataInconsistent(
-                        "An item in member 'L' was not the canonical encoding of a point"
-                            .to_string(),
+                        "An item in member 'L' was not the canonical encoding of a point".to_string(),
                     )
                 })?)
             }
@@ -90,8 +94,7 @@ impl RangeProof {
             for item in self.ri.clone() {
                 ri.push(item.decompress().ok_or_else(|| {
                     ProofError::InternalDataInconsistent(
-                        "An item in member 'R' was not the canonical encoding of a point"
-                            .to_string(),
+                        "An item in member 'R' was not the canonical encoding of a point".to_string(),
                     )
                 })?)
             }
@@ -103,6 +106,7 @@ impl RangeProof {
         }
     }
 
+    /// Create a single or aggregated range proof for a single party that knows all the secrets
     pub fn prove(
         transcript: &mut Transcript,
         statement: &RangeStatement,
@@ -115,15 +119,14 @@ impl RangeProof {
             ));
         }
         for j in 0..batch_size {
-            if statement.commitments[j]
-                != statement
+            if statement.commitments[j] !=
+                statement
                     .generators
                     .pc_gens()
                     .commit(Scalar::from(witness.openings[j].v), witness.openings[j].r)
             {
                 return Err(ProofError::InternalDataInconsistent(
-                    "Invalid range statement - commitment and opening data do not match"
-                        .to_string(),
+                    "Invalid range statement - commitment and opening data do not match".to_string(),
                 ));
             }
         }
@@ -262,6 +265,8 @@ impl RangeProof {
         }
     }
 
+    /// Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
+    /// range proofs by a party that can supply the optional seed nonces
     pub fn verify(
         transcript_label: &'static str,
         statements: &[RangeStatement],
@@ -314,22 +319,14 @@ impl RangeProof {
             if i == max_index {
                 continue;
             }
-            for (j, this_gi_base) in gi_base
-                .iter()
-                .enumerate()
-                .take(statement.generators.gi_base().len())
-            {
+            for (j, this_gi_base) in gi_base.iter().enumerate().take(statement.generators.gi_base().len()) {
                 if gi_base[j] != *this_gi_base {
                     return Err(ProofError::InternalDataInconsistent(
                         "Inconsistent Gi generator point vector in batch statement".to_string(),
                     ));
                 }
             }
-            for (j, this_hi_base) in hi_base
-                .iter()
-                .enumerate()
-                .take(statement.generators.hi_base().len())
-            {
+            for (j, this_hi_base) in hi_base.iter().enumerate().take(statement.generators.hi_base().len()) {
                 if hi_base[j] != *this_hi_base {
                     return Err(ProofError::InternalDataInconsistent(
                         "Inconsistent Hi generator point vector in batch statement".to_string(),
@@ -386,9 +383,7 @@ impl RangeProof {
                 ));
             }
             if 1 << li.len() != commitments.len() * bit_length {
-                return Err(ProofError::InvalidLength(
-                    "Vector L length not adequate".to_string(),
-                ));
+                return Err(ProofError::InvalidLength("Vector L length not adequate".to_string()));
             }
 
             // Helper values
@@ -474,15 +469,13 @@ impl RangeProof {
 
             // Recover the mask if possible (only for non-aggregated proofs)
             if let Some(seed_nonce) = statements[index].seed_nonce {
-                let mut mask =
-                    (d1 - nonce(&seed_nonce, "eta", None)? - e * nonce(&seed_nonce, "d", None)?)
-                        * e.invert()
-                        * e.invert();
+                let mut mask = (d1 - nonce(&seed_nonce, "eta", None)? - e * nonce(&seed_nonce, "d", None)?) *
+                    e.invert() *
+                    e.invert();
                 mask -= nonce(&seed_nonce, "alpha", None)?;
                 for j in 0..rounds {
                     mask -= challenges[j] * challenges[j] * nonce(&seed_nonce, "dL", Some(j))?;
-                    mask -=
-                        challenges_inv[j] * challenges_inv[j] * nonce(&seed_nonce, "dR", Some(j))?;
+                    mask -= challenges_inv[j] * challenges_inv[j] * nonce(&seed_nonce, "dR", Some(j))?;
                 }
                 mask *= (z_square * y_nm_1).invert();
                 masks.push(Some(mask));
@@ -524,8 +517,7 @@ impl RangeProof {
                 }
             }
 
-            h_base_scalar +=
-                weight * (r1 * y * s1 + e_square * (y_nm_1 * z * d_sum + (z * z - z) * y_sum));
+            h_base_scalar += weight * (r1 * y * s1 + e_square * (y_nm_1 * z * d_sum + (z * z - z) * y_sum));
             g_base_scalar += weight * d1;
 
             scalars.push(weight * (-e));
