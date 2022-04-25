@@ -7,13 +7,12 @@ use crate::range_statement::RangeStatement;
 use crate::range_witness::RangeWitness;
 use crate::scalar_protocol::ScalarProtocol;
 use crate::transcript_protocol::TranscriptProtocol;
-use crate::utils::{bit_vector_of_scalars, nonce};
+use crate::utils::{bit_vector_of_scalars, div_floor_usize, nonce};
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::{Identity, MultiscalarMul};
 use merlin::Transcript;
 use rand::thread_rng;
-use std::ops::Div;
 
 #[derive(Clone, Debug)]
 pub struct RangeProof {
@@ -145,15 +144,29 @@ impl RangeProof {
         for item in statement.commitments.clone() {
             transcript.append_point(b"Ci", &item.compress());
         }
-        for item in statement.offsets.clone() {
-            transcript.append_scalar(b"vi", &Scalar::from(item));
+        for item in statement.minimum_value_promises.clone() {
+            if let Some(minimum_value) = item {
+                transcript.append_u64(b"vi - minimum_value", minimum_value);
+            } else {
+                transcript.append_u64(b"vi - minimum_value", 0);
+            }
         }
 
         // Set bit arrays
         let mut a_li = vec![];
         let mut a_ri = vec![];
         for j in 0..batch_size {
-            let bit_vector = bit_vector_of_scalars(witness.openings[j].v - statement.offsets[j], bit_length)?;
+            let bit_vector = if let Some(minimum_value) = statement.minimum_value_promises[j] {
+                if minimum_value > witness.openings[j].v {
+                    return Err(ProofError::InternalDataInconsistent(
+                        "Minimum value cannot be larger than value!".to_string(),
+                    ));
+                } else {
+                    bit_vector_of_scalars(witness.openings[j].v - minimum_value, bit_length)?
+                }
+            } else {
+                bit_vector_of_scalars(witness.openings[j].v, bit_length)?
+            };
             for bit_field in bit_vector.clone() {
                 a_li.push(bit_field);
                 a_ri.push(bit_field - Scalar::one());
@@ -357,7 +370,7 @@ impl RangeProof {
         let rng = &mut thread_rng();
         for (index, proof) in range_proofs.iter().enumerate() {
             let commitments = statements[index].commitments.clone();
-            let offsets = statements[index].offsets.clone();
+            let minimum_value_promises = statements[index].minimum_value_promises.clone();
             let a = proof.get_a()?;
             let a1 = proof.get_a1()?;
             let b = proof.get_b()?;
@@ -395,8 +408,12 @@ impl RangeProof {
             for i in 0..(statements[index].commitments.len()) {
                 transcript.append_point(b"Ci", &statements[index].commitments[i].compress());
             }
-            for i in 0..(statements[index].offsets.len()) {
-                transcript.append_scalar(b"vi", &Scalar::from(statements[index].offsets[i]));
+            for item in statements[index].minimum_value_promises.clone() {
+                if let Some(minimum_value) = item {
+                    transcript.append_u64(b"vi - minimum_value", minimum_value);
+                } else {
+                    transcript.append_u64(b"vi - minimum_value", 0);
+                }
             }
 
             // Reconstruct challenges
@@ -451,7 +468,7 @@ impl RangeProof {
             while d_sum_temp_2m > 2 {
                 d_sum = d_sum + d_sum * d_sum_temp_z;
                 d_sum_temp_z = d_sum_temp_z * d_sum_temp_z;
-                d_sum_temp_2m = f32::floor((d_sum_temp_2m as f32).div(2f32)) as usize;
+                d_sum_temp_2m = div_floor_usize(d_sum_temp_2m as f32, 2f32);
             }
             d_sum *= two_n_minus_one;
 
@@ -499,11 +516,11 @@ impl RangeProof {
             let mut z_even_powers = Scalar::one();
             for k in 0..batch_size {
                 z_even_powers *= z_square;
-                let temp = weight * (-e_square * z_even_powers * y_nm_1);
-                scalars.push(temp);
+                let weighted = weight * (-e_square * z_even_powers * y_nm_1);
+                scalars.push(weighted);
                 points.push(commitments[k]);
-                if offsets[k] != 0 {
-                    h_base_scalar -= temp * Scalar::from(offsets[k]);
+                if let Some(minimum_value) = minimum_value_promises[k] {
+                    h_base_scalar -= weighted * Scalar::from(minimum_value);
                 }
             }
 

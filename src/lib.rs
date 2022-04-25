@@ -15,7 +15,7 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod commitment_opening;
-mod errors;
+pub mod errors;
 pub mod generators;
 pub mod hidden;
 mod inner_product_round;

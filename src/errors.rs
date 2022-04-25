@@ -1,8 +1,7 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![allow(non_snake_case)]
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 
 use thiserror::Error;
 

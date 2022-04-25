@@ -6,7 +6,8 @@ use crate::hidden::Hidden;
 use crate::scalar_protocol::ScalarProtocol;
 use crate::transcript_protocol::TranscriptProtocol;
 use crate::utils::{
-    add_point_vec, add_scalar_vec, mul_point_vec_with_scalar, mul_scalar_vec_with_scalar, nonce,
+    add_point_vec, add_scalar_vec, div_floor_usize, mul_point_vec_with_scalar,
+    mul_scalar_vec_with_scalar, nonce,
 };
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
@@ -15,7 +16,6 @@ use merlin::Transcript;
 use non_empty_vec::NonEmpty;
 use rand_core::{CryptoRng, RngCore};
 use std::convert::TryFrom;
-use std::ops::Div;
 
 #[derive(Debug)]
 pub struct InnerProductRound<'a> {
@@ -145,7 +145,7 @@ impl<'a> InnerProductRound<'a> {
             return Ok(());
         };
 
-        n = f32::floor((n as f32).div(2f32)) as usize;
+        n = div_floor_usize(n as f32, 2f32);
         let a1 = self
             .ai
             .get(..n)

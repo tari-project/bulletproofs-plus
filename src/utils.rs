@@ -6,6 +6,7 @@ use crate::range_proof::RangeProof;
 use blake2::Blake2b;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
+use std::ops::Div;
 
 pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<Scalar, ProofError> {
     let encoded_label = label.as_bytes();
@@ -107,6 +108,10 @@ pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar
         }
     }
     Ok(result)
+}
+
+pub fn div_floor_usize(value: f32, divisor: f32) -> usize {
+    f32::floor((value as f32).div(divisor)) as usize
 }
 
 #[cfg(test)]

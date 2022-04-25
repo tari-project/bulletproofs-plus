@@ -1,8 +1,6 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![allow(non_snake_case)]
-
 use crate::errors::ProofError;
 use crate::range_parameters::RangeParameters;
 use curve25519_dalek::ristretto::RistrettoPoint;
@@ -12,7 +10,7 @@ use curve25519_dalek::scalar::Scalar;
 pub struct RangeStatement {
     pub generators: RangeParameters,
     pub commitments: Vec<RistrettoPoint>, // range statement
-    pub offsets: Vec<u64>,
+    pub minimum_value_promises: Vec<Option<u64>>,
     pub seed_nonce: Option<Scalar>,
 }
 
@@ -20,7 +18,7 @@ impl RangeStatement {
     pub fn init(
         generators: RangeParameters,
         commitments: Vec<RistrettoPoint>,
-        offsets: Vec<u64>,
+        minimum_value_promise: Vec<Option<u64>>,
         seed_nonce: Option<Scalar>,
     ) -> Result<RangeStatement, ProofError> {
         if !commitments.len().is_power_of_two() {
@@ -28,9 +26,9 @@ impl RangeStatement {
                 "Number of commitments must be a power of two".to_string(),
             ));
         }
-        if !offsets.len() == commitments.len() {
+        if !minimum_value_promise.len() == commitments.len() {
             return Err(ProofError::InternalDataInconsistent(
-                "Incorrect number of offsets".to_string(),
+                "Incorrect number of minimum value promises".to_string(),
             ));
         }
         if generators.batch_size() < commitments.len() {
@@ -46,7 +44,7 @@ impl RangeStatement {
         Ok(Self {
             generators,
             commitments,
-            offsets,
+            minimum_value_promises: minimum_value_promise,
             seed_nonce,
         })
     }
