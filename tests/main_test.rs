@@ -231,6 +231,39 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>, promise_strategy:
                     RangeProof::verify(transcript_label, &statements_private_changed, &proofs.clone()).unwrap();
                 assert_ne!(private_masks, recovered_private_masks_changed);
             }
+
+            // 8. Meddle with the minimum value promises
+            let mut statements_public_changed = vec![];
+            for statement in statements_public.clone() {
+                statements_public_changed.push(RangeStatement {
+                    generators: statement.generators.clone(),
+                    commitments: statement.commitments.clone(),
+                    minimum_value_promises: statement
+                        .minimum_value_promises
+                        .clone()
+                        .iter()
+                        .map(|promise| {
+                            if let Some(value) = promise {
+                                Some(value.saturating_add(1))
+                            } else {
+                                Some(1)
+                            }
+                        })
+                        .collect(),
+                    seed_nonce: statement.seed_nonce,
+                });
+            }
+            match RangeProof::verify(transcript_label, &statements_public_changed, &proofs.clone()) {
+                Ok(_) => {
+                    panic!("Range proof should not verify")
+                },
+                Err(e) => match e {
+                    ProofError::VerificationFailed(_) => {},
+                    _ => {
+                        panic!("Expected 'ProofError::VerificationFailed'")
+                    },
+                },
+            };
         }
     }
 }
