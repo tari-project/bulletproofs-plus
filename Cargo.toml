@@ -25,6 +25,7 @@ derivative = "2.2.0"
 derive_more = "0.99.17"
 
 [dev-dependencies]
+criterion = "0.3"
 
 [features]
 default = []
@@ -37,3 +38,12 @@ avx2 = ["simd_backend"] # deprecated alias for simd_backend
 
 [[test]]
 name = "main_test"
+
+[[bench]]
+name = "range_proof"
+harness = false
+#required-features = ["avx2"]
+
+[[bench]]
+name = "generators"
+harness = false
