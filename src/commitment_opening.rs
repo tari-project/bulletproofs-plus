@@ -1,9 +1,7 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![deny(missing_docs)]
-
-//! Bulletproof+ commitment opening struct
+//! Bulletproofs+ commitment opening struct
 
 use curve25519_dalek::scalar::Scalar;
 use zeroize::Zeroize;

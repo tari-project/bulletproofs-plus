@@ -1,9 +1,7 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![deny(missing_docs)]
-
-//! Bulletproof+ commitment openings for the aggregated case
+//! Bulletproofs+ commitment openings for the aggregated case
 
 use zeroize::Zeroize;
 
@@ -26,7 +24,7 @@ impl RangeWitness {
 /// Overwrite secrets with null bytes when they go out of scope.
 impl Drop for RangeWitness {
     fn drop(&mut self) {
-        for item in self.openings.iter_mut() {
+        for item in &mut self.openings {
             item.zeroize();
         }
     }

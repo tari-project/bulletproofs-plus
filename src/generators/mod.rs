@@ -4,8 +4,6 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![deny(missing_docs)]
-
 //! The `generators` module contains API for producing a set of generators for a range proof
 
 /// A convenience iterator struct for the generators

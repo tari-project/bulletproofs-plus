@@ -65,7 +65,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
             b.iter(|| {
                 // 4. Create the aggregated proof
                 let mut transcript = Transcript::new(transcript_label.as_bytes());
-                let _ = RangeProof::prove(&mut transcript, &statement.clone(), witness.clone());
+                let _ = RangeProof::prove(&mut transcript, &statement.clone(), &witness);
             })
         });
     }
@@ -133,7 +133,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
 
             // 4. Create the proof
             let mut transcript = Transcript::new(transcript_label.as_bytes());
-            let proof = RangeProof::prove(&mut transcript, &statement, witness.clone());
+            let proof = RangeProof::prove(&mut transcript, &statement, &witness);
             proofs.push(proof.unwrap());
 
             // Benchmark this code
@@ -201,7 +201,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, c: &mut Criterion) {
 
         // 4. Create the proof
         let mut transcript = Transcript::new(transcript_label.as_bytes());
-        let proof = RangeProof::prove(&mut transcript, &statement, witness.clone());
+        let proof = RangeProof::prove(&mut transcript, &statement, &witness);
         proofs.push(proof.unwrap());
     }
 

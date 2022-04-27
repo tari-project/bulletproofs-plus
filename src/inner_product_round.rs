@@ -1,20 +1,15 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![deny(missing_docs)]
-
-//! Bulletproof+ inner product calculation for each round
-
-use std::convert::TryFrom;
+//! Bulletproofs+ inner product calculation for each round
 
 use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
-    traits::MultiscalarMul,
+    traits::VartimeMultiscalarMul,
 };
 use merlin::Transcript;
-use non_empty_vec::NonEmpty;
-use rand_core::{CryptoRng, RngCore};
+use rand::{CryptoRng, RngCore};
 use zeroize::Zeroize;
 
 use crate::{
@@ -22,30 +17,23 @@ use crate::{
     hidden::Hidden,
     scalar_protocol::ScalarProtocol,
     transcript_protocol::TranscriptProtocol,
-    utils::{
-        add_point_vec,
-        add_scalar_vec,
-        div_floor_usize,
-        mul_point_vec_with_scalar,
-        mul_scalar_vec_with_scalar,
-        nonce,
-    },
+    utils::{add_point_vec, add_scalar_vec, mul_point_vec_with_scalar, mul_scalar_vec_with_scalar, nonce},
 };
 
 /// The struct that will hold the inner product calculation for each round, called consecutively
 #[derive(Debug)]
 pub struct InnerProductRound<'a> {
     // Common data
-    gi_base: NonEmpty<RistrettoPoint>,
-    hi_base: NonEmpty<RistrettoPoint>,
+    gi_base: Vec<RistrettoPoint>,
+    hi_base: Vec<RistrettoPoint>,
     g_base: RistrettoPoint,
     h_base: RistrettoPoint,
-    y_powers: NonEmpty<Scalar>,
+    y_powers: Vec<Scalar>,
     done: bool,
 
     // Prover data
-    ai: NonEmpty<Scalar>,
-    bi: NonEmpty<Scalar>,
+    ai: Vec<Scalar>,
+    bi: Vec<Scalar>,
     alpha: Scalar,
 
     // Verifier data
@@ -78,53 +66,51 @@ impl<'a> InnerProductRound<'a> {
         y_powers: Vec<Scalar>,
         transcript: &'a mut Transcript,
         seed_nonce: Option<Scalar>,
+        batch_size: usize,
     ) -> Result<Self, ProofError> {
-        let gi_base = NonEmpty::try_from(gi_base).map_err(|e| ProofError::InvalidLength(format!("Gi - {:?}", e)))?;
-        let hi_base = NonEmpty::try_from(hi_base).map_err(|e| ProofError::InvalidLength(format!("Hi - {:?}", e)))?;
-        let a = NonEmpty::try_from(ai).map_err(|e| ProofError::InvalidLength(format!("a - {:?}", e)))?;
-        let b = NonEmpty::try_from(bi).map_err(|e| ProofError::InvalidLength(format!("b - {:?}", e)))?;
-        let y_powers = NonEmpty::try_from(y_powers).map_err(|e| ProofError::InvalidLength(format!("{:?}", e)))?;
-        let n = gi_base.len().get();
-        if !(hi_base.len().get() == n && a.len().get() == n && b.len().get() == n) || (y_powers.len().get() != (n + 2))
-        {
-            return Err(ProofError::InternalDataInconsistent(
+        let n = gi_base.len();
+        if gi_base.is_empty() || hi_base.is_empty() || ai.is_empty() || bi.is_empty() || y_powers.is_empty() {
+            Err(ProofError::InvalidLength(
+                "Vectors gi_base, hi_base, ai, bi and y_powers cannot be empty".to_string(),
+            ))
+        } else if !(hi_base.len() == n && ai.len() == n && bi.len() == n) || (y_powers.len() != (n + 2)) {
+            Err(ProofError::InternalDataInconsistent(
                 "Vector length for inner product round".to_string(),
-            ));
-        };
-        Ok(Self {
-            gi_base,
-            hi_base,
-            g_base,
-            h_base,
-            y_powers,
-            done: false,
-            ai: a,
-            bi: b,
-            alpha,
-            a1: None,
-            b: None,
-            r1: None,
-            s1: None,
-            d1: None,
-            li: Vec::new(),
-            ri: Vec::new(),
-            transcript: transcript.into(),
-            round: 0,
-            seed_nonce,
-        })
+            ))
+        } else {
+            Ok(Self {
+                gi_base,
+                hi_base,
+                g_base,
+                h_base,
+                y_powers,
+                done: false,
+                ai,
+                bi,
+                alpha,
+                a1: None,
+                b: None,
+                r1: None,
+                s1: None,
+                d1: None,
+                li: Vec::with_capacity(n * batch_size + 2),
+                ri: Vec::with_capacity(n * batch_size + 2),
+                transcript: transcript.into(),
+                round: 0,
+                seed_nonce,
+            })
+        }
     }
 
     /// Calculate the inner product, updating 'self' for each round
     pub fn inner_product<T: RngCore + CryptoRng>(&mut self, rng: &mut T) -> Result<(), ProofError> {
-        let mut n = self.gi_base.len().get();
+        let mut n = self.gi_base.len();
         if n == 1 {
             self.done = true;
 
             // Random masks
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-            let r = Scalar::random_not_zero(rng);
-            // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-            let s = Scalar::random_not_zero(rng);
+            let (r, s) = (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng));
             let (d, eta) = if let Some(seed_nonce) = self.seed_nonce {
                 (nonce(&seed_nonce, "d", None)?, nonce(&seed_nonce, "eta", None)?)
             } else {
@@ -151,45 +137,21 @@ impl<'a> InnerProductRound<'a> {
             return Ok(());
         };
 
-        n = div_floor_usize(n as f32, 2f32);
-        let a1 = self
-            .ai
-            .get(..n)
-            .ok_or_else(|| ProofError::InternalDataInconsistent("Zero length (a)".to_string()))?;
-        let a2 = self
-            .ai
-            .get(n..)
-            .ok_or_else(|| ProofError::InternalDataInconsistent("Zero length (a)".to_string()))?;
-        let b1 = self
-            .bi
-            .get(..n)
-            .ok_or_else(|| ProofError::InternalDataInconsistent("Zero length (b)".to_string()))?;
-        let b2 = self
-            .bi
-            .get(n..)
-            .ok_or_else(|| ProofError::InternalDataInconsistent("Zero length (b)".to_string()))?;
-        let gi_base_lo = self
-            .gi_base
-            .get(..n)
-            .ok_or_else(|| ProofError::InternalDataInconsistent("Zero length (Gi)".to_string()))?;
-        let gi_base_hi = self
-            .gi_base
-            .get(n..)
-            .ok_or_else(|| ProofError::InternalDataInconsistent("Zero length (Gi)".to_string()))?;
-        let hi_base_lo = self
-            .hi_base
-            .get(..n)
-            .ok_or_else(|| ProofError::InternalDataInconsistent("Zero length (Hi)".to_string()))?;
-        let hi_base_hi = self
-            .hi_base
-            .get(n..)
-            .ok_or_else(|| ProofError::InternalDataInconsistent("Zero length (Hi)".to_string()))?;
-        let y_n_inverse = if self.y_powers[n] != Scalar::zero() {
-            self.y_powers[n].invert()
-        } else {
+        n /= 2; // Rounds towards zero, truncating any fractional part
+        let a1 = &self.ai[..n];
+        let a2 = &self.ai[n..];
+        let b1 = &self.bi[..n];
+        let b2 = &self.bi[n..];
+        let gi_base_lo = &self.gi_base[..n];
+        let gi_base_hi = &self.gi_base[n..];
+        let hi_base_lo = &self.hi_base[..n];
+        let hi_base_hi = &self.hi_base[n..];
+        let y_n_inverse = if self.y_powers[n] == Scalar::zero() {
             return Err(ProofError::InternalDataInconsistent(
                 "Cannot invert a zero valued Scalar".to_string(),
             ));
+        } else {
+            self.y_powers[n].invert()
         };
 
         let (d_l, d_r) = if let Some(seed_nonce) = self.seed_nonce {
@@ -225,8 +187,11 @@ impl<'a> InnerProductRound<'a> {
             ri_scalars.push(b1[i]);
             ri_points.push(hi_base_hi[i]);
         }
-        self.li.push(RistrettoPoint::multiscalar_mul(li_scalars, li_points));
-        self.ri.push(RistrettoPoint::multiscalar_mul(ri_scalars, ri_points));
+        // 'RistrettoPoint::vartime_multiscalar_mul' optimized for vector lengths <190 and >190
+        self.li
+            .push(RistrettoPoint::vartime_multiscalar_mul(li_scalars, li_points));
+        self.ri
+            .push(RistrettoPoint::vartime_multiscalar_mul(ri_scalars, ri_points));
 
         self.transcript
             .validate_and_append_point(b"L", &self.li[self.li.len() - 1].compress())?;
@@ -235,27 +200,23 @@ impl<'a> InnerProductRound<'a> {
         let e = self.transcript.challenge_scalar(b"e")?;
         let e_inverse = e.invert();
 
-        self.gi_base = NonEmpty::try_from(add_point_vec(
+        self.gi_base = add_point_vec(
             mul_point_vec_with_scalar(gi_base_lo, &e_inverse)?.as_slice(),
             mul_point_vec_with_scalar(gi_base_hi, &(e * y_n_inverse))?.as_slice(),
-        )?)
-        .map_err(|e| ProofError::InvalidLength(format!("With Gi - {:?}", e)))?;
-        self.hi_base = NonEmpty::try_from(add_point_vec(
+        )?;
+        self.hi_base = add_point_vec(
             mul_point_vec_with_scalar(hi_base_lo, &e)?.as_slice(),
             mul_point_vec_with_scalar(hi_base_hi, &e_inverse)?.as_slice(),
-        )?)
-        .map_err(|e| ProofError::InvalidLength(format!("With Hi - {:?}", e)))?;
+        )?;
 
-        self.ai = NonEmpty::try_from(add_scalar_vec(
+        self.ai = add_scalar_vec(
             mul_scalar_vec_with_scalar(a1, &e)?.as_slice(),
             mul_scalar_vec_with_scalar(a2, &(self.y_powers[n] * e_inverse))?.as_slice(),
-        )?)
-        .map_err(|e| ProofError::InvalidLength(format!("With a - {:?}", e)))?;
-        self.bi = NonEmpty::try_from(add_scalar_vec(
+        )?;
+        self.bi = add_scalar_vec(
             mul_scalar_vec_with_scalar(b1, &e_inverse)?.as_slice(),
             mul_scalar_vec_with_scalar(b2, &e)?.as_slice(),
-        )?)
-        .map_err(|e| ProofError::InvalidLength(format!("With b - {:?}", e)))?;
+        )?;
         self.alpha = d_l * e * e + self.alpha + d_r * e_inverse * e_inverse;
 
         Ok(())
@@ -316,30 +277,30 @@ impl<'a> InnerProductRound<'a> {
     }
 
     pub fn get_li(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
-        if !self.li.is_empty() {
+        if self.li.is_empty() {
+            Err(ProofError::InternalDataInconsistent(
+                "Vector 'L' not assigned yet".to_string(),
+            ))
+        } else {
             let mut li = Vec::with_capacity(self.li.len());
             for item in self.li.clone() {
                 li.push(item.compress())
             }
             Ok(li)
-        } else {
-            Err(ProofError::InternalDataInconsistent(
-                "Vector 'L' not assigned yet".to_string(),
-            ))
         }
     }
 
     pub fn get_ri(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
-        if !self.ri.is_empty() {
+        if self.ri.is_empty() {
+            Err(ProofError::InternalDataInconsistent(
+                "Vector 'R' not assigned yet".to_string(),
+            ))
+        } else {
             let mut ri = Vec::with_capacity(self.ri.len());
             for item in self.ri.clone() {
                 ri.push(item.compress())
             }
             Ok(ri)
-        } else {
-            Err(ProofError::InternalDataInconsistent(
-                "Vector 'R' not assigned yet".to_string(),
-            ))
         }
     }
 }

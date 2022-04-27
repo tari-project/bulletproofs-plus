@@ -1,8 +1,6 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::Div;
-
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand::Rng;
@@ -62,13 +60,14 @@ fn test_aggregated_single_batch_multiple_bit_lengths() {
 
 #[test]
 fn test_non_aggregated_multiple_batches_single_bit_length() {
-    let bit_lengths = vec![4];
-    let batches = vec![1, 1, 1];
+    let bit_lengths = vec![64];
+    let batches = vec![1, 1, 1, 1, 1];
     proof_batches(
         bit_lengths.clone(),
         batches.clone(),
         ProofOfMinimumValueStrategy::NoOffset,
     );
+    // panic!("Hansie");
     proof_batches(
         bit_lengths.clone(),
         batches.clone(),
@@ -84,8 +83,8 @@ fn test_non_aggregated_multiple_batches_single_bit_length() {
 
 #[test]
 fn test_mixed_aggregation_multiple_batches_single_bit_length() {
-    let bit_lengths = vec![4];
-    let batches = vec![1, 4, 1, 8, 1];
+    let bit_lengths = vec![64];
+    let batches = vec![1, 2, 4, 8];
     proof_batches(
         bit_lengths.clone(),
         batches.clone(),
@@ -109,10 +108,6 @@ enum ProofOfMinimumValueStrategy {
     Intermediate,
     EqualToValue,
     LargerThanValue,
-}
-
-fn div_floor_u64(value: f64, divisor: f64) -> u64 {
-    f64::floor((value as f64).div(divisor)) as u64
 }
 
 fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>, promise_strategy: ProofOfMinimumValueStrategy) {
@@ -140,7 +135,7 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>, promise_strategy:
                 let value = rng.gen_range(value_min..value_max);
                 let minimum_value = match promise_strategy {
                     ProofOfMinimumValueStrategy::NoOffset => None,
-                    ProofOfMinimumValueStrategy::Intermediate => Some(div_floor_u64(value as f64, 3f64)),
+                    ProofOfMinimumValueStrategy::Intermediate => Some(value / 3),
                     ProofOfMinimumValueStrategy::EqualToValue => Some(value),
                     ProofOfMinimumValueStrategy::LargerThanValue => Some(value + 1),
                 };
@@ -178,7 +173,7 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>, promise_strategy:
             // 4. Create the proofs
             let mut transcript = Transcript::new(transcript_label.as_bytes());
 
-            let proof = RangeProof::prove(&mut transcript, &private_statement.clone(), witness);
+            let proof = RangeProof::prove(&mut transcript, &private_statement.clone(), &witness);
             match promise_strategy {
                 ProofOfMinimumValueStrategy::LargerThanValue => match proof {
                     Ok(_) => {

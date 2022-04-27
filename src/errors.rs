@@ -1,9 +1,7 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![deny(missing_docs)]
-
-//! Bulletproof+ error definitions
+//! Bulletproofs+ error definitions
 
 use thiserror::Error;
 

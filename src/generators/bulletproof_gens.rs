@@ -72,6 +72,7 @@ impl BulletproofGens {
         }
 
         for i in 0..self.party_capacity {
+            #[allow(clippy::cast_possible_truncation)]
             let party_index = i as u32;
             let mut label = [b'G', 0, 0, 0, 0];
             LittleEndian::write_u32(&mut label[1..5], party_index);

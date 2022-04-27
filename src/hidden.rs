@@ -1,7 +1,7 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Bulletproof+ add 'Debug' functionality to other struct members that do not implement 'Debug'
+//! Bulletproofs+ add 'Debug' functionality to other struct members that do not implement 'Debug'
 
 use std::fmt;
 

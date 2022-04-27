@@ -1,9 +1,7 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![deny(missing_docs)]
-
-//! Bulletproof+ public range proof parameters intended for a verifier
+//! Bulletproofs+ public range proof parameters intended for a verifier
 
 use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
@@ -20,7 +18,7 @@ use crate::{
     range_witness::RangeWitness,
     scalar_protocol::ScalarProtocol,
     transcript_protocol::TranscriptProtocol,
-    utils::{bit_vector_of_scalars, div_floor_usize, nonce},
+    utils::{bit_vector_of_scalars, nonce},
 };
 
 /// Contains the public range proof parameters intended for a verifier
@@ -71,7 +69,11 @@ impl RangeProof {
     }
 
     fn get_li(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
-        if !self.li.is_empty() {
+        if self.li.is_empty() {
+            Err(ProofError::InternalDataInconsistent(
+                "Vector 'L' not assigned yet".to_string(),
+            ))
+        } else {
             let mut li = Vec::with_capacity(self.li.len());
             for item in self.li.clone() {
                 li.push(item.decompress().ok_or_else(|| {
@@ -81,15 +83,15 @@ impl RangeProof {
                 })?)
             }
             Ok(li)
-        } else {
-            Err(ProofError::InternalDataInconsistent(
-                "Vector 'L' not assigned yet".to_string(),
-            ))
         }
     }
 
     fn get_ri(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
-        if !self.li.is_empty() {
+        if self.li.is_empty() {
+            Err(ProofError::InternalDataInconsistent(
+                "Vector 'R' not assigned yet".to_string(),
+            ))
+        } else {
             let mut ri = Vec::with_capacity(self.ri.len());
             for item in self.ri.clone() {
                 ri.push(item.decompress().ok_or_else(|| {
@@ -99,18 +101,15 @@ impl RangeProof {
                 })?)
             }
             Ok(ri)
-        } else {
-            Err(ProofError::InternalDataInconsistent(
-                "Vector 'R' not assigned yet".to_string(),
-            ))
         }
     }
 
     /// Create a single or aggregated range proof for a single party that knows all the secrets
+    /// The prover must ensure that the commitments and witness opening data are consistent
     pub fn prove(
         transcript: &mut Transcript,
         statement: &RangeStatement,
-        witness: RangeWitness,
+        witness: &RangeWitness,
     ) -> Result<RangeProof, ProofError> {
         let batch_size = statement.commitments.len();
         if witness.openings.len() != batch_size {
@@ -118,28 +117,14 @@ impl RangeProof {
                 "Invalid range statement - commitments and openings do not match!".to_string(),
             ));
         }
-        for j in 0..batch_size {
-            if statement.commitments[j] !=
-                statement
-                    .generators
-                    .pc_gens()
-                    .commit(Scalar::from(witness.openings[j].v), witness.openings[j].r)
-            {
-                return Err(ProofError::InternalDataInconsistent(
-                    "Invalid range statement - commitment and opening data do not match".to_string(),
-                ));
-            }
-        }
 
         let bit_length = statement.generators.bit_length();
 
         // Global generators
-        let h_base = statement.generators.h_base();
-        let g_base = statement.generators.g_base();
-        let hi_base = statement.generators.hi_base();
-        let gi_base = statement.generators.gi_base();
+        let (h_base, g_base) = (statement.generators.h_base(), statement.generators.g_base());
+        let (hi_base, gi_base) = (statement.generators.hi_base(), statement.generators.gi_base());
 
-        transcript.domain_separator(b"Bulletproof+", b"Range Proof");
+        transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
         transcript.validate_and_append_point(b"H", &h_base.compress())?;
         transcript.validate_and_append_point(b"G", &g_base.compress())?;
         transcript.append_u64(b"N", bit_length as u64);
@@ -156,8 +141,7 @@ impl RangeProof {
         }
 
         // Set bit arrays
-        let mut a_li = vec![];
-        let mut a_ri = vec![];
+        let (mut a_li, mut a_ri) = (vec![], vec![]);
         for j in 0..batch_size {
             let bit_vector = if let Some(minimum_value) = statement.minimum_value_promises[j] {
                 if minimum_value > witness.openings[j].v {
@@ -184,9 +168,10 @@ impl RangeProof {
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
             Scalar::random_not_zero(rng)
         };
-        let mut ai_scalars = vec![alpha];
-        let mut ai_points = vec![g_base];
-
+        let mut ai_scalars = Vec::with_capacity(bit_length * batch_size + 1);
+        ai_scalars.push(alpha);
+        let mut ai_points = Vec::with_capacity(bit_length * batch_size + 1);
+        ai_points.push(g_base);
         for i in 0..(bit_length * batch_size) {
             ai_scalars.push(a_li[i]);
             ai_points.push(gi_base[i]);
@@ -197,8 +182,7 @@ impl RangeProof {
         transcript.validate_and_append_point(b"A", &a.compress())?;
 
         // Get challenges
-        let y = transcript.challenge_scalar(b"y")?;
-        let z = transcript.challenge_scalar(b"z")?;
+        let (y, z) = (transcript.challenge_scalar(b"y")?, transcript.challenge_scalar(b"z")?);
         let z_square = z * z;
 
         // Compute powers of the challenge
@@ -236,7 +220,7 @@ impl RangeProof {
         }
 
         // Calculate the inner product
-        transcript.domain_separator(b"Bulletproof+", b"Inner Product Proof");
+        transcript.domain_separator(b"Bulletproofs+", b"Inner Product Proof");
         let mut ip_data = InnerProductRound::init(
             gi_base,
             hi_base,
@@ -248,9 +232,10 @@ impl RangeProof {
             y_powers,
             transcript,
             statement.seed_nonce,
+            batch_size,
         )?;
         loop {
-            let _ = ip_data.inner_product(rng);
+            let _result = ip_data.inner_product(rng);
             if ip_data.is_done() {
                 return Ok(RangeProof {
                     a: a.compress(),
@@ -398,7 +383,7 @@ impl RangeProof {
 
             // Start the transcript
             let mut transcript = Transcript::new(transcript_label.as_bytes());
-            transcript.domain_separator(b"Bulletproof+", b"Range Proof");
+            transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
             transcript.validate_and_append_point(b"H", &h_base.compress())?;
             transcript.validate_and_append_point(b"G", &g_base.compress())?;
             transcript.append_u64(b"N", bit_length as u64);
@@ -418,7 +403,7 @@ impl RangeProof {
             transcript.validate_and_append_point(b"A", &proof.a)?;
             let y = transcript.challenge_scalar(b"y")?;
             let z = transcript.challenge_scalar(b"z")?;
-            transcript.domain_separator(b"Bulletproof+", b"Inner Product Proof");
+            transcript.domain_separator(b"Bulletproofs+", b"Inner Product Proof");
             let mut challenges = vec![];
             for j in 0..rounds {
                 transcript.validate_and_append_point(b"L", &li[j].compress())?;
@@ -466,7 +451,7 @@ impl RangeProof {
             while d_sum_temp_2m > 2 {
                 d_sum = d_sum + d_sum * d_sum_temp_z;
                 d_sum_temp_z = d_sum_temp_z * d_sum_temp_z;
-                d_sum_temp_2m = div_floor_usize(d_sum_temp_2m as f32, 2f32);
+                d_sum_temp_2m /= 2; // Rounds towards zero, truncating any fractional part
             }
             d_sum *= two_n_minus_one;
 

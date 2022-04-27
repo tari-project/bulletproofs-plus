@@ -1,16 +1,12 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![deny(missing_docs)]
-
-//! Bulletproof+ utilities
-
-use std::ops::Div;
+//! Bulletproofs+ utilities
 
 use blake2::Blake2b;
 use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
 
-use crate::{errors::ProofError, range_proof::RangeProof};
+use crate::{errors::ProofError, range_proof::RangeProof, scalar_protocol::ScalarProtocol};
 
 /// Create a Blake2B deterministic nonce given a seed, label and index
 pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<Scalar, ProofError> {
@@ -29,7 +25,8 @@ pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<S
     } else {
         Blake2b::with_params(&seed_nonce.to_bytes(), &[], encoded_label)
     };
-    Ok(Scalar::from_hash(hasher))
+
+    Ok(Scalar::from_hasher_blake2b(hasher))
 }
 
 /// Multiply a point vector with a scalar vector
@@ -101,18 +98,13 @@ pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar
     }
     let mut result = vec![];
     for i in 0..bit_length {
-        if (value >> i) & 1 != 0 {
-            result.push(Scalar::one());
-        } else {
+        if (value >> i) & 1 == 0 {
             result.push(Scalar::zero());
+        } else {
+            result.push(Scalar::one());
         }
     }
     Ok(result)
-}
-
-/// A convenience function ot calculate division and return the rounded down value
-pub fn div_floor_usize(value: f32, divisor: f32) -> usize {
-    f32::floor((value as f32).div(divisor)) as usize
 }
 
 #[cfg(test)]

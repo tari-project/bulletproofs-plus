@@ -4,9 +4,7 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![deny(missing_docs)]
-
-/// Bulletproof+ `TranscriptProtocol` trait for using a Scalar
+/// Bulletproofs+ `TranscriptProtocol` trait for using a Scalar
 use curve25519_dalek::{ristretto::CompressedRistretto, scalar::Scalar};
 use merlin::Transcript;
 

@@ -1,9 +1,7 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-#![deny(missing_docs)]
-
-//! Bulletproof+ range parameters (generators and base points) needed for a batch of range proofs
+//! Bulletproofs+ range parameters (generators and base points) needed for a batch of range proofs
 
 use curve25519_dalek::ristretto::RistrettoPoint;
 
@@ -70,12 +68,12 @@ impl RangeParameters {
 
     /// Return the protected value base point
     pub fn h_base(&self) -> RistrettoPoint {
-        self.pc_gens.b_base
+        self.pc_gens.h_base
     }
 
     /// Return the protected mask base point
     pub fn g_base(&self) -> RistrettoPoint {
-        self.pc_gens.b_base_blinding
+        self.pc_gens.g_base
     }
 
     /// Return the protected value bulletproof generators
@@ -83,7 +81,7 @@ impl RangeParameters {
         let hi_base: Vec<RistrettoPoint> = self
             .bp_gens
             .h_iter(self.bit_length(), self.batch_size())
-            .cloned()
+            .copied()
             .collect();
         hi_base
     }
@@ -93,7 +91,7 @@ impl RangeParameters {
         let gi_base: Vec<RistrettoPoint> = self
             .bp_gens
             .g_iter(self.bit_length(), self.batch_size())
-            .cloned()
+            .copied()
             .collect();
         gi_base
     }
