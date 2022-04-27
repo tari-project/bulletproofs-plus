@@ -209,8 +209,9 @@ impl RangeProof {
 
         // Compute d efficiently
         let mut d = vec![z_square];
+        let two = Scalar::from(2u8);
         for i in 1..bit_length {
-            d.push(Scalar::from(2u8) * d[i - 1]);
+            d.push(two * d[i - 1]);
         }
         for j in 1..batch_size {
             for i in 0..bit_length {
@@ -363,6 +364,8 @@ impl RangeProof {
         // Recovered masks
         let mut masks = vec![];
 
+        let two = Scalar::from(2u8);
+
         // Process each proof and add it to the batch
         let rng = &mut thread_rng();
         for (index, proof) in range_proofs.iter().enumerate() {
@@ -448,7 +451,7 @@ impl RangeProof {
             // Compute d efficiently
             let mut d = vec![z_square];
             for i in 1..bit_length {
-                d.push(Scalar::from(2u8) * d[i - 1]);
+                d.push(two * d[i - 1]);
             }
             for j in 1..batch_size {
                 for i in 0..bit_length {
@@ -499,8 +502,8 @@ impl RangeProof {
                         h *= challenges[k];
                     }
                 }
-                gi_base_scalars[i] += weight * (g + e * e * z);
-                hi_base_scalars[i] += weight * (h - e * e * (d[i] * y_nm_i + z));
+                gi_base_scalars[i] += weight * (g + e_square * z);
+                hi_base_scalars[i] += weight * (h - e_square * (d[i] * y_nm_i + z));
                 y_inv_i *= y_inverse;
                 y_nm_i *= y_inverse;
             }
@@ -517,7 +520,7 @@ impl RangeProof {
                 }
             }
 
-            h_base_scalar += weight * (r1 * y * s1 + e_square * (y_nm_1 * z * d_sum + (z * z - z) * y_sum));
+            h_base_scalar += weight * (r1 * y * s1 + e_square * (y_nm_1 * z * d_sum + (z_square - z) * y_sum));
             g_base_scalar += weight * d1;
 
             scalars.push(weight * (-e));
