@@ -8,7 +8,7 @@
 use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
-    traits::{Identity, MultiscalarMul},
+    traits::{Identity, MultiscalarMul, VartimeMultiscalarMul},
 };
 use merlin::Transcript;
 use rand::thread_rng;
@@ -550,7 +550,7 @@ impl RangeProof {
             points.push(hi_base[i]);
         }
 
-        if RistrettoPoint::multiscalar_mul(scalars, points) != RistrettoPoint::identity() {
+        if RistrettoPoint::vartime_multiscalar_mul(scalars, points) != RistrettoPoint::identity() {
             return Err(ProofError::VerificationFailed(
                 "Range proof batch not valid".to_string(),
             ));
