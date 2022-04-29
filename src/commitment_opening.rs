@@ -7,7 +7,7 @@ use curve25519_dalek::scalar::Scalar;
 use zeroize::Zeroize;
 
 /// Commitment openings to be used for Pedersen commitments
-#[derive(Clone, Debug, Zeroize)]
+#[derive(Clone, Zeroize)]
 pub struct CommitmentOpening {
     pub(crate) v: u64,
     pub(crate) r: Scalar,

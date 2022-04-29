@@ -6,7 +6,7 @@
 use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
-    traits::{Identity, MultiscalarMul, VartimeMultiscalarMul},
+    traits::{Identity, VartimeMultiscalarMul},
 };
 use merlin::Transcript;
 use rand::thread_rng;
@@ -38,46 +38,32 @@ impl RangeProof {
     /// The maximum bit length that proofs can be generated for
     pub const MAX_BIT_LENGTH: usize = 64;
 
-    fn get_a(&self) -> Result<RistrettoPoint, ProofError> {
+    fn a_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
         self.a.decompress().ok_or_else(|| {
-            ProofError::InternalDataInconsistent("Member 'a' was not the canonical encoding of a point".to_string())
+            ProofError::InvalidArgument("Member 'a' was not the canonical encoding of a point".to_string())
         })
     }
 
-    fn get_a1(&self) -> Result<RistrettoPoint, ProofError> {
+    fn a1_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
         self.a1.decompress().ok_or_else(|| {
-            ProofError::InternalDataInconsistent("Member 'a1' was not the canonical encoding of a point".to_string())
+            ProofError::InvalidArgument("Member 'a1' was not the canonical encoding of a point".to_string())
         })
     }
 
-    fn get_b(&self) -> Result<RistrettoPoint, ProofError> {
+    fn b_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
         self.b.decompress().ok_or_else(|| {
-            ProofError::InternalDataInconsistent("Member 'b' was not the canonical encoding of a point".to_string())
+            ProofError::InvalidArgument("Member 'b' was not the canonical encoding of a point".to_string())
         })
     }
 
-    fn get_r1(&self) -> Scalar {
-        self.r1
-    }
-
-    fn get_s1(&self) -> Scalar {
-        self.s1
-    }
-
-    fn get_d1(&self) -> Scalar {
-        self.d1
-    }
-
-    fn get_li(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
+    fn li_decompressed(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
         if self.li.is_empty() {
-            Err(ProofError::InternalDataInconsistent(
-                "Vector 'L' not assigned yet".to_string(),
-            ))
+            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
         } else {
             let mut li = Vec::with_capacity(self.li.len());
             for item in self.li.clone() {
                 li.push(item.decompress().ok_or_else(|| {
-                    ProofError::InternalDataInconsistent(
+                    ProofError::InvalidArgument(
                         "An item in member 'L' was not the canonical encoding of a point".to_string(),
                     )
                 })?)
@@ -86,21 +72,35 @@ impl RangeProof {
         }
     }
 
-    fn get_ri(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
+    fn li(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
         if self.li.is_empty() {
-            Err(ProofError::InternalDataInconsistent(
-                "Vector 'R' not assigned yet".to_string(),
-            ))
+            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
+        } else {
+            Ok(self.li.clone())
+        }
+    }
+
+    fn ri_decompressed(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
+        if self.ri.is_empty() {
+            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
         } else {
             let mut ri = Vec::with_capacity(self.ri.len());
             for item in self.ri.clone() {
                 ri.push(item.decompress().ok_or_else(|| {
-                    ProofError::InternalDataInconsistent(
+                    ProofError::InvalidArgument(
                         "An item in member 'R' was not the canonical encoding of a point".to_string(),
                     )
                 })?)
             }
             Ok(ri)
+        }
+    }
+
+    fn ri(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
+        if self.ri.is_empty() {
+            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
+        } else {
+            Ok(self.ri.clone())
         }
     }
 
@@ -122,15 +122,17 @@ impl RangeProof {
 
         // Global generators
         let (h_base, g_base) = (statement.generators.h_base(), statement.generators.g_base());
+        let h_base_compressed = statement.generators.h_base_compressed();
+        let g_base_compressed = statement.generators.g_base_compressed();
         let (hi_base, gi_base) = (statement.generators.hi_base(), statement.generators.gi_base());
 
         transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
-        transcript.validate_and_append_point(b"H", &h_base.compress())?;
-        transcript.validate_and_append_point(b"G", &g_base.compress())?;
+        transcript.validate_and_append_point(b"H", &h_base_compressed)?;
+        transcript.validate_and_append_point(b"G", &g_base_compressed)?;
         transcript.append_u64(b"N", bit_length as u64);
         transcript.append_u64(b"M", batch_size as u64);
-        for item in statement.commitments.clone() {
-            transcript.append_point(b"Ci", &item.compress());
+        for item in statement.commitments_compressed.clone() {
+            transcript.append_point(b"Ci", &item);
         }
         for item in statement.minimum_value_promises.clone() {
             if let Some(minimum_value) = item {
@@ -141,11 +143,12 @@ impl RangeProof {
         }
 
         // Set bit arrays
-        let (mut a_li, mut a_ri) = (vec![], vec![]);
+        let mut a_li = Vec::with_capacity(bit_length * batch_size);
+        let mut a_ri = Vec::with_capacity(bit_length * batch_size);
         for j in 0..batch_size {
             let bit_vector = if let Some(minimum_value) = statement.minimum_value_promises[j] {
                 if minimum_value > witness.openings[j].v {
-                    return Err(ProofError::InternalDataInconsistent(
+                    return Err(ProofError::InvalidArgument(
                         "Minimum value cannot be larger than value!".to_string(),
                     ));
                 } else {
@@ -178,7 +181,7 @@ impl RangeProof {
             ai_scalars.push(a_ri[i]);
             ai_points.push(hi_base[i]);
         }
-        let a = RistrettoPoint::multiscalar_mul(ai_scalars, ai_points);
+        let a = RistrettoPoint::vartime_multiscalar_mul(ai_scalars, ai_points);
         transcript.validate_and_append_point(b"A", &a.compress())?;
 
         // Get challenges
@@ -186,13 +189,15 @@ impl RangeProof {
         let z_square = z * z;
 
         // Compute powers of the challenge
-        let mut y_powers = vec![Scalar::one()];
+        let mut y_powers = Vec::with_capacity(batch_size * bit_length + 2);
+        y_powers.push(Scalar::one());
         for _ in 1..(batch_size * bit_length + 2) {
             y_powers.push(y_powers[y_powers.len() - 1] * y);
         }
 
         // Compute d efficiently
-        let mut d = vec![z_square];
+        let mut d = Vec::with_capacity(bit_length + bit_length * batch_size);
+        d.push(z_square);
         let two = Scalar::from(2u8);
         for i in 1..bit_length {
             d.push(two * d[i - 1]);
@@ -204,11 +209,11 @@ impl RangeProof {
         }
 
         // Prepare for inner product
-        let mut a_li_1 = vec![];
+        let mut a_li_1 = Vec::with_capacity(a_li.len());
         for item in a_li {
             a_li_1.push(item - z);
         }
-        let mut a_ri_1 = vec![];
+        let mut a_ri_1 = Vec::with_capacity(a_ri.len());
         for i in 0..a_ri.len() {
             a_ri_1.push(a_ri[i] + d[i] * y_powers[bit_length * batch_size - i] + z);
         }
@@ -260,37 +265,39 @@ impl RangeProof {
     ) -> Result<Vec<Option<Scalar>>, ProofError> {
         // Consistency checks
         if statements.is_empty() || range_proofs.is_empty() {
-            return Err(ProofError::InternalDataInconsistent(
+            return Err(ProofError::InvalidArgument(
                 "Range statements or proofs length empty".to_string(),
             ));
         }
         if statements.len() != range_proofs.len() {
-            return Err(ProofError::InternalDataInconsistent(
+            return Err(ProofError::InvalidArgument(
                 "Range statements and proofs length mismatch".to_string(),
             ));
         }
 
         // Verify generators consistency & select largest batch
-        let g_base = statements[0].generators.g_base();
-        let h_base = statements[0].generators.h_base();
+        let (g_base, h_base) = (statements[0].generators.g_base(), statements[0].generators.h_base());
+        let (g_base_compressed, h_base_compressed) = (
+            statements[0].generators.g_base_compressed(),
+            statements[0].generators.h_base_compressed(),
+        );
         let bit_length = statements[0].generators.bit_length();
         let mut max_mn = statements[0].commitments.len() * statements[0].generators.bit_length();
-        let mut gi_base = statements[0].generators.gi_base();
-        let mut hi_base = statements[0].generators.hi_base();
+        let (mut gi_base, mut hi_base) = (statements[0].generators.gi_base(), statements[0].generators.hi_base());
         let mut max_index = 0;
         for (i, statement) in statements.iter().enumerate().skip(1) {
             if g_base != statement.generators.g_base() {
-                return Err(ProofError::InternalDataInconsistent(
+                return Err(ProofError::InvalidArgument(
                     "Inconsistent G generator point in batch statement".to_string(),
                 ));
             }
             if h_base != statement.generators.h_base() {
-                return Err(ProofError::InternalDataInconsistent(
+                return Err(ProofError::InvalidArgument(
                     "Inconsistent H generator point in batch statement".to_string(),
                 ));
             }
             if bit_length != statement.generators.bit_length() {
-                return Err(ProofError::InternalDataInconsistent(
+                return Err(ProofError::InvalidArgument(
                     "Inconsistent bit length in batch statement".to_string(),
                 ));
             }
@@ -307,14 +314,14 @@ impl RangeProof {
             }
             for (j, this_gi_base) in gi_base.iter().enumerate().take(statement.generators.gi_base().len()) {
                 if gi_base[j] != *this_gi_base {
-                    return Err(ProofError::InternalDataInconsistent(
+                    return Err(ProofError::InvalidArgument(
                         "Inconsistent Gi generator point vector in batch statement".to_string(),
                     ));
                 }
             }
             for (j, this_hi_base) in hi_base.iter().enumerate().take(statement.generators.hi_base().len()) {
                 if hi_base[j] != *this_hi_base {
-                    return Err(ProofError::InternalDataInconsistent(
+                    return Err(ProofError::InvalidArgument(
                         "Inconsistent Hi generator point vector in batch statement".to_string(),
                     ));
                 }
@@ -343,11 +350,16 @@ impl RangeProof {
         let mut hi_base_scalars = vec![Scalar::zero(); max_mn];
 
         // Final multiscalar multiplication data
-        let mut scalars: Vec<Scalar> = vec![];
-        let mut points: Vec<RistrettoPoint> = vec![];
+        let mut msm_len = 0;
+        for (index, item) in statements.iter().enumerate() {
+            msm_len += item.generators.batch_size() + 3 + range_proofs[index].li.len() * 2;
+        }
+        msm_len += 2 + max_mn * 2;
+        let mut scalars: Vec<Scalar> = Vec::with_capacity(msm_len);
+        let mut points: Vec<RistrettoPoint> = Vec::with_capacity(msm_len);
 
         // Recovered masks
-        let mut masks = vec![];
+        let mut masks = Vec::with_capacity(range_proofs.len());
 
         let two = Scalar::from(2u8);
 
@@ -356,14 +368,14 @@ impl RangeProof {
         for (index, proof) in range_proofs.iter().enumerate() {
             let commitments = statements[index].commitments.clone();
             let minimum_value_promises = statements[index].minimum_value_promises.clone();
-            let a = proof.get_a()?;
-            let a1 = proof.get_a1()?;
-            let b = proof.get_b()?;
-            let r1 = proof.get_r1();
-            let s1 = proof.get_s1();
-            let d1 = proof.get_d1();
-            let li = proof.get_li()?;
-            let ri = proof.get_ri()?;
+            let a = proof.a_decompressed()?;
+            let a1 = proof.a1_decompressed()?;
+            let b = proof.b_decompressed()?;
+            let r1 = proof.r1;
+            let s1 = proof.s1;
+            let d1 = proof.d1;
+            let li = proof.li_decompressed()?;
+            let ri = proof.ri_decompressed()?;
 
             if li.len() != ri.len() {
                 return Err(ProofError::InvalidLength(
@@ -384,12 +396,12 @@ impl RangeProof {
             // Start the transcript
             let mut transcript = Transcript::new(transcript_label.as_bytes());
             transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
-            transcript.validate_and_append_point(b"H", &h_base.compress())?;
-            transcript.validate_and_append_point(b"G", &g_base.compress())?;
+            transcript.validate_and_append_point(b"H", &h_base_compressed)?;
+            transcript.validate_and_append_point(b"G", &g_base_compressed)?;
             transcript.append_u64(b"N", bit_length as u64);
             transcript.append_u64(b"M", batch_size as u64);
-            for i in 0..(statements[index].commitments.len()) {
-                transcript.append_point(b"Ci", &statements[index].commitments[i].compress());
+            for i in 0..(statements[index].commitments_compressed.len()) {
+                transcript.append_point(b"Ci", &statements[index].commitments_compressed[i]);
             }
             for item in statements[index].minimum_value_promises.clone() {
                 if let Some(minimum_value) = item {
@@ -404,17 +416,17 @@ impl RangeProof {
             let y = transcript.challenge_scalar(b"y")?;
             let z = transcript.challenge_scalar(b"z")?;
             transcript.domain_separator(b"Bulletproofs+", b"Inner Product Proof");
-            let mut challenges = vec![];
+            let mut challenges = Vec::with_capacity(rounds);
             for j in 0..rounds {
-                transcript.validate_and_append_point(b"L", &li[j].compress())?;
-                transcript.validate_and_append_point(b"R", &ri[j].compress())?;
+                transcript.validate_and_append_point(b"L", &proof.li()?[j])?;
+                transcript.validate_and_append_point(b"R", &proof.ri()?[j])?;
                 let e = transcript.challenge_scalar(b"e")?;
                 challenges.push(e);
             }
             let mut challenges_inv = challenges.clone();
             let _ = Scalar::batch_invert(&mut challenges_inv);
-            transcript.validate_and_append_point(b"A1", &a1.compress())?;
-            transcript.validate_and_append_point(b"B", &b.compress())?;
+            transcript.validate_and_append_point(b"A1", &proof.a1)?;
+            transcript.validate_and_append_point(b"B", &proof.b)?;
             let e = transcript.challenge_scalar(b"e")?;
 
             // Compute useful challenge values
@@ -434,7 +446,8 @@ impl RangeProof {
             }
 
             // Compute d efficiently
-            let mut d = vec![z_square];
+            let mut d = Vec::with_capacity(bit_length + bit_length * batch_size);
+            d.push(z_square);
             for i in 1..bit_length {
                 d.push(two * d[i - 1]);
             }
@@ -535,6 +548,7 @@ impl RangeProof {
             points.push(hi_base[i]);
         }
 
+        println!("my calc: {}, actual: {}", msm_len, scalars.len());
         if RistrettoPoint::vartime_multiscalar_mul(scalars, points) != RistrettoPoint::identity() {
             return Err(ProofError::VerificationFailed(
                 "Range proof batch not valid".to_string(),

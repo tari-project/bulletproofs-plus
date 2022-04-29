@@ -3,7 +3,7 @@
 
 //! Bulletproofs+ range parameters (generators and base points) needed for a batch of range proofs
 
-use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 
 use crate::{
     errors::ProofError,
@@ -24,17 +24,17 @@ impl RangeParameters {
     /// Initialize a new 'RangeParameters' with sanity checks
     pub fn init(bit_length: usize, batch_size: usize) -> Result<RangeParameters, ProofError> {
         if !batch_size.is_power_of_two() {
-            return Err(ProofError::InternalDataInconsistent(
+            return Err(ProofError::InvalidArgument(
                 "Batch size must be a power of two".to_string(),
             ));
         }
         if !bit_length.is_power_of_two() {
-            return Err(ProofError::InternalDataInconsistent(
+            return Err(ProofError::InvalidArgument(
                 "Bit length must be a power of two".to_string(),
             ));
         }
         if bit_length > RangeProof::MAX_BIT_LENGTH {
-            return Err(ProofError::InternalDataInconsistent(format!(
+            return Err(ProofError::InvalidArgument(format!(
                 "Bit length must be <= {}",
                 RangeProof::MAX_BIT_LENGTH
             )));
@@ -74,6 +74,16 @@ impl RangeParameters {
     /// Return the protected mask base point
     pub fn g_base(&self) -> RistrettoPoint {
         self.pc_gens.g_base
+    }
+
+    /// Return the protected value compressed base point
+    pub fn h_base_compressed(&self) -> CompressedRistretto {
+        self.pc_gens.h_base_compressed
+    }
+
+    /// Return the protected mask compressed base point
+    pub fn g_base_compressed(&self) -> CompressedRistretto {
+        self.pc_gens.g_base_compressed
     }
 
     /// Return the protected value bulletproof generators

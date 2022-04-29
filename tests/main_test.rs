@@ -90,6 +90,7 @@ fn test_mixed_aggregation_multiple_batches_single_bit_length() {
         batches.clone(),
         ProofOfMinimumValueStrategy::NoOffset,
     );
+    // panic!("Hansie");
     proof_batches(
         bit_lengths.clone(),
         batches.clone(),
@@ -180,7 +181,7 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>, promise_strategy:
                         panic!("Expected an error here")
                     },
                     Err(e) => match e {
-                        ProofError::InternalDataInconsistent(_) => {},
+                        ProofError::InvalidArgument(_) => {},
                         _ => {
                             panic!("Expected 'ProofError::InternalDataInconsistent'")
                         },
@@ -218,6 +219,7 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>, promise_strategy:
                     statements_private_changed.push(RangeStatement {
                         generators: statement.generators.clone(),
                         commitments: statement.commitments.clone(),
+                        commitments_compressed: statement.commitments_compressed.clone(),
                         minimum_value_promises: statement.minimum_value_promises.clone(),
                         seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::one()),
                     });
@@ -233,6 +235,7 @@ fn proof_batches(bit_lengths: Vec<usize>, batches: Vec<usize>, promise_strategy:
                 statements_public_changed.push(RangeStatement {
                     generators: statement.generators.clone(),
                     commitments: statement.commitments.clone(),
+                    commitments_compressed: statement.commitments_compressed.clone(),
                     minimum_value_promises: statement
                         .minimum_value_promises
                         .clone()

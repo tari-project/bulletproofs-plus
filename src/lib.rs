@@ -3,17 +3,7 @@
 
 //! Bulletproofs+
 
-#![cfg_attr(not(debug_assertions), deny(unused_variables))]
-#![cfg_attr(not(debug_assertions), deny(unused_imports))]
-#![cfg_attr(not(debug_assertions), deny(dead_code))]
-#![cfg_attr(not(debug_assertions), deny(unused_extern_crates))]
-#![deny(unused_must_use)]
-#![deny(unreachable_patterns)]
-#![deny(unknown_lints)]
 #![recursion_limit = "1024"]
-// Some functions have a large amount of dependencies (e.g. services) and historically this warning has lead to
-// bundling of dependencies into a resources struct, which is then overused and is the wrong abstraction
-#![allow(clippy::too_many_arguments)]
 
 #[macro_use]
 extern crate lazy_static;

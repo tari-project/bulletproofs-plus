@@ -96,7 +96,7 @@ pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar
             "Value too large, bit vector capacity will be exceeded".to_string(),
         ));
     }
-    let mut result = vec![];
+    let mut result = Vec::with_capacity(bit_length);
     for i in 0..bit_length {
         if (value >> i) & 1 == 0 {
             result.push(Scalar::zero());

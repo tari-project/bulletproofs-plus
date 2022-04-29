@@ -12,8 +12,8 @@ pub enum ProofError {
     #[error("A proof component failed to verify: `{0}")]
     VerificationFailed(String),
     /// Internal data sizes are inconsistent
-    #[error("Internal data sizes are inconsistent: `{0}`")]
-    InternalDataInconsistent(String),
+    #[error("Internal data is invalid: `{0}`")]
+    InvalidArgument(String),
     /// Invalid array/vector length error
     #[error("Invalid array/vector length error: `{0}`")]
     InvalidLength(String),

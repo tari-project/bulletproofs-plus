@@ -8,7 +8,7 @@ use zeroize::Zeroize;
 use crate::commitment_opening::CommitmentOpening;
 
 /// A convenience struct for holding commitment openings for the aggregated case
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct RangeWitness {
     /// The vector of commitment openings for the aggregated case
     pub openings: Vec<CommitmentOpening>,

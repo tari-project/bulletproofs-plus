@@ -54,6 +54,7 @@ pub struct InnerProductRound<'a> {
 }
 
 impl<'a> InnerProductRound<'a> {
+    #![allow(clippy::too_many_arguments)]
     /// Initialize a new 'InnerProductRound' with sanity checks
     pub fn init(
         gi_base: Vec<RistrettoPoint>,
@@ -74,7 +75,7 @@ impl<'a> InnerProductRound<'a> {
                 "Vectors gi_base, hi_base, ai, bi and y_powers cannot be empty".to_string(),
             ))
         } else if !(hi_base.len() == n && ai.len() == n && bi.len() == n) || (y_powers.len() != (n + 2)) {
-            Err(ProofError::InternalDataInconsistent(
+            Err(ProofError::InvalidArgument(
                 "Vector length for inner product round".to_string(),
             ))
         } else {
@@ -147,7 +148,7 @@ impl<'a> InnerProductRound<'a> {
         let hi_base_lo = &self.hi_base[..n];
         let hi_base_hi = &self.hi_base[n..];
         let y_n_inverse = if self.y_powers[n] == Scalar::zero() {
-            return Err(ProofError::InternalDataInconsistent(
+            return Err(ProofError::InvalidArgument(
                 "Cannot invert a zero valued Scalar".to_string(),
             ));
         } else {
@@ -187,7 +188,6 @@ impl<'a> InnerProductRound<'a> {
             ri_scalars.push(b1[i]);
             ri_points.push(hi_base_hi[i]);
         }
-        // 'RistrettoPoint::vartime_multiscalar_mul' optimized for vector lengths <190 and >190
         self.li
             .push(RistrettoPoint::vartime_multiscalar_mul(li_scalars, li_points));
         self.ri
@@ -230,9 +230,7 @@ impl<'a> InnerProductRound<'a> {
         if let Some(a1) = self.a1 {
             Ok(a1.compress())
         } else {
-            Err(ProofError::InternalDataInconsistent(
-                "Value 'A' not assigned yet".to_string(),
-            ))
+            Err(ProofError::InvalidArgument("Value 'A' not assigned yet".to_string()))
         }
     }
 
@@ -240,9 +238,7 @@ impl<'a> InnerProductRound<'a> {
         if let Some(b) = self.b {
             Ok(b.compress())
         } else {
-            Err(ProofError::InternalDataInconsistent(
-                "Value 'B' not assigned yet".to_string(),
-            ))
+            Err(ProofError::InvalidArgument("Value 'B' not assigned yet".to_string()))
         }
     }
 
@@ -250,9 +246,7 @@ impl<'a> InnerProductRound<'a> {
         if let Some(r1) = self.r1 {
             Ok(r1)
         } else {
-            Err(ProofError::InternalDataInconsistent(
-                "Value 'r1' not assigned yet".to_string(),
-            ))
+            Err(ProofError::InvalidArgument("Value 'r1' not assigned yet".to_string()))
         }
     }
 
@@ -260,9 +254,7 @@ impl<'a> InnerProductRound<'a> {
         if let Some(s1) = self.s1 {
             Ok(s1)
         } else {
-            Err(ProofError::InternalDataInconsistent(
-                "Value 's1' not assigned yet".to_string(),
-            ))
+            Err(ProofError::InvalidArgument("Value 's1' not assigned yet".to_string()))
         }
     }
 
@@ -270,17 +262,13 @@ impl<'a> InnerProductRound<'a> {
         if let Some(d1) = self.d1 {
             Ok(d1)
         } else {
-            Err(ProofError::InternalDataInconsistent(
-                "Value 'd1' not assigned yet".to_string(),
-            ))
+            Err(ProofError::InvalidArgument("Value 'd1' not assigned yet".to_string()))
         }
     }
 
     pub fn get_li(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
         if self.li.is_empty() {
-            Err(ProofError::InternalDataInconsistent(
-                "Vector 'L' not assigned yet".to_string(),
-            ))
+            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
         } else {
             let mut li = Vec::with_capacity(self.li.len());
             for item in self.li.clone() {
@@ -292,9 +280,7 @@ impl<'a> InnerProductRound<'a> {
 
     pub fn get_ri(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
         if self.ri.is_empty() {
-            Err(ProofError::InternalDataInconsistent(
-                "Vector 'R' not assigned yet".to_string(),
-            ))
+            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
         } else {
             let mut ri = Vec::with_capacity(self.ri.len());
             for item in self.ri.clone() {
