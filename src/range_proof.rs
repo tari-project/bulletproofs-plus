@@ -385,9 +385,13 @@ impl RangeProof {
             if 1 << li.len() != commitments.len() * bit_length {
                 return Err(ProofError::InvalidLength("Vector L length not adequate".to_string()));
             }
+            if li.len() >= 32 {
+                return Err(ProofError::InvalidLength("Vector L is too large".to_string()));
+            }
 
             // Helper values
             let batch_size = commitments.len();
+            let gen_length = batch_size * bit_length;
             let rounds = li.len();
 
             // Batch weight (may not be equal to a zero valued scalar) - this may not be zero ever
@@ -424,7 +428,7 @@ impl RangeProof {
                 challenges.push(e);
             }
             let mut challenges_inv = challenges.clone();
-            let _ = Scalar::batch_invert(&mut challenges_inv);
+            let challenges_inv_prod = Scalar::batch_invert(&mut challenges_inv);
             transcript.validate_and_append_point(b"A1", &proof.a1)?;
             transcript.validate_and_append_point(b"B", &proof.b)?;
             let e = transcript.challenge_scalar(b"e")?;
@@ -434,8 +438,12 @@ impl RangeProof {
             let e_square = e * e;
             let y_inverse = y.invert();
             let mut y_nm = y;
-            for _ in 0..rounds {
+            let mut challenges_sq = Vec::with_capacity(challenges.len());
+            let mut challenges_sq_inv = Vec::with_capacity(challenges_inv.len());
+            for i in 0..rounds {
                 y_nm = y_nm * y_nm;
+                challenges_sq.push(challenges[i] * challenges[i]);
+                challenges_sq_inv.push(challenges_inv[i] * challenges_inv[i]);
             }
             let y_nm_1 = y_nm * y;
             let mut y_sum = Scalar::zero();
@@ -471,12 +479,11 @@ impl RangeProof {
             // Recover the mask if possible (only for non-aggregated proofs)
             if let Some(seed_nonce) = statements[index].seed_nonce {
                 let mut mask = (d1 - nonce(&seed_nonce, "eta", None)? - e * nonce(&seed_nonce, "d", None)?) *
-                    e.invert() *
-                    e.invert();
+                    e_square.invert();
                 mask -= nonce(&seed_nonce, "alpha", None)?;
                 for j in 0..rounds {
-                    mask -= challenges[j] * challenges[j] * nonce(&seed_nonce, "dL", Some(j))?;
-                    mask -= challenges_inv[j] * challenges_inv[j] * nonce(&seed_nonce, "dR", Some(j))?;
+                    mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j))?;
+                    mask -= challenges_sq_inv[j] * nonce(&seed_nonce, "dR", Some(j))?;
                 }
                 mask *= (z_square * y_nm_1).invert();
                 masks.push(Some(mask));
@@ -487,19 +494,17 @@ impl RangeProof {
             // Aggregate the generator scalars
             let mut y_inv_i = Scalar::one();
             let mut y_nm_i = y_nm;
-            for i in 0..batch_size * bit_length {
-                let mut g = r1 * e * y_inv_i;
-                let mut h = s1 * e;
-                for j in 0..rounds {
-                    let k = rounds - j - 1;
-                    if (i >> j) & 1 > 0 {
-                        g *= challenges[k];
-                        h *= challenges_inv[k];
-                    } else {
-                        g *= challenges_inv[k];
-                        h *= challenges[k];
-                    }
-                }
+
+            let mut s = Vec::with_capacity(batch_size * bit_length);
+            s.push(challenges_inv_prod);
+            for i in 1..gen_length {
+                let log_i = (32 - 1 - (i as u32).leading_zeros()) as usize;
+                let j = 1 << log_i;
+                s.push(s[i - j] * challenges_sq[rounds - log_i - 1]);
+            }
+            for i in 0..gen_length {
+                let g = r1 * e * y_inv_i * s[i];
+                let h = s1 * e * s[gen_length - i - 1];
                 gi_base_scalars[i] += weight * (g + e_square * z);
                 hi_base_scalars[i] += weight * (h - e_square * (d[i] * y_nm_i + z));
                 y_inv_i *= y_inverse;
@@ -529,9 +534,9 @@ impl RangeProof {
             points.push(a);
 
             for j in 0..rounds {
-                scalars.push(weight * (-e_square * challenges[j] * challenges[j]));
+                scalars.push(weight * (-e_square * challenges_sq[j]));
                 points.push(li[j]);
-                scalars.push(weight * (-e_square * challenges_inv[j] * challenges_inv[j]));
+                scalars.push(weight * (-e_square * challenges_sq_inv[j]));
                 points.push(ri[j]);
             }
         }
@@ -548,7 +553,6 @@ impl RangeProof {
             points.push(hi_base[i]);
         }
 
-        println!("my calc: {}, actual: {}", msm_len, scalars.len());
         if RistrettoPoint::vartime_multiscalar_mul(scalars, points) != RistrettoPoint::identity() {
             return Err(ProofError::VerificationFailed(
                 "Range proof batch not valid".to_string(),
