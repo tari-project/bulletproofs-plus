@@ -14,10 +14,10 @@ pub mod commitment_opening;
 pub mod errors;
 /// Bulletproofs+ `generators` module contains API for producing a set of generators for a range proof
 pub mod generators;
-/// Bulletproofs+ add 'Debug' functionality to other struct members that do not implement 'Debug'
-pub mod hidden;
 /// Bulletproofs+ inner product calculation for each round
 mod inner_product_round;
+/// Bulletproofs+ add 'Debug' functionality to other struct members that do not implement 'Debug'
+pub mod non_debug;
 /// Bulletproofs+ range parameters (generators and base points) needed for a batch of range proofs
 pub mod range_parameters;
 /// Bulletproofs+ public range proof parameters intended for a verifier

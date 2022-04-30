@@ -1,8 +1,8 @@
-// Copyright (c) 2018 Chain, Inc.
-// SPDX-License-Identifier: MIT
-
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
+//   Modified from:
+//     Copyright (c) 2018 Chain, Inc.
+//     SPDX-License-Identifier: MIT
 
 use curve25519_dalek::ristretto::RistrettoPoint;
 use digest::{ExtendableOutputDirty, Update, XofReader};

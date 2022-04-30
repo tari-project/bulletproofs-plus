@@ -22,10 +22,10 @@ pub struct RangeParameters {
 
 impl RangeParameters {
     /// Initialize a new 'RangeParameters' with sanity checks
-    pub fn init(bit_length: usize, batch_size: usize) -> Result<RangeParameters, ProofError> {
-        if !batch_size.is_power_of_two() {
+    pub fn init(bit_length: usize, aggregation_factor: usize) -> Result<RangeParameters, ProofError> {
+        if !aggregation_factor.is_power_of_two() {
             return Err(ProofError::InvalidArgument(
-                "Batch size must be a power of two".to_string(),
+                "Aggregation factor size must be a power of two".to_string(),
             ));
         }
         if !bit_length.is_power_of_two() {
@@ -41,68 +41,86 @@ impl RangeParameters {
         }
 
         Ok(Self {
-            bp_gens: BulletproofGens::new(bit_length, batch_size),
+            bp_gens: BulletproofGens::new(bit_length, aggregation_factor),
             pc_gens: PedersenGens::default(),
         })
     }
 
-    /// Return a reference to the protected bulletproof generators
+    /// Return a reference to the non-public bulletproof generators
     pub fn bp_gens(&self) -> &BulletproofGens {
         &self.bp_gens
     }
 
-    /// Return a reference to the protected base point generators
+    /// Return a reference to the non-public base point generators
     pub fn pc_gens(&self) -> &PedersenGens {
         &self.pc_gens
     }
 
-    /// Returns the
-    pub fn batch_size(&self) -> usize {
+    /// Returns the aggregation factor
+    pub fn aggregation_factor(&self) -> usize {
         self.bp_gens.party_capacity
     }
 
-    /// Returns the
+    /// Returns the bit length
     pub fn bit_length(&self) -> usize {
         self.bp_gens.gens_capacity
     }
 
-    /// Return the protected value base point
+    /// Returns the non-public value base point
     pub fn h_base(&self) -> RistrettoPoint {
         self.pc_gens.h_base
     }
 
-    /// Return the protected mask base point
+    /// Returns the non-public mask base point
     pub fn g_base(&self) -> RistrettoPoint {
         self.pc_gens.g_base
     }
 
-    /// Return the protected value compressed base point
+    /// Returns the non-public value compressed base point
     pub fn h_base_compressed(&self) -> CompressedRistretto {
         self.pc_gens.h_base_compressed
     }
 
-    /// Return the protected mask compressed base point
+    /// Returns the non-public mask compressed base point
     pub fn g_base_compressed(&self) -> CompressedRistretto {
         self.pc_gens.g_base_compressed
     }
 
-    /// Return the protected value bulletproof generators
+    /// Return the non-public value bulletproof generators
     pub fn hi_base(&self) -> Vec<RistrettoPoint> {
         let hi_base: Vec<RistrettoPoint> = self
             .bp_gens
-            .h_iter(self.bit_length(), self.batch_size())
+            .h_iter(self.bit_length(), self.aggregation_factor())
             .copied()
             .collect();
         hi_base
     }
 
-    /// Return the protected mask bulletproof generators
+    /// Return the non-public value bulletproof generator references
+    pub fn hi_base_ref(&self) -> Vec<&RistrettoPoint> {
+        let hi_base_ref: Vec<&RistrettoPoint> = self
+            .bp_gens
+            .h_iter(self.bit_length(), self.aggregation_factor())
+            .collect();
+        hi_base_ref
+    }
+
+    /// Return the non-public mask bulletproof generators
     pub fn gi_base(&self) -> Vec<RistrettoPoint> {
         let gi_base: Vec<RistrettoPoint> = self
             .bp_gens
-            .g_iter(self.bit_length(), self.batch_size())
+            .g_iter(self.bit_length(), self.aggregation_factor())
             .copied()
             .collect();
         gi_base
+    }
+
+    /// Return the non-public mask bulletproof generator references
+    pub fn gi_base_ref(&self) -> Vec<&RistrettoPoint> {
+        let gi_base_ref: Vec<&RistrettoPoint> = self
+            .bp_gens
+            .g_iter(self.bit_length(), self.aggregation_factor())
+            .collect();
+        gi_base_ref
     }
 }

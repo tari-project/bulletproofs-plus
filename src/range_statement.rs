@@ -16,15 +16,15 @@ use crate::{errors::ProofError, range_parameters::RangeParameters};
 /// values and a vector of optional seed nonces for mask recovery
 #[derive(Clone, Debug)]
 pub struct RangeStatement {
-    /// The generators and base points needed for a batch of range proofs
+    /// The generators and base points needed for aggregating range proofs
     pub generators: RangeParameters,
-    /// The batch of commitments
+    /// The aggregated commitments
     pub commitments: Vec<RistrettoPoint>,
-    /// The batch of compressed commitments
+    /// The aggregated compressed commitments
     pub commitments_compressed: Vec<CompressedRistretto>,
     /// Optional minimum promised values
     pub minimum_value_promises: Vec<Option<u64>>,
-    /// Optional seed nonces for mask recovery
+    /// Optional seed nonce for mask recovery
     pub seed_nonce: Option<Scalar>,
 }
 
@@ -46,7 +46,7 @@ impl RangeStatement {
                 "Incorrect number of minimum value promises".to_string(),
             ));
         }
-        if generators.batch_size() < commitments.len() {
+        if generators.aggregation_factor() < commitments.len() {
             return Err(ProofError::InvalidArgument(
                 "Not enough generators for this statement".to_string(),
             ));

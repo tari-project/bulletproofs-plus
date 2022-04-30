@@ -14,7 +14,7 @@ use zeroize::Zeroize;
 
 use crate::{
     errors::ProofError,
-    hidden::Hidden,
+    non_debug::NonDebug,
     scalar_protocol::ScalarProtocol,
     transcript_protocol::TranscriptProtocol,
     utils::{add_point_vec, add_scalar_vec, mul_point_vec_with_scalar, mul_scalar_vec_with_scalar, nonce},
@@ -46,7 +46,7 @@ pub struct InnerProductRound<'a> {
     ri: Vec<RistrettoPoint>,
 
     // Transcript
-    transcript: Hidden<&'a mut Transcript>,
+    transcript: NonDebug<&'a mut Transcript>,
 
     // Seed for mask recovery
     round: usize,
@@ -67,7 +67,7 @@ impl<'a> InnerProductRound<'a> {
         y_powers: Vec<Scalar>,
         transcript: &'a mut Transcript,
         seed_nonce: Option<Scalar>,
-        batch_size: usize,
+        aggregation_factor: usize,
     ) -> Result<Self, ProofError> {
         let n = gi_base.len();
         if gi_base.is_empty() || hi_base.is_empty() || ai.is_empty() || bi.is_empty() || y_powers.is_empty() {
@@ -94,8 +94,8 @@ impl<'a> InnerProductRound<'a> {
                 r1: None,
                 s1: None,
                 d1: None,
-                li: Vec::with_capacity(n * batch_size + 2),
-                ri: Vec::with_capacity(n * batch_size + 2),
+                li: Vec::with_capacity(n * aggregation_factor + 2),
+                ri: Vec::with_capacity(n * aggregation_factor + 2),
                 transcript: transcript.into(),
                 round: 0,
                 seed_nonce,
@@ -222,11 +222,13 @@ impl<'a> InnerProductRound<'a> {
         Ok(())
     }
 
+    /// Indicating when the inner product rounds are complete
     pub fn is_done(&self) -> bool {
         self.done
     }
 
-    pub fn get_a1(&self) -> Result<CompressedRistretto, ProofError> {
+    /// Compresses and returns the non-public point 'a1' using the Ristretto encoding
+    pub fn a1_compressed(&self) -> Result<CompressedRistretto, ProofError> {
         if let Some(a1) = self.a1 {
             Ok(a1.compress())
         } else {
@@ -234,7 +236,8 @@ impl<'a> InnerProductRound<'a> {
         }
     }
 
-    pub fn get_b(&self) -> Result<CompressedRistretto, ProofError> {
+    /// Compresses and returns the non-public point 'b' using the Ristretto encoding
+    pub fn b_compressed(&self) -> Result<CompressedRistretto, ProofError> {
         if let Some(b) = self.b {
             Ok(b.compress())
         } else {
@@ -242,7 +245,8 @@ impl<'a> InnerProductRound<'a> {
         }
     }
 
-    pub fn get_r1(&self) -> Result<Scalar, ProofError> {
+    /// Returns the non-public scalar 'r1'
+    pub fn r1(&self) -> Result<Scalar, ProofError> {
         if let Some(r1) = self.r1 {
             Ok(r1)
         } else {
@@ -250,7 +254,8 @@ impl<'a> InnerProductRound<'a> {
         }
     }
 
-    pub fn get_s1(&self) -> Result<Scalar, ProofError> {
+    /// Returns the non-public scalar 's1'
+    pub fn s1(&self) -> Result<Scalar, ProofError> {
         if let Some(s1) = self.s1 {
             Ok(s1)
         } else {
@@ -258,7 +263,8 @@ impl<'a> InnerProductRound<'a> {
         }
     }
 
-    pub fn get_d1(&self) -> Result<Scalar, ProofError> {
+    /// Returns the non-public scalar 'd1'
+    pub fn d1(&self) -> Result<Scalar, ProofError> {
         if let Some(d1) = self.d1 {
             Ok(d1)
         } else {
@@ -266,7 +272,8 @@ impl<'a> InnerProductRound<'a> {
         }
     }
 
-    pub fn get_li(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
+    /// Compresses and returns the non-public vector of points 'li' using the Ristretto encoding
+    pub fn li_compressed(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
         if self.li.is_empty() {
             Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
         } else {
@@ -278,7 +285,8 @@ impl<'a> InnerProductRound<'a> {
         }
     }
 
-    pub fn get_ri(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
+    /// Compresses and returns the non-public vector of points 'ri' using the Ristretto encoding
+    pub fn ri_compressed(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
         if self.ri.is_empty() {
             Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
         } else {

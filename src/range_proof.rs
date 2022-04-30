@@ -111,8 +111,8 @@ impl RangeProof {
         statement: &RangeStatement,
         witness: &RangeWitness,
     ) -> Result<RangeProof, ProofError> {
-        let batch_size = statement.commitments.len();
-        if witness.openings.len() != batch_size {
+        let aggregation_factor = statement.commitments.len();
+        if witness.openings.len() != aggregation_factor {
             return Err(ProofError::InvalidLength(
                 "Invalid range statement - commitments and openings do not match!".to_string(),
             ));
@@ -130,7 +130,7 @@ impl RangeProof {
         transcript.validate_and_append_point(b"H", &h_base_compressed)?;
         transcript.validate_and_append_point(b"G", &g_base_compressed)?;
         transcript.append_u64(b"N", bit_length as u64);
-        transcript.append_u64(b"M", batch_size as u64);
+        transcript.append_u64(b"M", aggregation_factor as u64);
         for item in statement.commitments_compressed.clone() {
             transcript.append_point(b"Ci", &item);
         }
@@ -143,9 +143,9 @@ impl RangeProof {
         }
 
         // Set bit arrays
-        let mut a_li = Vec::with_capacity(bit_length * batch_size);
-        let mut a_ri = Vec::with_capacity(bit_length * batch_size);
-        for j in 0..batch_size {
+        let mut a_li = Vec::with_capacity(bit_length * aggregation_factor);
+        let mut a_ri = Vec::with_capacity(bit_length * aggregation_factor);
+        for j in 0..aggregation_factor {
             let bit_vector = if let Some(minimum_value) = statement.minimum_value_promises[j] {
                 if minimum_value > witness.openings[j].v {
                     return Err(ProofError::InvalidArgument(
@@ -171,11 +171,11 @@ impl RangeProof {
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
             Scalar::random_not_zero(rng)
         };
-        let mut ai_scalars = Vec::with_capacity(bit_length * batch_size + 1);
+        let mut ai_scalars = Vec::with_capacity(bit_length * aggregation_factor + 1);
         ai_scalars.push(alpha);
-        let mut ai_points = Vec::with_capacity(bit_length * batch_size + 1);
+        let mut ai_points = Vec::with_capacity(bit_length * aggregation_factor + 1);
         ai_points.push(g_base);
-        for i in 0..(bit_length * batch_size) {
+        for i in 0..(bit_length * aggregation_factor) {
             ai_scalars.push(a_li[i]);
             ai_points.push(gi_base[i]);
             ai_scalars.push(a_ri[i]);
@@ -189,20 +189,20 @@ impl RangeProof {
         let z_square = z * z;
 
         // Compute powers of the challenge
-        let mut y_powers = Vec::with_capacity(batch_size * bit_length + 2);
+        let mut y_powers = Vec::with_capacity(aggregation_factor * bit_length + 2);
         y_powers.push(Scalar::one());
-        for _ in 1..(batch_size * bit_length + 2) {
+        for _ in 1..(aggregation_factor * bit_length + 2) {
             y_powers.push(y_powers[y_powers.len() - 1] * y);
         }
 
         // Compute d efficiently
-        let mut d = Vec::with_capacity(bit_length + bit_length * batch_size);
+        let mut d = Vec::with_capacity(bit_length + bit_length * aggregation_factor);
         d.push(z_square);
         let two = Scalar::from(2u8);
         for i in 1..bit_length {
             d.push(two * d[i - 1]);
         }
-        for j in 1..batch_size {
+        for j in 1..aggregation_factor {
             for i in 0..bit_length {
                 d.push(d[(j - 1) * bit_length + i] * z_square);
             }
@@ -215,13 +215,13 @@ impl RangeProof {
         }
         let mut a_ri_1 = Vec::with_capacity(a_ri.len());
         for i in 0..a_ri.len() {
-            a_ri_1.push(a_ri[i] + d[i] * y_powers[bit_length * batch_size - i] + z);
+            a_ri_1.push(a_ri[i] + d[i] * y_powers[bit_length * aggregation_factor - i] + z);
         }
         let mut alpha1 = alpha;
         let mut z_even_powers = Scalar::one();
-        for j in 0..batch_size {
+        for j in 0..aggregation_factor {
             z_even_powers *= z_square;
-            alpha1 += z_even_powers * witness.openings[j].r * y_powers[bit_length * batch_size + 1];
+            alpha1 += z_even_powers * witness.openings[j].r * y_powers[bit_length * aggregation_factor + 1];
         }
 
         // Calculate the inner product
@@ -237,20 +237,20 @@ impl RangeProof {
             y_powers,
             transcript,
             statement.seed_nonce,
-            batch_size,
+            aggregation_factor,
         )?;
         loop {
             let _result = ip_data.inner_product(rng);
             if ip_data.is_done() {
                 return Ok(RangeProof {
                     a: a.compress(),
-                    a1: ip_data.get_a1()?,
-                    b: ip_data.get_b()?,
-                    r1: ip_data.get_r1()?,
-                    s1: ip_data.get_s1()?,
-                    d1: ip_data.get_d1()?,
-                    li: ip_data.get_li()?,
-                    ri: ip_data.get_ri()?,
+                    a1: ip_data.a1_compressed()?,
+                    b: ip_data.b_compressed()?,
+                    r1: ip_data.r1()?,
+                    s1: ip_data.s1()?,
+                    d1: ip_data.d1()?,
+                    li: ip_data.li_compressed()?,
+                    ri: ip_data.ri_compressed()?,
                 });
             }
         }
@@ -275,7 +275,7 @@ impl RangeProof {
             ));
         }
 
-        // Verify generators consistency & select largest batch
+        // Verify generators consistency & select largest aggregation factor
         let (g_base, h_base) = (statements[0].generators.g_base(), statements[0].generators.h_base());
         let (g_base_compressed, h_base_compressed) = (
             statements[0].generators.g_base_compressed(),
@@ -283,7 +283,6 @@ impl RangeProof {
         );
         let bit_length = statements[0].generators.bit_length();
         let mut max_mn = statements[0].commitments.len() * statements[0].generators.bit_length();
-        let (mut gi_base, mut hi_base) = (statements[0].generators.gi_base(), statements[0].generators.hi_base());
         let mut max_index = 0;
         for (i, statement) in statements.iter().enumerate().skip(1) {
             if g_base != statement.generators.g_base() {
@@ -304,23 +303,33 @@ impl RangeProof {
             if statement.commitments.len() * statement.generators.bit_length() > max_mn {
                 max_mn = statement.commitments.len() * statement.generators.bit_length();
                 max_index = i;
-                gi_base = statement.generators.gi_base();
-                hi_base = statement.generators.hi_base();
             }
         }
+        let (gi_base_ref, hi_base_ref) = (
+            statements[max_index].generators.gi_base_ref(),
+            statements[max_index].generators.hi_base_ref(),
+        );
         for (i, statement) in statements.iter().enumerate() {
             if i == max_index {
                 continue;
             }
-            for (j, this_gi_base) in gi_base.iter().enumerate().take(statement.generators.gi_base().len()) {
-                if gi_base[j] != *this_gi_base {
+            for (j, this_gi_base) in gi_base_ref
+                .iter()
+                .enumerate()
+                .take(statement.generators.gi_base_ref().len())
+            {
+                if gi_base_ref[j] != *this_gi_base {
                     return Err(ProofError::InvalidArgument(
                         "Inconsistent Gi generator point vector in batch statement".to_string(),
                     ));
                 }
             }
-            for (j, this_hi_base) in hi_base.iter().enumerate().take(statement.generators.hi_base().len()) {
-                if hi_base[j] != *this_hi_base {
+            for (j, this_hi_base) in hi_base_ref
+                .iter()
+                .enumerate()
+                .take(statement.generators.hi_base_ref().len())
+            {
+                if hi_base_ref[j] != *this_hi_base {
                     return Err(ProofError::InvalidArgument(
                         "Inconsistent Hi generator point vector in batch statement".to_string(),
                     ));
@@ -352,7 +361,7 @@ impl RangeProof {
         // Final multiscalar multiplication data
         let mut msm_len = 0;
         for (index, item) in statements.iter().enumerate() {
-            msm_len += item.generators.batch_size() + 3 + range_proofs[index].li.len() * 2;
+            msm_len += item.generators.aggregation_factor() + 3 + range_proofs[index].li.len() * 2;
         }
         msm_len += 2 + max_mn * 2;
         let mut scalars: Vec<Scalar> = Vec::with_capacity(msm_len);
@@ -385,13 +394,10 @@ impl RangeProof {
             if 1 << li.len() != commitments.len() * bit_length {
                 return Err(ProofError::InvalidLength("Vector L length not adequate".to_string()));
             }
-            if li.len() >= 32 {
-                return Err(ProofError::InvalidLength("Vector L is too large".to_string()));
-            }
 
             // Helper values
-            let batch_size = commitments.len();
-            let gen_length = batch_size * bit_length;
+            let aggregation_factor = commitments.len();
+            let gen_length = aggregation_factor * bit_length;
             let rounds = li.len();
 
             // Batch weight (may not be equal to a zero valued scalar) - this may not be zero ever
@@ -403,7 +409,7 @@ impl RangeProof {
             transcript.validate_and_append_point(b"H", &h_base_compressed)?;
             transcript.validate_and_append_point(b"G", &g_base_compressed)?;
             transcript.append_u64(b"N", bit_length as u64);
-            transcript.append_u64(b"M", batch_size as u64);
+            transcript.append_u64(b"M", aggregation_factor as u64);
             for i in 0..(statements[index].commitments_compressed.len()) {
                 transcript.append_point(b"Ci", &statements[index].commitments_compressed[i]);
             }
@@ -448,18 +454,18 @@ impl RangeProof {
             let y_nm_1 = y_nm * y;
             let mut y_sum = Scalar::zero();
             let mut y_sum_temp = y;
-            for _ in 0..bit_length * batch_size {
+            for _ in 0..bit_length * aggregation_factor {
                 y_sum += y_sum_temp;
                 y_sum_temp *= y;
             }
 
             // Compute d efficiently
-            let mut d = Vec::with_capacity(bit_length + bit_length * batch_size);
+            let mut d = Vec::with_capacity(bit_length + bit_length * aggregation_factor);
             d.push(z_square);
             for i in 1..bit_length {
                 d.push(two * d[i - 1]);
             }
-            for j in 1..batch_size {
+            for j in 1..aggregation_factor {
                 for i in 0..bit_length {
                     d.push(d[(j - 1) * bit_length + i] * z_square);
                 }
@@ -468,7 +474,7 @@ impl RangeProof {
             // Compute its sum efficiently
             let mut d_sum = z_square;
             let mut d_sum_temp_z = z_square;
-            let mut d_sum_temp_2m = 2 * batch_size;
+            let mut d_sum_temp_2m = 2 * aggregation_factor;
             while d_sum_temp_2m > 2 {
                 d_sum = d_sum + d_sum * d_sum_temp_z;
                 d_sum_temp_z = d_sum_temp_z * d_sum_temp_z;
@@ -478,8 +484,8 @@ impl RangeProof {
 
             // Recover the mask if possible (only for non-aggregated proofs)
             if let Some(seed_nonce) = statements[index].seed_nonce {
-                let mut mask = (d1 - nonce(&seed_nonce, "eta", None)? - e * nonce(&seed_nonce, "d", None)?) *
-                    e_square.invert();
+                let mut mask =
+                    (d1 - nonce(&seed_nonce, "eta", None)? - e * nonce(&seed_nonce, "d", None)?) * e_square.invert();
                 mask -= nonce(&seed_nonce, "alpha", None)?;
                 for j in 0..rounds {
                     mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j))?;
@@ -495,9 +501,11 @@ impl RangeProof {
             let mut y_inv_i = Scalar::one();
             let mut y_nm_i = y_nm;
 
-            let mut s = Vec::with_capacity(batch_size * bit_length);
+            let mut s = Vec::with_capacity(gen_length);
             s.push(challenges_inv_prod);
             for i in 1..gen_length {
+                #[allow(clippy::cast_possible_truncation)]
+                // Note: 'i' must be cast to u32 in this case (usize is 64bit on 64bit platforms)
                 let log_i = (32 - 1 - (i as u32).leading_zeros()) as usize;
                 let j = 1 << log_i;
                 s.push(s[i - j] * challenges_sq[rounds - log_i - 1]);
@@ -513,7 +521,7 @@ impl RangeProof {
 
             // Remaining terms
             let mut z_even_powers = Scalar::one();
-            for k in 0..batch_size {
+            for k in 0..aggregation_factor {
                 z_even_powers *= z_square;
                 let weighted = weight * (-e_square * z_even_powers * y_nm_1);
                 scalars.push(weighted);
@@ -548,9 +556,9 @@ impl RangeProof {
         points.push(h_base);
         for i in 0..max_mn {
             scalars.push(gi_base_scalars[i]);
-            points.push(gi_base[i]);
+            points.push(*gi_base_ref[i]);
             scalars.push(hi_base_scalars[i]);
-            points.push(hi_base[i]);
+            points.push(*hi_base_ref[i]);
         }
 
         if RistrettoPoint::vartime_multiscalar_mul(scalars, points) != RistrettoPoint::identity() {
