@@ -35,75 +35,106 @@ pub struct RangeProof {
     ri: Vec<CompressedRistretto>,
 }
 
+/// # Example
+/// ```
+/// use curve25519_dalek::scalar::Scalar;
+/// use merlin::Transcript;
+/// use rand::Rng;
+/// use tari_bulletproofs_plus::{
+///     commitment_opening::CommitmentOpening,
+///     errors::ProofError,
+///     protocols::scalar_protocol::ScalarProtocol,
+///     range_parameters::RangeParameters,
+///     range_proof::RangeProof,
+///     range_statement::RangeStatement,
+///     range_witness::RangeWitness,
+/// };
+///
+/// # fn main() {
+/// let mut rng = rand::thread_rng();
+/// let transcript_label: &'static str = "BatchedRangeProofTest";
+/// let bit_length = 64; // Other powers of two are permissible up to 2^6 = 64
+///
+/// // 0.  Batch data
+/// let proof_batch = vec![1, 2, 1, 4];
+/// let mut private_masks: Vec<Option<Scalar>> = vec![];
+/// let mut public_masks: Vec<Option<Scalar>> = vec![];
+/// let mut statements_private = vec![];
+/// let mut statements_public = vec![];
+/// let mut proofs = vec![];
+///
+/// for aggregation_size in proof_batch {
+///     // 1. Generators
+///     let generators = RangeParameters::init(bit_length, aggregation_size).unwrap();
+///
+///     // 2. Create witness data
+///     let mut witness = RangeWitness::new(vec![]);
+///     let mut commitments = vec![];
+///     let mut minimum_values = vec![];
+///     for m in 0..aggregation_size {
+///         let value = 123000111222333 * m as u64; // Value in uT
+///         let blinding = Scalar::random_not_zero(&mut rng);
+///         if m == 2 {
+///             // Minimum value proofs other than zero are can be built into the proof
+///             minimum_values.push(Some(value / 3));
+///         } else {
+///             minimum_values.push(None);
+///         }
+///         commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
+///         witness.openings.push(CommitmentOpening::new(value, blinding));
+///         if m == 0 {
+///             if aggregation_size == 1 {
+///                 // Masks (any secret scalar) can be embedded for proofs with aggregation size = 1
+///                 private_masks.push(Some(blinding));
+///                 public_masks.push(None);
+///             } else {
+///                 private_masks.push(None);
+///                 public_masks.push(None);
+///             }
+///         }
+///     }
+///
+///     // 3. Generate the statement
+///     let seed_nonce = if aggregation_size == 1 {
+///         // A secret seed nonce will be needed to recover the secret scalar for proofs with aggregation size = 1
+///         Some(Scalar::random_not_zero(&mut rng))
+///     } else {
+///         None
+///     };
+///     let private_statement = RangeStatement::init(
+///         generators.clone(),
+///         commitments.clone(),
+///         minimum_values.clone(),
+///         // Only the owner will know the secret seed_nonce
+///         seed_nonce,
+///     )
+///     .unwrap();
+///     statements_private.push(private_statement.clone());
+///     let public_statement =
+///         RangeStatement::init(generators.clone(), commitments, minimum_values.clone(), None).unwrap();
+///     statements_public.push(public_statement.clone());
+///
+///     // 4. Create the proofs
+///     let mut transcript = Transcript::new(transcript_label.as_bytes());
+///     let proof = RangeProof::prove(&mut transcript, &private_statement.clone(), &witness);
+///     proofs.push(proof.unwrap());
+/// }
+///
+/// // 5. Verify the entire batch as the commitment owner, i.e. the prover self
+/// let recovered_private_masks =
+///     RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone()).unwrap();
+/// assert_eq!(private_masks, recovered_private_masks);
+///
+/// // 6. Verify the entire batch as public entity
+/// let recovered_public_masks = RangeProof::verify(transcript_label, &statements_public, &proofs).unwrap();
+/// assert_eq!(public_masks, recovered_public_masks);
+///
+/// # }
+/// ```
+
 impl RangeProof {
     /// The maximum bit length that proofs can be generated for
     pub const MAX_BIT_LENGTH: usize = 64;
-
-    fn a_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
-        self.a.decompress().ok_or_else(|| {
-            ProofError::InvalidArgument("Member 'a' was not the canonical encoding of a point".to_string())
-        })
-    }
-
-    fn a1_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
-        self.a1.decompress().ok_or_else(|| {
-            ProofError::InvalidArgument("Member 'a1' was not the canonical encoding of a point".to_string())
-        })
-    }
-
-    fn b_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
-        self.b.decompress().ok_or_else(|| {
-            ProofError::InvalidArgument("Member 'b' was not the canonical encoding of a point".to_string())
-        })
-    }
-
-    fn li_decompressed(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
-        if self.li.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
-        } else {
-            let mut li = Vec::with_capacity(self.li.len());
-            for item in self.li.clone() {
-                li.push(item.decompress().ok_or_else(|| {
-                    ProofError::InvalidArgument(
-                        "An item in member 'L' was not the canonical encoding of a point".to_string(),
-                    )
-                })?)
-            }
-            Ok(li)
-        }
-    }
-
-    fn li(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
-        if self.li.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
-        } else {
-            Ok(self.li.clone())
-        }
-    }
-
-    fn ri_decompressed(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
-        if self.ri.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
-        } else {
-            let mut ri = Vec::with_capacity(self.ri.len());
-            for item in self.ri.clone() {
-                ri.push(item.decompress().ok_or_else(|| {
-                    ProofError::InvalidArgument(
-                        "An item in member 'R' was not the canonical encoding of a point".to_string(),
-                    )
-                })?)
-            }
-            Ok(ri)
-        }
-    }
-
-    fn ri(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
-        if self.ri.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
-        } else {
-            Ok(self.ri.clone())
-        }
-    }
 
     /// Create a single or aggregated range proof for a single party that knows all the secrets
     /// The prover must ensure that the commitments and witness opening data are consistent
@@ -569,5 +600,71 @@ impl RangeProof {
         }
 
         Ok(masks)
+    }
+
+    fn a_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
+        self.a.decompress().ok_or_else(|| {
+            ProofError::InvalidArgument("Member 'a' was not the canonical encoding of a point".to_string())
+        })
+    }
+
+    fn a1_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
+        self.a1.decompress().ok_or_else(|| {
+            ProofError::InvalidArgument("Member 'a1' was not the canonical encoding of a point".to_string())
+        })
+    }
+
+    fn b_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
+        self.b.decompress().ok_or_else(|| {
+            ProofError::InvalidArgument("Member 'b' was not the canonical encoding of a point".to_string())
+        })
+    }
+
+    fn li_decompressed(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
+        if self.li.is_empty() {
+            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
+        } else {
+            let mut li = Vec::with_capacity(self.li.len());
+            for item in self.li.clone() {
+                li.push(item.decompress().ok_or_else(|| {
+                    ProofError::InvalidArgument(
+                        "An item in member 'L' was not the canonical encoding of a point".to_string(),
+                    )
+                })?)
+            }
+            Ok(li)
+        }
+    }
+
+    fn li(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
+        if self.li.is_empty() {
+            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
+        } else {
+            Ok(self.li.clone())
+        }
+    }
+
+    fn ri_decompressed(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
+        if self.ri.is_empty() {
+            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
+        } else {
+            let mut ri = Vec::with_capacity(self.ri.len());
+            for item in self.ri.clone() {
+                ri.push(item.decompress().ok_or_else(|| {
+                    ProofError::InvalidArgument(
+                        "An item in member 'R' was not the canonical encoding of a point".to_string(),
+                    )
+                })?)
+            }
+            Ok(ri)
+        }
+    }
+
+    fn ri(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
+        if self.ri.is_empty() {
+            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
+        } else {
+            Ok(self.ri.clone())
+        }
     }
 }
