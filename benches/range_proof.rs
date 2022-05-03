@@ -9,11 +9,11 @@ use merlin::Transcript;
 use rand::{self, Rng};
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
+    protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
     range_proof::RangeProof,
     range_statement::RangeStatement,
     range_witness::RangeWitness,
-    scalar_protocol::ScalarProtocol,
 };
 
 static AGGREGATION_SIZES: [usize; 6] = [1, 2, 4, 8, 16, 32];

@@ -4,7 +4,8 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
-/// Bulletproofs+ `TranscriptProtocol` trait for using a Scalar
+//! Bulletproofs+ `TranscriptProtocol` trait for using a Transcript
+
 use curve25519_dalek::{ristretto::CompressedRistretto, scalar::Scalar};
 use merlin::Transcript;
 

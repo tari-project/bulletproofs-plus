@@ -16,8 +16,8 @@ pub mod errors;
 pub mod generators;
 /// Bulletproofs+ inner product calculation for each round
 mod inner_product_round;
-/// Bulletproofs+ add 'Debug' functionality to other struct members that do not implement 'Debug'
-pub mod non_debug;
+/// Bulletproofs+ library protocol extensions
+pub mod protocols;
 /// Bulletproofs+ range parameters (generators and base points) needed for a batch of range proofs
 pub mod range_parameters;
 /// Bulletproofs+ public range proof parameters intended for a verifier
@@ -27,10 +27,6 @@ pub mod range_proof;
 pub mod range_statement;
 /// Bulletproofs+ commitment openings for the aggregated case
 pub mod range_witness;
-/// Bulletproofs+ `ScalarProtocol` trait for using a Scalar
-pub mod scalar_protocol;
-/// Bulletproofs+ `TranscriptProtocol` trait for using a Scalar
-mod transcript_protocol;
 /// Bulletproofs+ utilities
 mod utils;
 

@@ -3,6 +3,8 @@
 
 //! Bulletproofs+ inner product calculation for each round
 
+#![allow(clippy::too_many_lines)]
+
 use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
@@ -14,10 +16,12 @@ use zeroize::Zeroize;
 
 use crate::{
     errors::ProofError,
-    non_debug::NonDebug,
-    scalar_protocol::ScalarProtocol,
-    transcript_protocol::TranscriptProtocol,
-    utils::{add_point_vec, add_scalar_vec, mul_point_vec_with_scalar, mul_scalar_vec_with_scalar, nonce},
+    protocols::{
+        ristretto_point_protocol::RistrettoPointProtocol,
+        scalar_protocol::ScalarProtocol,
+        transcript_protocol::TranscriptProtocol,
+    },
+    utils::{generic::nonce, non_debug::NonDebug},
 };
 
 /// The struct that will hold the inner product calculation for each round, called consecutively
@@ -174,10 +178,18 @@ impl<'a> InnerProductRound<'a> {
         }
 
         // Compute L and R by multi-scalar multiplication
-        let mut li_scalars = vec![c_l, d_l];
-        let mut li_points = vec![self.h_base, self.g_base];
-        let mut ri_scalars = vec![c_r, d_r];
-        let mut ri_points = vec![self.h_base, self.g_base];
+        let mut li_scalars = Vec::with_capacity(2 * n + 2);
+        li_scalars.push(c_l);
+        li_scalars.push(d_l);
+        let mut li_points = Vec::with_capacity(2 * n + 2);
+        li_points.push(self.h_base);
+        li_points.push(self.g_base);
+        let mut ri_scalars = Vec::with_capacity(2 * n + 2);
+        ri_scalars.push(c_r);
+        ri_scalars.push(d_r);
+        let mut ri_points = Vec::with_capacity(2 * n + 2);
+        ri_points.push(self.h_base);
+        ri_points.push(self.g_base);
         for i in 0..n {
             li_scalars.push(a1[i] * y_n_inverse);
             li_points.push(gi_base_hi[i]);
@@ -200,24 +212,24 @@ impl<'a> InnerProductRound<'a> {
         let e = self.transcript.challenge_scalar(b"e")?;
         let e_inverse = e.invert();
 
-        self.gi_base = add_point_vec(
-            mul_point_vec_with_scalar(gi_base_lo, &e_inverse)?.as_slice(),
-            mul_point_vec_with_scalar(gi_base_hi, &(e * y_n_inverse))?.as_slice(),
+        self.gi_base = RistrettoPoint::add_point_vectors(
+            RistrettoPoint::mul_point_vec_with_scalar(gi_base_lo, &e_inverse)?.as_slice(),
+            RistrettoPoint::mul_point_vec_with_scalar(gi_base_hi, &(e * y_n_inverse))?.as_slice(),
         )?;
-        self.hi_base = add_point_vec(
-            mul_point_vec_with_scalar(hi_base_lo, &e)?.as_slice(),
-            mul_point_vec_with_scalar(hi_base_hi, &e_inverse)?.as_slice(),
+        self.hi_base = RistrettoPoint::add_point_vectors(
+            RistrettoPoint::mul_point_vec_with_scalar(hi_base_lo, &e)?.as_slice(),
+            RistrettoPoint::mul_point_vec_with_scalar(hi_base_hi, &e_inverse)?.as_slice(),
         )?;
 
-        self.ai = add_scalar_vec(
-            mul_scalar_vec_with_scalar(a1, &e)?.as_slice(),
-            mul_scalar_vec_with_scalar(a2, &(self.y_powers[n] * e_inverse))?.as_slice(),
+        self.ai = Scalar::add_scalar_vectors(
+            Scalar::mul_with_scalar_vec_with_scalar(a1, &e)?.as_slice(),
+            Scalar::mul_with_scalar_vec_with_scalar(a2, &(self.y_powers[n] * e_inverse))?.as_slice(),
         )?;
-        self.bi = add_scalar_vec(
-            mul_scalar_vec_with_scalar(b1, &e_inverse)?.as_slice(),
-            mul_scalar_vec_with_scalar(b2, &e)?.as_slice(),
+        self.bi = Scalar::add_scalar_vectors(
+            Scalar::mul_with_scalar_vec_with_scalar(b1, &e_inverse)?.as_slice(),
+            Scalar::mul_with_scalar_vec_with_scalar(b2, &e)?.as_slice(),
         )?;
-        self.alpha = d_l * e * e + self.alpha + d_r * e_inverse * e_inverse;
+        self.alpha += d_l * e * e + d_r * e_inverse * e_inverse;
 
         Ok(())
     }

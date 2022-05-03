@@ -10,8 +10,8 @@ use curve25519_dalek::{
     scalar::Scalar,
     traits::MultiscalarMul,
 };
-use digest::Digest;
-use sha3::Sha3_512;
+
+use crate::protocols::ristretto_point_protocol::RistrettoPointProtocol;
 
 /// Represents a pair of base points for Pedersen commitments
 ///
@@ -37,11 +37,16 @@ pub struct PedersenGens {
 
 lazy_static! {
     static ref RISTRETTO_BASEPOINT_POINT_BLINDING: RistrettoPoint =
-        hash_from_bytes_sha3_512(RISTRETTO_BASEPOINT_COMPRESSED.as_bytes());
-    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING: CompressedRistretto =
-        (*RISTRETTO_BASEPOINT_POINT_BLINDING).compress();
+        RistrettoPoint::hash_from_bytes_sha3_512(RISTRETTO_BASEPOINT_COMPRESSED.as_bytes());
 }
+
 impl PedersenGens {
+    // Pre-calculated '(*RISTRETTO_BASEPOINT_POINT_BLINDING).compress()'
+    const RISTRETTO_BASEPOINT_COMPRESSED_BLINDING: CompressedRistretto = CompressedRistretto([
+        140, 146, 64, 180, 86, 169, 230, 220, 101, 195, 119, 161, 4, 141, 116, 95, 148, 160, 140, 219, 127, 68, 203,
+        205, 123, 70, 243, 64, 72, 135, 17, 52,
+    ]);
+
     /// Creates a Pedersen commitment using the value scalar and a blinding factor.
     pub fn commit(&self, value: Scalar, blinding: Scalar) -> RistrettoPoint {
         RistrettoPoint::multiscalar_mul(&[value, blinding], &[self.h_base, self.g_base])
@@ -54,23 +59,22 @@ impl Default for PedersenGens {
             h_base: RISTRETTO_BASEPOINT_POINT,
             g_base: *RISTRETTO_BASEPOINT_POINT_BLINDING,
             h_base_compressed: RISTRETTO_BASEPOINT_COMPRESSED,
-            g_base_compressed: *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING,
+            g_base_compressed: PedersenGens::RISTRETTO_BASEPOINT_COMPRESSED_BLINDING,
         }
     }
 }
 
-// Helper function to implement 'RistrettoPoint::hash_from_bytes::<Sha3_512>'
-fn hash_from_bytes_sha3_512(input: &[u8]) -> RistrettoPoint {
-    let mut hasher = Sha3_512::default();
-    hasher.update(input);
-    from_hash_sha3_512(hasher)
-}
+#[cfg(test)]
+mod tests {
+    use crate::{generators::pedersen_gens::RISTRETTO_BASEPOINT_POINT_BLINDING, PedersenGens};
 
-// Helper function to implement 'RistrettoPoint::from_hash::<Sha3_512>'
-fn from_hash_sha3_512(hasher: Sha3_512) -> RistrettoPoint {
-    let output = hasher.finalize();
-    let mut output_bytes = [0u8; 64];
-    output_bytes.copy_from_slice(output.as_slice());
-
-    RistrettoPoint::from_uniform_bytes(&output_bytes)
+    #[test]
+    fn test_const() {
+        let pc_gens = PedersenGens::default();
+        assert_eq!(pc_gens.g_base.compress(), pc_gens.g_base_compressed);
+        assert_eq!(
+            (*RISTRETTO_BASEPOINT_POINT_BLINDING).compress(),
+            pc_gens.g_base_compressed
+        );
+    }
 }

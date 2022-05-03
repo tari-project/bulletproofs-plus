@@ -7,11 +7,11 @@ use rand::Rng;
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
     errors::ProofError,
+    protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
     range_proof::RangeProof,
     range_statement::RangeStatement,
     range_witness::RangeWitness,
-    scalar_protocol::ScalarProtocol,
 };
 
 #[test]

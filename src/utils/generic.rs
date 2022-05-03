@@ -1,12 +1,15 @@
-// Copyright 2022 The Tari Project
-// SPDX-License-Identifier: BSD-3-Clause
-
-//! Bulletproofs+ utilities
+use core::{
+    option::{Option, Option::Some},
+    result::{
+        Result,
+        Result::{Err, Ok},
+    },
+};
 
 use blake2::Blake2b;
-use curve25519_dalek::{ristretto::RistrettoPoint, scalar::Scalar};
+use curve25519_dalek::scalar::Scalar;
 
-use crate::{errors::ProofError, range_proof::RangeProof, scalar_protocol::ScalarProtocol};
+use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::RangeProof};
 
 /// Create a Blake2B deterministic nonce given a seed, label and index
 pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<Scalar, ProofError> {
@@ -27,61 +30,6 @@ pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<S
     };
 
     Ok(Scalar::from_hasher_blake2b(hasher))
-}
-
-/// Multiply a point vector with a scalar vector
-pub fn mul_point_vec_with_scalar(
-    point_vec: &[RistrettoPoint],
-    scalar: &Scalar,
-) -> Result<Vec<RistrettoPoint>, ProofError> {
-    if point_vec.is_empty() {
-        return Err(ProofError::InvalidLength(
-            "Cannot multiply empty point vector with scalar".to_string(),
-        ));
-    }
-    let mut out = vec![RistrettoPoint::default(); point_vec.len()];
-    for i in 0..point_vec.len() {
-        out[i] = point_vec[i] * scalar;
-    }
-    Ok(out)
-}
-
-/// Add two point vectors
-pub fn add_point_vec(a: &[RistrettoPoint], b: &[RistrettoPoint]) -> Result<Vec<RistrettoPoint>, ProofError> {
-    if a.len() != b.len() || a.is_empty() {
-        return Err(ProofError::InvalidLength("Cannot add empty point vectors".to_string()));
-    }
-    let mut out = vec![RistrettoPoint::default(); a.len()];
-    for i in 0..a.len() {
-        out[i] = a[i] + b[i];
-    }
-    Ok(out)
-}
-
-/// Multiply one scalar vector with another scalar vector
-pub fn mul_scalar_vec_with_scalar(scalar_vec: &[Scalar], scalar: &Scalar) -> Result<Vec<Scalar>, ProofError> {
-    if scalar_vec.is_empty() {
-        return Err(ProofError::InvalidLength(
-            "Cannot multiply empty scalar vector with scalar".to_string(),
-        ));
-    }
-    let mut out = vec![Scalar::default(); scalar_vec.len()];
-    for i in 0..scalar_vec.len() {
-        out[i] = scalar_vec[i] * scalar;
-    }
-    Ok(out)
-}
-
-/// Add two scalar vectors
-pub fn add_scalar_vec(a: &[Scalar], b: &[Scalar]) -> Result<Vec<Scalar>, ProofError> {
-    if a.len() != b.len() || a.is_empty() {
-        return Err(ProofError::InvalidLength("Cannot add empty scalar vectors".to_string()));
-    }
-    let mut out = vec![Scalar::default(); a.len()];
-    for i in 0..a.len() {
-        out[i] = a[i] + b[i];
-    }
-    Ok(out)
 }
 
 /// Decompose a given value into a vector of scalars for the required bit length
@@ -114,9 +62,9 @@ mod tests {
 
     use crate::{
         errors::ProofError,
+        protocols::scalar_protocol::ScalarProtocol,
         range_proof::RangeProof,
-        scalar_protocol::ScalarProtocol,
-        utils::{bit_vector_of_scalars, nonce},
+        utils::generic::{bit_vector_of_scalars, nonce},
     };
 
     #[test]

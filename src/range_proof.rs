@@ -3,6 +3,8 @@
 
 //! Bulletproofs+ public range proof parameters intended for a verifier
 
+#![allow(clippy::too_many_lines)]
+
 use curve25519_dalek::{
     ristretto::{CompressedRistretto, RistrettoPoint},
     scalar::Scalar,
@@ -14,11 +16,10 @@ use rand::thread_rng;
 use crate::{
     errors::ProofError,
     inner_product_round::InnerProductRound,
+    protocols::{scalar_protocol::ScalarProtocol, transcript_protocol::TranscriptProtocol},
     range_statement::RangeStatement,
     range_witness::RangeWitness,
-    scalar_protocol::ScalarProtocol,
-    transcript_protocol::TranscriptProtocol,
-    utils::{bit_vector_of_scalars, nonce},
+    utils::generic::{bit_vector_of_scalars, nonce},
 };
 
 /// Contains the public range proof parameters intended for a verifier
