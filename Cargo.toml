@@ -1,0 +1,40 @@
+[package]
+name = "tari_bulletproofs_plus"
+version = "0.0.1"
+authors = ["The Tari Development Community"]
+edition = "2018"
+license = "BSD-3-Clause"
+description = "A smaller faster implementation of Bulletproofs"
+
+[dependencies]
+curve25519-dalek = { package = "curve25519-dalek", version = "4.0.0-pre.2", default-features = false, features = ["serde", "alloc"] }
+sha3 = { version = "0.9.1", default-features = false }
+blake2 = "0.9.1"
+digest = { version = "0.9.0", default-features = false }
+rand = "0.8"
+byteorder = { version = "1", default-features = false }
+thiserror = { version = "1"}
+merlin = { version = "3", default-features = false }
+zeroize = "1.0.0"
+derive_more = "0.99.17"
+lazy_static = "1.4.0"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[features]
+default = ["u64_backend"]
+u64_backend = ["curve25519-dalek/u64_backend"]
+simd_backend = ["curve25519-dalek/simd_backend"]
+
+[[test]]
+name = "main_test"
+
+[[bench]]
+name = "range_proof"
+harness = false
+#required-features = ["avx2"]
+
+[[bench]]
+name = "generators"
+harness = false
