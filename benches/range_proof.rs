@@ -5,7 +5,6 @@ use std::ops::Div;
 
 use criterion::{Criterion, SamplingMode};
 use curve25519_dalek::scalar::Scalar;
-use merlin::Transcript;
 use rand::{self, Rng};
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
@@ -63,8 +62,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
             // Benchmark this code
             b.iter(|| {
                 // 4. Create the aggregated proof
-                let mut transcript = Transcript::new(transcript_label.as_bytes());
-                let _ = RangeProof::prove(&mut transcript, &statement.clone(), &witness);
+                let _ = RangeProof::prove(transcript_label, &statement.clone(), &witness);
             })
         });
     }
@@ -131,8 +129,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
             statements.push(statement.clone());
 
             // 4. Create the proof
-            let mut transcript = Transcript::new(transcript_label.as_bytes());
-            let proof = RangeProof::prove(&mut transcript, &statement, &witness);
+            let proof = RangeProof::prove(transcript_label, &statement, &witness);
             proofs.push(proof.unwrap());
 
             // Benchmark this code
@@ -199,8 +196,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, c: &mut Criterion) {
         statements.push(statement.clone());
 
         // 4. Create the proof
-        let mut transcript = Transcript::new(transcript_label.as_bytes());
-        let proof = RangeProof::prove(&mut transcript, &statement, &witness);
+        let proof = RangeProof::prove(transcript_label, &statement, &witness);
         proofs.push(proof.unwrap());
     }
 

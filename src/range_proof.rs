@@ -115,8 +115,7 @@ pub struct RangeProof {
 ///     statements_public.push(public_statement.clone());
 ///
 ///     // 4. Create the proofs
-///     let mut transcript = Transcript::new(transcript_label.as_bytes());
-///     let proof = RangeProof::prove(&mut transcript, &private_statement.clone(), &witness);
+///     let proof = RangeProof::prove(transcript_label, &private_statement.clone(), &witness);
 ///     proofs.push(proof.unwrap());
 /// }
 ///
@@ -139,7 +138,7 @@ impl RangeProof {
     /// Create a single or aggregated range proof for a single party that knows all the secrets
     /// The prover must ensure that the commitments and witness opening data are consistent
     pub fn prove(
-        transcript: &mut Transcript,
+        transcript_label: &'static str,
         statement: &RangeStatement,
         witness: &RangeWitness,
     ) -> Result<RangeProof, ProofError> {
@@ -156,19 +155,24 @@ impl RangeProof {
         let (h_base, g_base) = (statement.generators.h_base(), statement.generators.g_base());
         let h_base_compressed = statement.generators.h_base_compressed();
         let g_base_compressed = statement.generators.g_base_compressed();
-        let (hi_base, gi_base) = (statement.generators.hi_base(), statement.generators.gi_base());
+        let (hi_base, gi_base) = (
+            statement.generators.hi_base_copied(),
+            statement.generators.gi_base_copied(),
+        );
 
+        // Start the transcript
+        let mut transcript = Transcript::new(transcript_label.as_bytes());
         transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
         transcript.validate_and_append_point(b"H", &h_base_compressed)?;
         transcript.validate_and_append_point(b"G", &g_base_compressed)?;
         transcript.append_u64(b"N", bit_length as u64);
         transcript.append_u64(b"M", aggregation_factor as u64);
-        for item in statement.commitments_compressed.clone() {
-            transcript.append_point(b"Ci", &item);
+        for item in &statement.commitments_compressed {
+            transcript.append_point(b"Ci", item);
         }
-        for item in statement.minimum_value_promises.clone() {
+        for item in &statement.minimum_value_promises {
             if let Some(minimum_value) = item {
-                transcript.append_u64(b"vi - minimum_value", minimum_value);
+                transcript.append_u64(b"vi - minimum_value", *minimum_value);
             } else {
                 transcript.append_u64(b"vi - minimum_value", 0);
             }
@@ -267,7 +271,7 @@ impl RangeProof {
             a_ri_1,
             alpha1,
             y_powers,
-            transcript,
+            &mut transcript,
             statement.seed_nonce,
             aggregation_factor,
         )?;
@@ -345,23 +349,17 @@ impl RangeProof {
             if i == max_index {
                 continue;
             }
-            for (j, this_gi_base) in gi_base_ref
-                .iter()
-                .enumerate()
-                .take(statement.generators.gi_base_ref().len())
-            {
-                if gi_base_ref[j] != *this_gi_base {
+            let statement_gi_base_ref = statement.generators.gi_base_ref();
+            for (j, gi_base_ref_item) in gi_base_ref.iter().enumerate().take(statement_gi_base_ref.len()) {
+                if &statement_gi_base_ref[j] != gi_base_ref_item {
                     return Err(ProofError::InvalidArgument(
                         "Inconsistent Gi generator point vector in batch statement".to_string(),
                     ));
                 }
             }
-            for (j, this_hi_base) in hi_base_ref
-                .iter()
-                .enumerate()
-                .take(statement.generators.hi_base_ref().len())
-            {
-                if hi_base_ref[j] != *this_hi_base {
+            let statement_hi_base_ref = statement.generators.hi_base_ref();
+            for (j, hi_base_ref_item) in hi_base_ref.iter().enumerate().take(statement_hi_base_ref.len()) {
+                if &statement_hi_base_ref[j] != hi_base_ref_item {
                     return Err(ProofError::InvalidArgument(
                         "Inconsistent Hi generator point vector in batch statement".to_string(),
                     ));

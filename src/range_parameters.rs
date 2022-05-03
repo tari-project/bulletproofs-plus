@@ -86,41 +86,37 @@ impl RangeParameters {
         self.pc_gens.g_base_compressed
     }
 
-    /// Return the non-public value bulletproof generators
-    pub fn hi_base(&self) -> Vec<RistrettoPoint> {
-        let hi_base: Vec<RistrettoPoint> = self
-            .bp_gens
-            .h_iter(self.bit_length(), self.aggregation_factor())
-            .copied()
-            .collect();
-        hi_base
+    /// Return the non-public value iterator to the bulletproof generators
+    pub fn hi_base_iter(&self) -> impl Iterator<Item = &RistrettoPoint> {
+        self.bp_gens.h_iter(self.bit_length(), self.aggregation_factor())
     }
 
     /// Return the non-public value bulletproof generator references
     pub fn hi_base_ref(&self) -> Vec<&RistrettoPoint> {
-        let hi_base_ref: Vec<&RistrettoPoint> = self
-            .bp_gens
-            .h_iter(self.bit_length(), self.aggregation_factor())
-            .collect();
+        let hi_base_ref: Vec<&RistrettoPoint> = self.hi_base_iter().collect();
         hi_base_ref
     }
 
-    /// Return the non-public mask bulletproof generators
-    pub fn gi_base(&self) -> Vec<RistrettoPoint> {
-        let gi_base: Vec<RistrettoPoint> = self
-            .bp_gens
-            .g_iter(self.bit_length(), self.aggregation_factor())
-            .copied()
-            .collect();
-        gi_base
+    /// Return the non-public value bulletproof generator references
+    pub fn hi_base_copied(&self) -> Vec<RistrettoPoint> {
+        let hi_base_ref: Vec<RistrettoPoint> = self.hi_base_iter().copied().collect();
+        hi_base_ref
+    }
+
+    /// Return the non-public mask iterator to the bulletproof generators
+    pub fn gi_base_iter(&self) -> impl Iterator<Item = &RistrettoPoint> {
+        self.bp_gens.g_iter(self.bit_length(), self.aggregation_factor())
     }
 
     /// Return the non-public mask bulletproof generator references
     pub fn gi_base_ref(&self) -> Vec<&RistrettoPoint> {
-        let gi_base_ref: Vec<&RistrettoPoint> = self
-            .bp_gens
-            .g_iter(self.bit_length(), self.aggregation_factor())
-            .collect();
+        let gi_base_ref: Vec<&RistrettoPoint> = self.gi_base_iter().collect();
         gi_base_ref
+    }
+
+    /// Return the non-public mask bulletproof generators
+    pub fn gi_base_copied(&self) -> Vec<RistrettoPoint> {
+        let gi_base: Vec<RistrettoPoint> = self.gi_base_iter().copied().collect();
+        gi_base
     }
 }

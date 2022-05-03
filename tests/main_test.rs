@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use curve25519_dalek::scalar::Scalar;
-use merlin::Transcript;
 use rand::Rng;
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
@@ -172,9 +171,7 @@ fn prove_and_verify(bit_lengths: Vec<usize>, proof_batch: Vec<usize>, promise_st
                 RangeStatement::init(generators.clone(), commitments, minimum_values.clone(), None).unwrap();
 
             // 4. Create the proofs
-            let mut transcript = Transcript::new(transcript_label.as_bytes());
-
-            let proof = RangeProof::prove(&mut transcript, &private_statement.clone(), &witness);
+            let proof = RangeProof::prove(transcript_label, &private_statement.clone(), &witness);
             match promise_strategy {
                 ProofOfMinimumValueStrategy::LargerThanValue => match proof {
                     Ok(_) => {
