@@ -1,7 +1,15 @@
+// Copyright 2022 The Tari Project
+// SPDX-License-Identifier: BSD-3-Clause
+//   Modified from:
+//     Copyright (c) 2018 Chain, Inc.
+//     SPDX-License-Identifier: MIT
+
+#![allow(missing_docs)]
+
 #[macro_use]
 extern crate criterion;
 
-use std::ops::Div;
+use std::convert::TryInto;
 
 use criterion::{Criterion, SamplingMode};
 use curve25519_dalek::scalar::Scalar;
@@ -17,15 +25,12 @@ use tari_bulletproofs_plus::{
 
 static AGGREGATION_SIZES: [usize; 6] = [1, 2, 4, 8, 16, 32];
 
-fn div_floor_u64(value: f64, divisor: f64) -> u64 {
-    f64::floor((value as f64).div(divisor)) as u64
-}
-
 fn create_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
     let mut group = c.benchmark_group("rangeproof creation");
     group.sampling_mode(SamplingMode::Flat);
 
     let transcript_label: &'static str = "BatchedRangeProofTest";
+    #[allow(clippy::cast_possible_truncation)]
     let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
 
     for aggregation_factor in AGGREGATION_SIZES {
@@ -44,7 +49,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
             let mut rng = rand::thread_rng();
             for _ in 0..aggregation_factor {
                 let value = rng.gen_range(value_min..value_max);
-                minimum_values.push(Some(div_floor_u64(value as f64, 3f64)));
+                minimum_values.push(Some(value / 3));
                 let blinding = Scalar::random_not_zero(&mut rng);
                 commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
                 witness.openings.push(CommitmentOpening::new(value, blinding));
@@ -62,7 +67,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
             // Benchmark this code
             b.iter(|| {
                 // 4. Create the aggregated proof
-                let _ = RangeProof::prove(transcript_label, &statement.clone(), &witness);
+                let _proof = RangeProof::prove(transcript_label, &statement.clone(), &witness);
             })
         });
     }
@@ -90,6 +95,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
     group.sampling_mode(SamplingMode::Flat);
 
     let transcript_label: &'static str = "BatchedRangeProofTest";
+    #[allow(clippy::cast_possible_truncation)]
     let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
 
     for aggregation_factor in AGGREGATION_SIZES {
@@ -112,7 +118,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
             let mut rng = rand::thread_rng();
             for _ in 0..aggregation_factor {
                 let value = rng.gen_range(value_min..value_max);
-                minimum_values.push(Some(div_floor_u64(value as f64, 3f64)));
+                minimum_values.push(Some(value / 3));
                 let blinding = Scalar::random_not_zero(&mut rng);
                 commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
                 witness.openings.push(CommitmentOpening::new(value, blinding));
@@ -135,7 +141,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the aggregated proof
-                let _ = RangeProof::verify(transcript_label, &statements.clone(), &proofs.clone()).unwrap();
+                let _proof = RangeProof::verify(transcript_label, &statements.clone(), &proofs.clone()).unwrap();
             });
         });
     }
@@ -163,12 +169,13 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, c: &mut Criterion) {
     group.sampling_mode(SamplingMode::Flat);
 
     let transcript_label: &'static str = "BatchedRangeProofTest";
+    #[allow(clippy::cast_possible_truncation)]
     let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
 
     let max_range_proofs = AGGREGATION_SIZES
         .to_vec()
         .iter()
-        .fold(u32::MIN, |a, &b| a.max(b as u32));
+        .fold(u32::MIN, |a, &b| a.max(b.try_into().unwrap()));
     // 0.  Batch data
     let mut statements = vec![];
     let mut proofs = vec![];
@@ -189,7 +196,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, c: &mut Criterion) {
         let statement = RangeStatement::init(
             generators.clone(),
             vec![generators.pc_gens().commit(Scalar::from(value), blinding)],
-            vec![Some(div_floor_u64(value as f64, 3f64))],
+            vec![Some(value / 3)],
             seed_nonce,
         )
         .unwrap();
@@ -212,7 +219,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, c: &mut Criterion) {
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the entire batch of single proofs
-                let _ = RangeProof::verify(transcript_label, statements, proofs).unwrap();
+                let _proof = RangeProof::verify(transcript_label, statements, proofs).unwrap();
             });
         });
     }

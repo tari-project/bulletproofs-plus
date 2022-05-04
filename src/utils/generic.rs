@@ -1,3 +1,8 @@
+// Copyright 2022 The Tari Project
+// SPDX-License-Identifier: BSD-3-Clause
+
+//! Bulletproofs+ utilities
+
 use core::{
     option::{Option, Option::Some},
     result::{
@@ -100,7 +105,7 @@ mod tests {
         assert_eq!(ref_nonce_eta, nonce(&seed_nonce, "eta", None).unwrap());
     }
 
-    fn bit_vector_to_value(bit_vector: Vec<Scalar>) -> Result<u64, ProofError> {
+    fn bit_vector_to_value(bit_vector: &[Scalar]) -> Result<u64, ProofError> {
         if !bit_vector.len().is_power_of_two() || bit_vector.len() > RangeProof::MAX_BIT_LENGTH {
             return Err(ProofError::InvalidLength(
                 "Bit vector must be a power of 2 with length <= 64".to_string(),
@@ -112,14 +117,16 @@ mod tests {
                 result += 1 << i;
             }
         }
+        #[allow(clippy::cast_possible_truncation)]
         Ok(result as u64)
     }
 
     #[test]
+    #[allow(clippy::match_wild_err_arm)]
     fn test_bit_vector() {
         match bit_vector_of_scalars(11, 4) {
             Ok(values) => {
-                assert_eq!(11, bit_vector_to_value(values).unwrap());
+                assert_eq!(11, bit_vector_to_value(&values).unwrap());
             },
             Err(_) => {
                 panic!("Should not err")
@@ -127,7 +134,7 @@ mod tests {
         }
         match bit_vector_of_scalars(15, 4) {
             Ok(values) => {
-                assert_eq!(15, bit_vector_to_value(values).unwrap());
+                assert_eq!(15, bit_vector_to_value(&values).unwrap());
             },
             Err(_) => {
                 panic!("Should not err")
@@ -144,7 +151,7 @@ mod tests {
         }
         match bit_vector_of_scalars(u64::MAX - 12187, RangeProof::MAX_BIT_LENGTH) {
             Ok(values) => {
-                assert_eq!(u64::MAX - 12187, bit_vector_to_value(values).unwrap());
+                assert_eq!(u64::MAX - 12187, bit_vector_to_value(&values).unwrap());
             },
             Err(_) => {
                 panic!("Should not err")
@@ -152,7 +159,7 @@ mod tests {
         }
         match bit_vector_of_scalars(u64::MAX, RangeProof::MAX_BIT_LENGTH) {
             Ok(values) => {
-                assert_eq!(u64::MAX, bit_vector_to_value(values).unwrap());
+                assert_eq!(u64::MAX, bit_vector_to_value(&values).unwrap());
             },
             Err(_) => {
                 panic!("Should not err")
