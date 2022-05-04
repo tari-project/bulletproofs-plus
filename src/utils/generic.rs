@@ -1,5 +1,8 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
+//   Modified from:
+//     Copyright (c) 2018 Chain, Inc.
+//     SPDX-License-Identifier: MIT
 
 //! Bulletproofs+ utilities
 
@@ -21,43 +24,56 @@ pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<S
     let encoded_label = label.as_bytes();
     if encoded_label.len() > 16 {
         // See https://www.blake2.net/blake2.pdf section 2.8
-        return Err(ProofError::InvalidLength("nonce label".to_string()));
-    };
-    let hasher = if let Some(salt) = index {
+        Err(ProofError::InvalidLength("nonce label".to_string()))
+    } else if let Some(salt) = index {
         let encoded_index = salt.to_le_bytes();
         if encoded_index.len() > 16 {
             // See https://www.blake2.net/blake2.pdf section 2.8
-            return Err(ProofError::InvalidLength("nonce index".to_string()));
-        };
-        Blake2b::with_params(&seed_nonce.to_bytes(), &encoded_index, encoded_label)
+            Err(ProofError::InvalidLength("nonce index".to_string()))
+        } else {
+            Ok(Scalar::from_hasher_blake2b(Blake2b::with_params(
+                &seed_nonce.to_bytes(),
+                &encoded_index,
+                encoded_label,
+            )))
+        }
     } else {
-        Blake2b::with_params(&seed_nonce.to_bytes(), &[], encoded_label)
-    };
-
-    Ok(Scalar::from_hasher_blake2b(hasher))
+        Ok(Scalar::from_hasher_blake2b(Blake2b::with_params(
+            &seed_nonce.to_bytes(),
+            &[],
+            encoded_label,
+        )))
+    }
 }
 
 /// Decompose a given value into a vector of scalars for the required bit length
 pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar>, ProofError> {
     if !bit_length.is_power_of_two() || bit_length > RangeProof::MAX_BIT_LENGTH {
-        return Err(ProofError::InvalidLength(
+        Err(ProofError::InvalidLength(
             "Bit size not valid, must be a power of 2 and <= 64".to_string(),
-        ));
-    }
-    if value >> (bit_length - 1) > 1 {
-        return Err(ProofError::InvalidLength(
+        ))
+    } else if value >> (bit_length - 1) > 1 {
+        Err(ProofError::InvalidLength(
             "Value too large, bit vector capacity will be exceeded".to_string(),
-        ));
-    }
-    let mut result = Vec::with_capacity(bit_length);
-    for i in 0..bit_length {
-        if (value >> i) & 1 == 0 {
-            result.push(Scalar::zero());
-        } else {
-            result.push(Scalar::one());
+        ))
+    } else {
+        let mut result = Vec::with_capacity(bit_length);
+        for i in 0..bit_length {
+            if (value >> i) & 1 == 0 {
+                result.push(Scalar::zero());
+            } else {
+                result.push(Scalar::one());
+            }
         }
+        Ok(result)
     }
-    Ok(result)
+}
+
+/// Given `data` with `len >= 32`, return the first 32 bytes.
+pub fn read32(data: &[u8]) -> [u8; 32] {
+    let mut buf32 = [0u8; 32];
+    buf32[..].copy_from_slice(&data[..32]);
+    buf32
 }
 
 #[cfg(test)]

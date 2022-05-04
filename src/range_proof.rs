@@ -12,6 +12,7 @@ use curve25519_dalek::{
 };
 use merlin::Transcript;
 use rand::thread_rng;
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     errors::ProofError,
@@ -19,11 +20,11 @@ use crate::{
     protocols::{scalar_protocol::ScalarProtocol, transcript_protocol::TranscriptProtocol},
     range_statement::RangeStatement,
     range_witness::RangeWitness,
-    utils::generic::{bit_vector_of_scalars, nonce},
+    utils::generic::{bit_vector_of_scalars, nonce, read32},
 };
 
 /// Contains the public range proof parameters intended for a verifier
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RangeProof {
     a: CompressedRistretto,
     a1: CompressedRistretto,
@@ -600,6 +601,72 @@ impl RangeProof {
         Ok(masks)
     }
 
+    /// Serializes the proof into a byte array of 32-byte elements
+    pub fn to_bytes(&self) -> Vec<u8> {
+        // 6 elements, 2 vectors
+        let mut buf = Vec::with_capacity((6 + self.li.len() + self.ri.len()) * 32);
+        for l in &self.li {
+            buf.extend_from_slice(l.as_bytes());
+        }
+        for r in &self.ri {
+            buf.extend_from_slice(r.as_bytes());
+        }
+        buf.extend_from_slice(self.a.as_bytes());
+        buf.extend_from_slice(self.a1.as_bytes());
+        buf.extend_from_slice(self.b.as_bytes());
+        buf.extend_from_slice(self.r1.as_bytes());
+        buf.extend_from_slice(self.s1.as_bytes());
+        buf.extend_from_slice(self.d1.as_bytes());
+        buf
+    }
+
+    /// Deserializes the proof from a byte slice
+    pub fn from_bytes(slice: &[u8]) -> Result<RangeProof, ProofError> {
+        if slice.len() % 32 != 0 {
+            return Err(ProofError::InvalidLength(
+                "Serialized proof bytes must be a factor of 32".to_string(),
+            ));
+        }
+        let num_elements = slice.len() / 32;
+        if (num_elements - 6) % 2 != 0 {
+            return Err(ProofError::InvalidLength(
+                "Serialized proof has incorrect number of elements".to_string(),
+            ));
+        }
+        let n = (num_elements - 6) / 2;
+
+        let mut li: Vec<CompressedRistretto> = Vec::with_capacity(n);
+        let mut ri: Vec<CompressedRistretto> = Vec::with_capacity(n);
+        for i in 0..n {
+            li.push(CompressedRistretto(read32(&slice[i * 32..])));
+        }
+        for i in n..2 * n {
+            ri.push(CompressedRistretto(read32(&slice[i * 32..])));
+        }
+
+        let pos = 2 * n * 32;
+        let a = CompressedRistretto(read32(&slice[pos..]));
+        let a1 = CompressedRistretto(read32(&slice[pos + 32..]));
+        let b = CompressedRistretto(read32(&slice[pos + 64..]));
+        let r1 = Scalar::from_canonical_bytes(read32(&slice[pos + 96..]))
+            .ok_or_else(|| ProofError::InvalidArgument("r1 bytes not a canonical byte representation".to_string()))?;
+        let s1 = Scalar::from_canonical_bytes(read32(&slice[pos + 128..]))
+            .ok_or_else(|| ProofError::InvalidArgument("s1 bytes not a canonical byte representation".to_string()))?;
+        let d1 = Scalar::from_canonical_bytes(read32(&slice[pos + 160..]))
+            .ok_or_else(|| ProofError::InvalidArgument("d1 bytes not a canonical byte representation".to_string()))?;
+
+        Ok(RangeProof {
+            a,
+            a1,
+            b,
+            r1,
+            s1,
+            d1,
+            li,
+            ri,
+        })
+    }
+
     fn a_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
         self.a.decompress().ok_or_else(|| {
             ProofError::InvalidArgument("Member 'a' was not the canonical encoding of a point".to_string())
@@ -664,5 +731,34 @@ impl RangeProof {
         } else {
             Ok(self.ri.clone())
         }
+    }
+}
+
+impl Serialize for RangeProof {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer {
+        serializer.serialize_bytes(&self.to_bytes()[..])
+    }
+}
+
+impl<'de> Deserialize<'de> for RangeProof {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where D: Deserializer<'de> {
+        struct RangeProofVisitor;
+
+        impl<'de> Visitor<'de> for RangeProofVisitor {
+            type Value = RangeProof;
+
+            fn expecting(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                formatter.write_str("a valid RangeProof")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<RangeProof, E>
+            where E: serde::de::Error {
+                RangeProof::from_bytes(v).map_err(|_| serde::de::Error::custom("deserialization error"))
+            }
+        }
+
+        deserializer.deserialize_bytes(RangeProofVisitor)
     }
 }

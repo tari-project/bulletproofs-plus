@@ -7,19 +7,21 @@ license = "BSD-3-Clause"
 description = "A smaller faster implementation of Bulletproofs"
 
 [dependencies]
-curve25519-dalek = { package = "curve25519-dalek", version = "4.0.0-pre.2", default-features = false, features = ["serde", "alloc"] }
-sha3 = { version = "0.9.1", default-features = false }
 blake2 = "0.9.1"
-digest = { version = "0.9.0", default-features = false }
-rand = "0.8"
 byteorder = { version = "1", default-features = false }
-thiserror = { version = "1"}
-merlin = { version = "3", default-features = false }
-zeroize = "1.0.0"
+curve25519-dalek = { package = "curve25519-dalek", version = "4.0.0-pre.2", default-features = false, features = ["serde", "alloc"] }
 derive_more = "0.99.17"
+digest = { version = "0.9.0", default-features = false }
 lazy_static = "1.4.0"
+merlin = { version = "3", default-features = false }
+rand = "0.8"
+serde = "1.0.89"
+sha3 = { version = "0.9.1", default-features = false }
+thiserror = { version = "1" }
+zeroize = "1.0.0"
 
 [dev-dependencies]
+bincode = "1"
 criterion = "0.3"
 
 [features]
