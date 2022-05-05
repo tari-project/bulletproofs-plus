@@ -6,16 +6,16 @@
 
 Tari Bulletproofs+ is an implementation of _Bulletproofs+: Shorter Proofs for Privacy-Enhanced Distributed Ledger_ [2], 
 which was derived from the original _Bulletproofs: Short Proofs for Confidential Transactions and More_ [1]. The former 
-offer a 96 bytes shorter proof size than the latter.
+offers a 96 bytes shorter proof size than the latter.
 
 ## Comparative performance
 
-As we intend moving from Bulletproofs [1] to Bulletproofs+ [2] in our 
+As we intend to move from Bulletproofs [1] to Bulletproofs+ [2] in our 
 [blockchain poject](https://github.com/tari-project), the natural benchmark comparison is with Dalek's Bulletproofs [4]. 
-On average our proof creation and proof verification is respectively 32% and 4% slower, however, employing batch 
-verification, immediate benefits are evident with gains ranging from 38% to 74% for batch sizes from 2 to 32 proofs. 
+On average, our proof creation and proof verification are respectively 32% and 4% slower. However, employing batch 
+verification, immediate benefits are evident, with gains ranging from 38% to 74% for batch sizes from 2 to 32 proofs. 
 Thus, with our current implementation, we could not recreate the experimental results in [2], which claimed 16% 
-reduction in prover time, however, our 4% increase in verification time is exactly on par with their 3%. 
+reduction in prover time. However, our 4% increase in verification time is exactly on par with their 3%. 
 
 ### Aggregated 64-bit rangeproof creation
 
