@@ -1,3 +1,11 @@
+// Copyright 2022 The Tari Project
+// SPDX-License-Identifier: BSD-3-Clause
+//   Modified from:
+//     Copyright (c) 2018 Chain, Inc.
+//     SPDX-License-Identifier: MIT
+
+#![allow(missing_docs)]
+
 #[macro_use]
 extern crate criterion;
 

@@ -26,22 +26,22 @@ mod tests {
         let gens = BulletproofGens::new(64, 8);
 
         let helper = |n: usize, m: usize| {
-            let agg_g: Vec<RistrettoPoint> = gens.g_iter(n, m).cloned().collect();
+            let agg_g: Vec<RistrettoPoint> = gens.g_iter(n, m).copied().collect();
             let flat_g: Vec<RistrettoPoint> = gens
                 .g_vec
                 .iter()
                 .take(m)
                 .flat_map(move |g_j| g_j.iter().take(n))
-                .cloned()
+                .copied()
                 .collect();
 
-            let agg_h: Vec<RistrettoPoint> = gens.h_iter(n, m).cloned().collect();
+            let agg_h: Vec<RistrettoPoint> = gens.h_iter(n, m).copied().collect();
             let flat_h: Vec<RistrettoPoint> = gens
                 .h_vec
                 .iter()
                 .take(m)
                 .flat_map(move |h_j| h_j.iter().take(n))
-                .cloned()
+                .copied()
                 .collect();
 
             assert_eq!(agg_g, flat_g);
@@ -70,11 +70,11 @@ mod tests {
         gen_resized.increase_capacity(64);
 
         let helper = |n: usize, m: usize| {
-            let gens_g: Vec<RistrettoPoint> = gens.g_iter(n, m).cloned().collect();
-            let gens_h: Vec<RistrettoPoint> = gens.h_iter(n, m).cloned().collect();
+            let gens_g: Vec<RistrettoPoint> = gens.g_iter(n, m).copied().collect();
+            let gens_h: Vec<RistrettoPoint> = gens.h_iter(n, m).copied().collect();
 
-            let resized_g: Vec<RistrettoPoint> = gen_resized.g_iter(n, m).cloned().collect();
-            let resized_h: Vec<RistrettoPoint> = gen_resized.h_iter(n, m).cloned().collect();
+            let resized_g: Vec<RistrettoPoint> = gen_resized.g_iter(n, m).copied().collect();
+            let resized_h: Vec<RistrettoPoint> = gen_resized.h_iter(n, m).copied().collect();
 
             assert_eq!(gens_g, resized_g);
             assert_eq!(gens_h, resized_h);
