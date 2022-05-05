@@ -8,6 +8,7 @@ use rand::Rng;
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
     errors::ProofError,
+    generators::pedersen_gens::ExtensionDegree,
     protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
     range_proof::RangeProof,
@@ -19,12 +20,28 @@ use tari_bulletproofs_plus::{
 fn test_non_aggregated_single_proof_multiple_bit_lengths() {
     let bit_lengths = vec![4, 16, 64];
     let proof_batch = vec![1];
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::NoOffset);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::Intermediate);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::EqualToValue);
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
+        ExtensionDegree::ZERO,
+        &ProofOfMinimumValueStrategy::NoOffset,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::ONE,
+        &ProofOfMinimumValueStrategy::Intermediate,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::TWO,
+        &ProofOfMinimumValueStrategy::EqualToValue,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::ZERO,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -33,12 +50,28 @@ fn test_non_aggregated_single_proof_multiple_bit_lengths() {
 fn test_aggregated_single_proof_multiple_bit_lengths() {
     let bit_lengths = vec![2, 8, 32];
     let proof_batch = vec![4];
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::NoOffset);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::Intermediate);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::EqualToValue);
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
+        ExtensionDegree::ZERO,
+        &ProofOfMinimumValueStrategy::NoOffset,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::ONE,
+        &ProofOfMinimumValueStrategy::Intermediate,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::TWO,
+        &ProofOfMinimumValueStrategy::EqualToValue,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::ZERO,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -47,13 +80,28 @@ fn test_aggregated_single_proof_multiple_bit_lengths() {
 fn test_non_aggregated_multiple_proofs_single_bit_length() {
     let bit_lengths = vec![64];
     let proof_batch = vec![1, 1, 1, 1, 1];
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::NoOffset);
-    // panic!("Hansie");
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::Intermediate);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::EqualToValue);
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
+        ExtensionDegree::ZERO,
+        &ProofOfMinimumValueStrategy::NoOffset,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::ONE,
+        &ProofOfMinimumValueStrategy::Intermediate,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::TWO,
+        &ProofOfMinimumValueStrategy::EqualToValue,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::ZERO,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -62,13 +110,28 @@ fn test_non_aggregated_multiple_proofs_single_bit_length() {
 fn test_mixed_aggregation_multiple_proofs_single_bit_length() {
     let bit_lengths = vec![64];
     let proof_batch = vec![1, 2, 4, 8];
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::NoOffset);
-    // panic!("Hansie");
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::Intermediate);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::EqualToValue);
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
+        ExtensionDegree::ZERO,
+        &ProofOfMinimumValueStrategy::NoOffset,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::ONE,
+        &ProofOfMinimumValueStrategy::Intermediate,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::TWO,
+        &ProofOfMinimumValueStrategy::EqualToValue,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::ZERO,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -80,7 +143,12 @@ enum ProofOfMinimumValueStrategy {
     LargerThanValue,
 }
 
-fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strategy: &ProofOfMinimumValueStrategy) {
+fn prove_and_verify(
+    bit_lengths: &[usize],
+    proof_batch: &[usize],
+    extension_degree: ExtensionDegree,
+    promise_strategy: &ProofOfMinimumValueStrategy,
+) {
     let mut rng = rand::thread_rng();
     let transcript_label: &'static str = "BatchedRangeProofTest";
 
@@ -96,10 +164,10 @@ fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strate
         let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
         for aggregation_size in proof_batch {
             // 1. Generators
-            let generators = RangeParameters::init(*bit_length, *aggregation_size).unwrap();
+            let generators = RangeParameters::init(*bit_length, *aggregation_size, extension_degree).unwrap();
 
             // 2. Create witness data
-            let mut witness = RangeWitness::new(vec![]);
+            let mut openings = vec![];
             let mut commitments = vec![];
             let mut minimum_values = vec![];
             for m in 0..*aggregation_size {
@@ -111,12 +179,19 @@ fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strate
                     ProofOfMinimumValueStrategy::LargerThanValue => Some(value + 1),
                 };
                 minimum_values.push(minimum_value);
-                let blinding = Scalar::random_not_zero(&mut rng);
-                commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
-                witness.openings.push(CommitmentOpening::new(value, blinding));
+                let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
+                commitments.push(
+                    generators
+                        .pc_gens()
+                        .commit(Scalar::from(value), blindings.as_slice())
+                        .unwrap(),
+                );
+                openings.push(CommitmentOpening::new(value, blindings.clone()));
                 if m == 0 {
                     if *aggregation_size == 1 {
-                        private_masks.push(Some(blinding));
+                        for item in blindings {
+                            private_masks.push(Some(item));
+                        }
                         public_masks.push(None);
                     } else {
                         private_masks.push(None);
@@ -124,6 +199,7 @@ fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strate
                     }
                 }
             }
+            let witness = RangeWitness::init(openings).unwrap();
 
             // 3. Generate the statement
             let seed_nonce = if *aggregation_size == 1 {

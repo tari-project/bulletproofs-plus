@@ -14,28 +14,41 @@ use core::{
     },
 };
 
-use blake2::Blake2b;
+use blake2::{crypto_mac::Mac, Blake2b};
 use curve25519_dalek::scalar::Scalar;
 
 use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::RangeProof};
 
 /// Create a Blake2B deterministic nonce given a seed, label and index
-pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<Scalar, ProofError> {
+pub fn nonce(
+    seed_nonce: &Scalar,
+    label: &str,
+    index_j: Option<usize>,
+    index_k: Option<usize>,
+) -> Result<Scalar, ProofError> {
     let encoded_label = label.as_bytes();
     if encoded_label.len() > 16 {
         // See https://www.blake2.net/blake2.pdf section 2.8
         return Err(ProofError::InvalidLength("nonce label".to_string()));
     };
-    let hasher = if let Some(salt) = index {
-        let encoded_index = salt.to_le_bytes();
-        if encoded_index.len() > 16 {
+    let mut hasher = if let Some(salt) = index_j {
+        let encoded_salt = salt.to_le_bytes();
+        if encoded_salt.len() > 16 {
             // See https://www.blake2.net/blake2.pdf section 2.8
-            return Err(ProofError::InvalidLength("nonce index".to_string()));
+            return Err(ProofError::InvalidLength("nonce index_j".to_string()));
         };
-        Blake2b::with_params(&seed_nonce.to_bytes(), &encoded_index, encoded_label)
+        Blake2b::with_params(&seed_nonce.to_bytes(), &encoded_salt, encoded_label)
     } else {
         Blake2b::with_params(&seed_nonce.to_bytes(), &[], encoded_label)
     };
+    if let Some(salt) = index_k {
+        let encoded_salt = salt.to_le_bytes();
+        if encoded_salt.len() > 16 {
+            // See https://www.blake2.net/blake2.pdf section 2.8
+            return Err(ProofError::InvalidLength("nonce index_k".to_string()));
+        };
+        hasher.update(&encoded_salt);
+    }
 
     Ok(Scalar::from_hasher_blake2b(hasher))
 }
@@ -88,31 +101,41 @@ mod tests {
         let seed_nonce = Scalar::random_not_zero(rng);
 
         // Create personalized nonces
-        let ref_nonce_eta = nonce(&seed_nonce, "eta", None).unwrap();
-        let ref_nonce_a = nonce(&seed_nonce, "a", None).unwrap();
+        let ref_nonce_eta = nonce(&seed_nonce, "eta", None, None).unwrap();
+        let ref_nonce_a = nonce(&seed_nonce, "a", None, None).unwrap();
         let mut ref_nonces_dl = vec![];
         let mut ref_nonces_dr = vec![];
         for i in 0..16 {
-            ref_nonces_dl.push(nonce(&seed_nonce, "dL", Some(i)).unwrap());
-            ref_nonces_dr.push(nonce(&seed_nonce, "dR", Some(i)).unwrap());
+            ref_nonces_dl.push(nonce(&seed_nonce, "dL", Some(i), Some(1)).unwrap());
+            ref_nonces_dr.push(nonce(&seed_nonce, "dR", Some(i), Some(2)).unwrap());
         }
 
         // Verify
         for i in 0..16 {
-            assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dR", Some(i)).unwrap());
-            assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dL", Some(i)).unwrap());
-            assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dL", Some(i + 1)).unwrap());
-            assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dR", Some(i + 1)).unwrap());
+            assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dR", Some(i), Some(2)).unwrap());
+            assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dL", Some(i), Some(1)).unwrap());
+            assert_ne!(
+                ref_nonces_dl[i],
+                nonce(&seed_nonce, "dL", Some(i + 1), Some(1)).unwrap()
+            );
+            assert_ne!(
+                ref_nonces_dr[i],
+                nonce(&seed_nonce, "dR", Some(i + 1), Some(2)).unwrap()
+            );
+            assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dL", Some(i), Some(2)).unwrap());
+            assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dR", Some(i), Some(1)).unwrap());
         }
-        assert_ne!(ref_nonce_eta, nonce(&seed_nonce, "a", None).unwrap());
-        assert_ne!(ref_nonce_a, nonce(&seed_nonce, "eta", None).unwrap());
+        assert_ne!(ref_nonce_eta, nonce(&seed_nonce, "a", None, None).unwrap());
+        assert_ne!(ref_nonce_a, nonce(&seed_nonce, "eta", None, None).unwrap());
+        assert_ne!(ref_nonce_a, nonce(&seed_nonce, "a", None, Some(1)).unwrap());
+        assert_ne!(ref_nonce_eta, nonce(&seed_nonce, "eta", None, Some(1)).unwrap());
 
         for i in (0..16).rev() {
-            assert_eq!(ref_nonces_dr[i], nonce(&seed_nonce, "dR", Some(i)).unwrap());
-            assert_eq!(ref_nonces_dl[i], nonce(&seed_nonce, "dL", Some(i)).unwrap());
+            assert_eq!(ref_nonces_dr[i], nonce(&seed_nonce, "dR", Some(i), Some(2)).unwrap());
+            assert_eq!(ref_nonces_dl[i], nonce(&seed_nonce, "dL", Some(i), Some(1)).unwrap());
         }
-        assert_eq!(ref_nonce_a, nonce(&seed_nonce, "a", None).unwrap());
-        assert_eq!(ref_nonce_eta, nonce(&seed_nonce, "eta", None).unwrap());
+        assert_eq!(ref_nonce_a, nonce(&seed_nonce, "a", None, None).unwrap());
+        assert_eq!(ref_nonce_eta, nonce(&seed_nonce, "eta", None, None).unwrap());
     }
 
     fn bit_vector_to_value(bit_vector: &[Scalar]) -> Result<u64, ProofError> {

@@ -16,6 +16,7 @@ use curve25519_dalek::scalar::Scalar;
 use rand::{self, Rng};
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
+    generators::pedersen_gens::ExtensionDegree,
     protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
     range_proof::RangeProof,
@@ -24,9 +25,10 @@ use tari_bulletproofs_plus::{
 };
 
 static AGGREGATION_SIZES: [usize; 6] = [1, 2, 4, 8, 16, 32];
+static BATCHED_SIZES: [usize; 9] = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 
-fn create_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
-    let mut group = c.benchmark_group("rangeproof creation");
+fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: ExtensionDegree, c: &mut Criterion) {
+    let mut group = c.benchmark_group("range_proof_creation");
     group.sampling_mode(SamplingMode::Flat);
 
     let transcript_label: &'static str = "BatchedRangeProofTest";
@@ -35,25 +37,31 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
 
     for aggregation_factor in AGGREGATION_SIZES {
         let label = format!(
-            "Aggregated {}-bit range proof creation, aggregation factor {}",
-            bit_length, aggregation_factor
+            "Aggregated {}-bit BP+ creation aggregation factor {} degree {:?}",
+            bit_length, aggregation_factor, extension_degree
         );
         group.bench_function(&label, move |b| {
             // 1. Generators
-            let generators = RangeParameters::init(bit_length, aggregation_factor).unwrap();
+            let generators = RangeParameters::init(bit_length, aggregation_factor, extension_degree).unwrap();
 
             // 2. Create witness data
-            let mut witness = RangeWitness::new(vec![]);
             let mut commitments = vec![];
             let mut minimum_values = vec![];
+            let mut openings = vec![];
             let mut rng = rand::thread_rng();
             for _ in 0..aggregation_factor {
                 let value = rng.gen_range(value_min..value_max);
                 minimum_values.push(Some(value / 3));
-                let blinding = Scalar::random_not_zero(&mut rng);
-                commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
-                witness.openings.push(CommitmentOpening::new(value, blinding));
+                let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
+                commitments.push(
+                    generators
+                        .pc_gens()
+                        .commit(Scalar::from(value), blindings.as_slice())
+                        .unwrap(),
+                );
+                openings.push(CommitmentOpening::new(value, blindings.clone()));
             }
+            let witness = RangeWitness::init(openings).unwrap();
 
             // 3. Generate the statement
             let seed_nonce = if aggregation_factor == 1 {
@@ -74,24 +82,20 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
     group.finish();
 }
 
-// fn create_aggregated_rangeproof_n_8(c: &mut Criterion) {
-//     create_aggregated_rangeproof_helper(8, c);
-// }
-//
-// fn create_aggregated_rangeproof_n_16(c: &mut Criterion) {
-//     create_aggregated_rangeproof_helper(16, c);
-// }
-//
-// fn create_aggregated_rangeproof_n_32(c: &mut Criterion) {
-//     create_aggregated_rangeproof_helper(32, c);
-// }
-
-fn create_aggregated_rangeproof_n_64(c: &mut Criterion) {
-    create_aggregated_rangeproof_helper(64, c);
+fn create_aggregated_rangeproof_n_8_16_32(c: &mut Criterion) {
+    for bit_length in [8, 16, 32] {
+        create_aggregated_rangeproof_helper(bit_length, ExtensionDegree::ZERO, c);
+    }
 }
 
-fn verify_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
-    let mut group = c.benchmark_group("rangeproof verification");
+fn create_aggregated_rangeproof_n_64(c: &mut Criterion) {
+    for extension_degree in &[ExtensionDegree::ZERO, ExtensionDegree::ONE, ExtensionDegree::TWO] {
+        create_aggregated_rangeproof_helper(64, *extension_degree, c);
+    }
+}
+
+fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: ExtensionDegree, c: &mut Criterion) {
+    let mut group = c.benchmark_group("range_proof_verification");
     group.sampling_mode(SamplingMode::Flat);
 
     let transcript_label: &'static str = "BatchedRangeProofTest";
@@ -100,8 +104,8 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
 
     for aggregation_factor in AGGREGATION_SIZES {
         let label = format!(
-            "Aggregated {}-bit range proof verification, aggregation factor {}",
-            bit_length, aggregation_factor
+            "Aggregated {}-bit BP+ verification aggregation factor {} degree {:?}",
+            bit_length, aggregation_factor, extension_degree
         );
         group.bench_function(&label, move |b| {
             // 0.  Batch data
@@ -109,20 +113,26 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
             let mut proofs = vec![];
 
             // 1. Generators
-            let generators = RangeParameters::init(bit_length, aggregation_factor).unwrap();
+            let generators = RangeParameters::init(bit_length, aggregation_factor, extension_degree).unwrap();
 
             // 2. Create witness data
-            let mut witness = RangeWitness::new(vec![]);
             let mut commitments = vec![];
             let mut minimum_values = vec![];
+            let mut openings = vec![];
             let mut rng = rand::thread_rng();
             for _ in 0..aggregation_factor {
                 let value = rng.gen_range(value_min..value_max);
                 minimum_values.push(Some(value / 3));
-                let blinding = Scalar::random_not_zero(&mut rng);
-                commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
-                witness.openings.push(CommitmentOpening::new(value, blinding));
+                let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
+                commitments.push(
+                    generators
+                        .pc_gens()
+                        .commit(Scalar::from(value), blindings.as_slice())
+                        .unwrap(),
+                );
+                openings.push(CommitmentOpening::new(value, blindings.clone()));
             }
+            let witness = RangeWitness::init(openings).unwrap();
 
             // 3. Generate the statement
             let seed_nonce = if aggregation_factor == 1 {
@@ -148,31 +158,27 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, c: &mut Criterion) {
     group.finish();
 }
 
-// fn verify_aggregated_rangeproof_n_8(c: &mut Criterion) {
-//     verify_aggregated_rangeproof_helper(8, c);
-// }
-//
-// fn verify_aggregated_rangeproof_n_16(c: &mut Criterion) {
-//     verify_aggregated_rangeproof_helper(16, c);
-// }
-//
-// fn verify_aggregated_rangeproof_n_32(c: &mut Criterion) {
-//     verify_aggregated_rangeproof_helper(32, c);
-// }
-
-fn verify_aggregated_rangeproof_n_64(c: &mut Criterion) {
-    verify_aggregated_rangeproof_helper(64, c);
+fn verify_aggregated_rangeproof_n_8_16_32(c: &mut Criterion) {
+    for bit_length in [8, 16, 32] {
+        verify_aggregated_rangeproof_helper(bit_length, ExtensionDegree::ZERO, c);
+    }
 }
 
-fn verify_batched_rangeproofs_helper(bit_length: usize, c: &mut Criterion) {
-    let mut group = c.benchmark_group("rangeproof verification");
+fn verify_aggregated_rangeproof_n_64(c: &mut Criterion) {
+    for extension_degree in &[ExtensionDegree::ZERO, ExtensionDegree::ONE, ExtensionDegree::TWO] {
+        verify_aggregated_rangeproof_helper(64, *extension_degree, c);
+    }
+}
+
+fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: ExtensionDegree, c: &mut Criterion) {
+    let mut group = c.benchmark_group("batched_range_proof_verification");
     group.sampling_mode(SamplingMode::Flat);
 
     let transcript_label: &'static str = "BatchedRangeProofTest";
     #[allow(clippy::cast_possible_truncation)]
     let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
 
-    let max_range_proofs = AGGREGATION_SIZES
+    let max_range_proofs = BATCHED_SIZES
         .to_vec()
         .iter()
         .fold(u32::MIN, |a, &b| a.max(b.try_into().unwrap()));
@@ -181,21 +187,25 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, c: &mut Criterion) {
     let mut proofs = vec![];
 
     // 1. Generators
-    let generators = RangeParameters::init(bit_length, 1).unwrap();
+    let generators = RangeParameters::init(bit_length, 1, extension_degree).unwrap();
 
     let mut rng = rand::thread_rng();
     for _ in 0..max_range_proofs {
         // 2. Create witness data
-        let mut witness = RangeWitness::new(vec![]);
+        let mut openings = vec![];
         let value = rng.gen_range(value_min..value_max);
-        let blinding = Scalar::random_not_zero(&mut rng);
-        witness.openings.push(CommitmentOpening::new(value, blinding));
+        let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
+        openings.push(CommitmentOpening::new(value, blindings.clone()));
+        let witness = RangeWitness::init(openings).unwrap();
 
         // 3. Generate the statement
         let seed_nonce = Some(Scalar::random_not_zero(&mut rng));
         let statement = RangeStatement::init(
             generators.clone(),
-            vec![generators.pc_gens().commit(Scalar::from(value), blinding)],
+            vec![generators
+                .pc_gens()
+                .commit(Scalar::from(value), blindings.as_slice())
+                .unwrap()],
             vec![Some(value / 3)],
             seed_nonce,
         )
@@ -207,10 +217,10 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, c: &mut Criterion) {
         proofs.push(proof.unwrap());
     }
 
-    for number_of_range_proofs in AGGREGATION_SIZES {
+    for number_of_range_proofs in BATCHED_SIZES {
         let label = format!(
-            "Batched {}-bit range proof verification, {} single range proofs",
-            bit_length, number_of_range_proofs
+            "Batched {}-bit BP+ verification {} single proofs degree {:?}",
+            bit_length, number_of_range_proofs, extension_degree
         );
         let statements = &statements[0..number_of_range_proofs];
         let proofs = &proofs[0..number_of_range_proofs];
@@ -227,16 +237,16 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, c: &mut Criterion) {
 }
 
 fn verify_batched_rangeproof_n_64(c: &mut Criterion) {
-    verify_batched_rangeproofs_helper(64, c);
+    for extension_degree in &[ExtensionDegree::ZERO, ExtensionDegree::ONE, ExtensionDegree::TWO] {
+        verify_batched_rangeproofs_helper(64, *extension_degree, c);
+    }
 }
 
 criterion_group! {
     name = create_rp;
-    config = Criterion::default().sample_size(10);
+    config = Criterion::default();
     targets =
-    // create_aggregated_rangeproof_n_8,
-    // create_aggregated_rangeproof_n_16,
-    // create_aggregated_rangeproof_n_32,
+    create_aggregated_rangeproof_n_8_16_32,
     create_aggregated_rangeproof_n_64,
 }
 
@@ -244,9 +254,7 @@ criterion_group! {
     name = verify_rp;
     config = Criterion::default();
     targets =
-    // verify_aggregated_rangeproof_n_8,
-    // verify_aggregated_rangeproof_n_16,
-    // verify_aggregated_rangeproof_n_32,
+    verify_aggregated_rangeproof_n_8_16_32,
     verify_aggregated_rangeproof_n_64,
 }
 
@@ -254,9 +262,6 @@ criterion_group! {
     name = verify_batched_rp;
     config = Criterion::default();
     targets =
-    // verify_aggregated_rangeproof_n_8,
-    // verify_aggregated_rangeproof_n_16,
-    // verify_aggregated_rangeproof_n_32,
     verify_batched_rangeproof_n_64,
 }
 

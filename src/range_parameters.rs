@@ -7,7 +7,10 @@ use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 
 use crate::{
     errors::ProofError,
-    generators::{bulletproof_gens::BulletproofGens, pedersen_gens::PedersenGens},
+    generators::{
+        bulletproof_gens::BulletproofGens,
+        pedersen_gens::{ExtensionDegree, PedersenGens},
+    },
     range_proof::RangeProof,
 };
 
@@ -22,7 +25,11 @@ pub struct RangeParameters {
 
 impl RangeParameters {
     /// Initialize a new 'RangeParameters' with sanity checks
-    pub fn init(bit_length: usize, aggregation_factor: usize) -> Result<RangeParameters, ProofError> {
+    pub fn init(
+        bit_length: usize,
+        aggregation_factor: usize,
+        extension_degree: ExtensionDegree,
+    ) -> Result<RangeParameters, ProofError> {
         if !aggregation_factor.is_power_of_two() {
             return Err(ProofError::InvalidArgument(
                 "Aggregation factor size must be a power of two".to_string(),
@@ -42,7 +49,7 @@ impl RangeParameters {
 
         Ok(Self {
             bp_gens: BulletproofGens::new(bit_length, aggregation_factor),
-            pc_gens: PedersenGens::default(),
+            pc_gens: PedersenGens::with_extension_degree(extension_degree),
         })
     }
 
@@ -66,14 +73,19 @@ impl RangeParameters {
         self.bp_gens.gens_capacity
     }
 
+    /// Returns the aggregation factor
+    pub fn extension_degree(&self) -> ExtensionDegree {
+        self.pc_gens.extension_degree
+    }
+
     /// Returns the non-public value base point
     pub fn h_base(&self) -> RistrettoPoint {
         self.pc_gens.h_base
     }
 
     /// Returns the non-public mask base point
-    pub fn g_base(&self) -> RistrettoPoint {
-        self.pc_gens.g_base
+    pub fn g_base_vec(&self) -> Vec<RistrettoPoint> {
+        self.pc_gens.g_base_vec.clone()
     }
 
     /// Returns the non-public value compressed base point
@@ -82,8 +94,8 @@ impl RangeParameters {
     }
 
     /// Returns the non-public mask compressed base point
-    pub fn g_base_compressed(&self) -> CompressedRistretto {
-        self.pc_gens.g_base_compressed
+    pub fn g_base_compressed_vec(&self) -> Vec<CompressedRistretto> {
+        self.pc_gens.g_base_compressed_vec.clone()
     }
 
     /// Return the non-public value iterator to the bulletproof generators

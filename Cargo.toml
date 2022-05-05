@@ -11,6 +11,7 @@ blake2 = "0.9.1"
 byteorder = { version = "1", default-features = false }
 curve25519-dalek = { package = "curve25519-dalek", version = "4.0.0-pre.2", default-features = false, features = ["serde", "alloc"] }
 derive_more = "0.99.17"
+derivative = "2.2.0"
 digest = { version = "0.9.0", default-features = false }
 lazy_static = "1.4.0"
 merlin = { version = "3", default-features = false }
@@ -35,7 +36,7 @@ name = "main_test"
 [[bench]]
 name = "range_proof"
 harness = false
-#required-features = ["avx2"]
+#required-features = ["simd_backend"]
 
 [[bench]]
 name = "generators"

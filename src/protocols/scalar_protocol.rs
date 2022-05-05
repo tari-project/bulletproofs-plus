@@ -19,7 +19,7 @@ pub trait ScalarProtocol {
     fn from_hasher_blake2b(hasher: Blake2b) -> Scalar;
 
     /// Helper function to multiply one scalar vector with another scalar vector
-    fn mul_with_scalar_vec_with_scalar(scalar_vec: &[Scalar], scalar: &Scalar) -> Result<Vec<Scalar>, ProofError>;
+    fn mul_scalar_vec_with_scalar(scalar_vec: &[Scalar], scalar: &Scalar) -> Result<Vec<Scalar>, ProofError>;
 
     /// Helper function to add two scalar vectors
     fn add_scalar_vectors(a: &[Scalar], b: &[Scalar]) -> Result<Vec<Scalar>, ProofError>;
@@ -43,7 +43,7 @@ impl ScalarProtocol for Scalar {
         Scalar::from_bytes_mod_order_wide(&output)
     }
 
-    fn mul_with_scalar_vec_with_scalar(scalar_vec: &[Scalar], scalar: &Scalar) -> Result<Vec<Scalar>, ProofError> {
+    fn mul_scalar_vec_with_scalar(scalar_vec: &[Scalar], scalar: &Scalar) -> Result<Vec<Scalar>, ProofError> {
         if scalar_vec.is_empty() {
             return Err(ProofError::InvalidLength(
                 "Cannot multiply empty scalar vector with scalar".to_string(),
