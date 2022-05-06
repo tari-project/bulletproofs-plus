@@ -24,49 +24,43 @@ pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<S
     let encoded_label = label.as_bytes();
     if encoded_label.len() > 16 {
         // See https://www.blake2.net/blake2.pdf section 2.8
-        Err(ProofError::InvalidLength("nonce label".to_string()))
-    } else if let Some(salt) = index {
+        return Err(ProofError::InvalidLength("nonce label".to_string()));
+    };
+    let hasher = if let Some(salt) = index {
         let encoded_index = salt.to_le_bytes();
         if encoded_index.len() > 16 {
             // See https://www.blake2.net/blake2.pdf section 2.8
-            Err(ProofError::InvalidLength("nonce index".to_string()))
-        } else {
-            Ok(Scalar::from_hasher_blake2b(Blake2b::with_params(
-                &seed_nonce.to_bytes(),
-                &encoded_index,
-                encoded_label,
-            )))
-        }
+            return Err(ProofError::InvalidLength("nonce index".to_string()));
+        };
+        Blake2b::with_params(&seed_nonce.to_bytes(), &encoded_index, encoded_label)
     } else {
-        Ok(Scalar::from_hasher_blake2b(Blake2b::with_params(
-            &seed_nonce.to_bytes(),
-            &[],
-            encoded_label,
-        )))
-    }
+        Blake2b::with_params(&seed_nonce.to_bytes(), &[], encoded_label)
+    };
+
+    Ok(Scalar::from_hasher_blake2b(hasher))
 }
 
 /// Decompose a given value into a vector of scalars for the required bit length
 pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar>, ProofError> {
     if !bit_length.is_power_of_two() || bit_length > RangeProof::MAX_BIT_LENGTH {
-        Err(ProofError::InvalidLength(
+        return Err(ProofError::InvalidLength(
             "Bit size not valid, must be a power of 2 and <= 64".to_string(),
-        ))
-    } else if value >> (bit_length - 1) > 1 {
-        Err(ProofError::InvalidLength(
-            "Value too large, bit vector capacity will be exceeded".to_string(),
-        ))
-    } else {
-        let mut result = Vec::with_capacity(bit_length);
-        for i in 0..bit_length {
-            if (value >> i) & 1 == 0 {
-                result.push(Scalar::zero());
-            } else {
-                result.push(Scalar::one());
-            }
-        }
-        Ok(result)
+        ));
     }
+    if value >> (bit_length - 1) > 1 {
+        return Err(ProofError::InvalidLength(
+            "Value too large, bit vector capacity will be exceeded".to_string(),
+        ));
+    }
+    let mut result = Vec::with_capacity(bit_length);
+    for i in 0..bit_length {
+        if (value >> i) & 1 == 0 {
+            result.push(Scalar::zero());
+        } else {
+            result.push(Scalar::one());
+        }
+    }
+    Ok(result)
 }
 
 /// Given `data` with `len >= 32`, return the first 32 bytes.
