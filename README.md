@@ -14,10 +14,13 @@ As we intend to move from Bulletproofs [1] to Bulletproofs+ [2] in our
 [blockchain project](https://github.com/tari-project), the natural benchmark comparison is with the experimental results 
 in [2] and Dalek's Bulletproofs [4]. Compared with Dalek's Bulletproofs, our average proof creation and verification are 
 25% and 1% slower. Compared with the experimental results in [2], we could not recreate the 16% reduction in prover 
-time; however, our 1% increase in verification time is on par with their 3%.
+time; however, our 1% increase in verification time is on par with their 3%. However, employing batch verification, 
+immediate benefits are evident, with gains ranging from 40% to 77% for batch sizes from 2 to 64 proofs and 78% for 
+batch sizes > 64 proofs.
 
-However, employing batch verification, immediate benefits are evident, with gains ranging from 40% to 77% for batch 
-sizes from 2 to 64 proofs and 78% for batch sizes > 64 proofs. 
+Extended commitments add virtually no overhead in single or aggregated range proof creation or verification. Batched 
+average verification time for one and two degrees of extended commitment range proofs are 4% and 9% slower when compared 
+to using regular Pedersen commitments.   
 
 **Note:** The test results listed here are relative; the numbers are not absolute. The tests were run on an Intel(R) 
 Core(TM) i7-7820HQ CPU laptop without using the `simd_backend` feature.
