@@ -24,6 +24,17 @@ use crate::{
     PedersenGens,
 };
 
+/// Optionally extract masks when verifying the proofs
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ExtractMasks {
+    /// No masks will be recovered (e.g. as a public entity)
+    NO,
+    /// Recover masks and verify the proofs (e.g. as the commitment owner)
+    YES,
+    /// Only recover masks but do not verify the proofs (e.g. as the commitment owner)
+    ONLY,
+}
+
 /// Contains the public range proof parameters intended for a verifier
 #[derive(Clone, Debug, PartialEq)]
 pub struct RangeProof {
@@ -53,6 +64,7 @@ pub struct RangeProof {
 ///     range_statement::RangeStatement,
 ///     range_witness::RangeWitness,
 /// };
+/// use tari_bulletproofs_plus::range_proof::ExtractMasks;
 /// let mut rng = rand::thread_rng();
 /// let transcript_label: &'static str = "BatchedRangeProofTest";
 /// let bit_length = 64; // Other powers of two are permissible up to 2^6 = 64
@@ -129,11 +141,11 @@ pub struct RangeProof {
 ///
 /// // 5. Verify the entire batch as the commitment owner, i.e. the prover self
 /// let recovered_private_masks =
-///     RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone()).unwrap();
+///     RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone(), ExtractMasks::YES).unwrap();
 /// assert_eq!(private_masks, recovered_private_masks);
 ///
 /// // 6. Verify the entire batch as public entity
-/// let recovered_public_masks = RangeProof::verify(transcript_label, &statements_public, &proofs).unwrap();
+/// let recovered_public_masks = RangeProof::verify(transcript_label, &statements_public, &proofs, ExtractMasks::NO).unwrap();
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
 /// # }
@@ -390,6 +402,7 @@ impl RangeProof {
         transcript_label: &'static str,
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
+        extract_masks: ExtractMasks,
     ) -> Result<Vec<Option<Scalar>>, ProofError> {
         // Verify generators consistency & select largest aggregation factor
         let (max_mn, max_index) = RangeProof::verify_statements_and_generators_consistency(statements, range_proofs)?;
@@ -434,11 +447,16 @@ impl RangeProof {
         let mut points: Vec<RistrettoPoint> = Vec::with_capacity(msm_len);
 
         // Recovered masks
-        let extended_masks = statements
-            .iter()
-            .fold(0usize, |acc, x| acc + if x.seed_nonce.is_some() { 1 } else { 0 }) *
-            (extension_degree - 1);
-        let mut masks = Vec::with_capacity(range_proofs.len() + extended_masks);
+        let mut masks = match extract_masks {
+            ExtractMasks::NO => {vec![]}
+            _ => {
+                let extended_masks = statements
+                    .iter()
+                    .fold(0usize, |acc, x| acc + if x.seed_nonce.is_some() { 1 } else { 0 }) *
+                    (extension_degree - 1);
+                Vec::with_capacity(range_proofs.len() + extended_masks)
+            }
+        };
 
         let two = Scalar::from(2u8);
 
@@ -543,22 +561,27 @@ impl RangeProof {
             d_sum *= two_n_minus_one;
 
             // Recover the mask if possible (only for non-aggregated proofs)
-            if let Some(seed_nonce) = statements[index].seed_nonce {
-                for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
-                    let mut temp_mask = (*d1_val -
-                        nonce(&seed_nonce, "eta", None, Some(k))? -
-                        e * nonce(&seed_nonce, "d", None, Some(k))?) *
-                        e_square.invert();
-                    temp_mask -= nonce(&seed_nonce, "alpha", None, Some(k))?;
-                    for j in 0..rounds {
-                        temp_mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
-                        temp_mask -= challenges_sq_inv[j] * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
+            match extract_masks {
+                ExtractMasks::NO => {masks.push(None)},
+                _ => {
+                    if let Some(seed_nonce) = statements[index].seed_nonce {
+                        for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
+                            let mut temp_mask = (*d1_val -
+                                nonce(&seed_nonce, "eta", None, Some(k))? -
+                                e * nonce(&seed_nonce, "d", None, Some(k))?) *
+                                e_square.invert();
+                            temp_mask -= nonce(&seed_nonce, "alpha", None, Some(k))?;
+                            for j in 0..rounds {
+                                temp_mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
+                                temp_mask -= challenges_sq_inv[j] * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
+                            }
+                            temp_mask *= (z_square * y_nm_1).invert();
+                            masks.push(Some(temp_mask));
+                        }
+                    } else {
+                        masks.push(None);
                     }
-                    temp_mask *= (z_square * y_nm_1).invert();
-                    masks.push(Some(temp_mask));
-                }
-            } else {
-                masks.push(None);
+                },
             }
 
             // Aggregate the generator scalars
@@ -613,6 +636,9 @@ impl RangeProof {
                 scalars.push(weight * (-e_square * challenges_sq_inv[j]));
                 points.push(ri[j]);
             }
+        }
+        if extract_masks == ExtractMasks::ONLY {
+            return Ok(masks);
         }
 
         // Common generators

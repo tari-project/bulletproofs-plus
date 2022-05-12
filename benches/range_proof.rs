@@ -23,6 +23,7 @@ use tari_bulletproofs_plus::{
     range_statement::RangeStatement,
     range_witness::RangeWitness,
 };
+use tari_bulletproofs_plus::range_proof::ExtractMasks;
 
 static AGGREGATION_SIZES: [usize; 6] = [1, 2, 4, 8, 16, 32];
 static BATCHED_SIZES: [usize; 9] = [1, 2, 4, 8, 16, 32, 64, 128, 256];
@@ -151,7 +152,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the aggregated proof
-                let _proof = RangeProof::verify(transcript_label, &statements.clone(), &proofs.clone()).unwrap();
+                let _masks = RangeProof::verify(transcript_label, &statements.clone(), &proofs.clone(), ExtractMasks::NO).unwrap();
             });
         });
     }
@@ -229,7 +230,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the entire batch of single proofs
-                let _proof = RangeProof::verify(transcript_label, statements, proofs).unwrap();
+                let _masks = RangeProof::verify(transcript_label, statements, proofs, ExtractMasks::NO).unwrap();
             });
         });
     }

@@ -4,23 +4,25 @@
 
 ## Overview
 
-Tari Bulletproofs+ implements _Bulletproofs+: Shorter Proofs for Privacy-Enhanced Distributed Ledger_ [2],  
-derived from the original _Bulletproofs: Short Proofs for Confidential Transactions and More_ [1]. The former  
-offers a 96 bytes shorter proof size than the latter.
+Tari Bulletproofs+ (BP+) implements _Bulletproofs+: Shorter Proofs for Privacy-Enhanced Distributed Ledger_ [2],  
+derived from the original Bulletproofs (BP) work _Bulletproofs: Short Proofs for Confidential Transactions and More_ 
+[1]. The former offers a 96 bytes shorter proof size than the latter.
 
 ## Comparative performance
 
 As we intend to move from Bulletproofs [1] to Bulletproofs+ [2] in our 
 [blockchain project](https://github.com/tari-project), the natural benchmark comparison is with the experimental results 
-in [2] and Dalek's Bulletproofs [4]. Compared with Dalek's Bulletproofs, our average proof creation and verification are 
-25% and 1% slower. Compared with the experimental results in [2], we could not recreate the 16% reduction in prover 
-time; however, our 1% increase in verification time is on par with their 3%. However, employing batch verification, 
-immediate benefits are evident, with gains ranging from 40% to 77% for batch sizes from 2 to 64 proofs and 78% for 
-batch sizes > 64 proofs.
+in [2] and Dalek's Bulletproofs [4]. Compared with Dalek's Bulletproofs, our average proof creation is 30% slower, 
+while verification is on par. Compared with the experimental results in [2], we could not recreate the 16% reduction in 
+prover time; however, our 1% increase in verification time is on par with their 3%. Immediate benefits are evident 
+when employing batch verification; exponential gains range from 37% to 79% for batch sizes from 2 to 256 proofs.
 
-Extended commitments add virtually no overhead in single or aggregated range proof creation or verification. Batched 
-average verification time for one and two degrees of extended commitment range proofs are 4% and 9% slower when compared 
-to using regular Pedersen commitments.   
+Extended commitments add virtually no overhead in single or aggregated range proof creation or verification time, 
+neither in batched verification time, when compared to regular Pedersen commitments.
+
+Mask/blinding factor recovery adds moderate (5% for single proof-verification with extension degree zero) to significant 
+(22% for 256 single batched proofs verification with extension degree two) overhead to verification performance; 
+comparisons were made without activating the recovery feature.
 
 **Note:** The test results listed here are relative; the numbers are not absolute. The tests were run on an Intel(R) 
 Core(TM) i7-7820HQ CPU laptop without using the `simd_backend` feature.
@@ -29,29 +31,33 @@ Core(TM) i7-7820HQ CPU laptop without using the `simd_backend` feature.
 
 #### BP vs. BP+ (creation)
 
-| Agg. size | BP mean (ms) | BP median (ms) | BP+ mean (ms) | BP+ median (ms) | Diff mean (%) | Diff median (%) |
-|-----------|--------------|----------------|---------------|-----------------|---------------|-----------------|
-| 1         | 17.15        | 16.29          | 20.68         | 20.67           | 121%          | 127%            |
-| 2         | 31.91        | 31.63          | 40.19         | 40.08           | 126%          | 127%            |
-| 4         | 60.81        | 60.47          | 78.85         | 78.61           | 130%          | 130%            |
-| 8         | 118.53       | 119.18         | 152.12        | 152.31          | 128%          | 128%            |
-| 16        | 240.47       | 240.18         | 299.34        | 298.62          | 124%          | 124%            |
-| 32        | 471.71       | 460.67         | 583.20        | 581.92          | 124%          | 126%            |
-|           |              |                |               | Average         | 125%          | 127%            |
+BP+ creation is 30% slower than BP.
+
+| Size | BP Med (ms) | BP+ Med (ms) | Diff Med (%) |
+|------|-------------|--------------|--------------|
+| 1    | 16.29       | 21.24        | 130%         |
+| 2    | 31.63       | 41.08        | 130%         |
+| 4    | 60.47       | 80.46        | 133%         |
+| 8    | 119.18      | 156.56       | 131%         |
+| 16   | 240.18      | 306.03       | 127%         |
+| 32   | 460.67      | 598.57       | 130%         |
+|      |             | Average      | 130%         |
 
 <p align="center"><img src="./docs/assets/img_bp_vs_bp_plus_creation.png" width="550" /></p>
 
 #### BP+ extension degrees (creation)
 
-| Agg. size | BP+ ext_deg 0 (ms) | BP+ ext_deg 1 (ms) | BP+ ext_deg 2 (ms) | Diff ext_deg 0 vs. 1 (%) | Diff ext_deg 0 vs. 2 (%) |
-|-----------|--------------------|--------------------|--------------------|--------------------------|--------------------------|
-| 1         | 20.68              | 20.88              | 21.17              | 100.96%                  | 102.37%                  |
-| 2         | 40.19              | 40.51              | 40.984             | 100.80%                  | 101.97%                  |
-| 4         | 78.85              | 78.74              | 78.952             | 99.87%                   | 100.13%                  |
-| 8         | 152.12             | 152.79             | 152.93             | 100.44%                  | 100.53%                  |
-| 16        | 299.34             | 298.42             | 310.93             | 99.69%                   | 103.87%                  |
-| 32        | 583.20             | 583.62             | 664.55             | 100.07%                  | 113.95%                  |
-|           |                    |                    | Average            | 100%                     | 104%                     |
+Extended commitments add virtually no overhead to creation time.
+
+| Size | BP+ Med ed_0 (ms) | BP+ Med ed_1 (ms) | BP+ Med ed_2 (ms) | Diff Med ed_0-1 (%) | Diff Med ed_0-2 (%) |
+|------|-------------------|-------------------|-------------------|---------------------|---------------------|
+| 1    | 21.24             | 21.48             | 22.467            | 101.12%             | 105.77%             |
+| 2    | 41.08             | 41.45             | 42.074            | 100.91%             | 102.43%             |
+| 4    | 80.46             | 80.70             | 80.76             | 100.31%             | 100.38%             |
+| 8    | 156.56            | 157.07            | 157.06            | 100.33%             | 100.32%             |
+| 16   | 306.03            | 306.28            | 305.49            | 100.08%             | 99.82%              |
+| 32   | 598.57            | 598.47            | 598.01            | 99.98%              | 99.91%              |
+|      |                   |                   | Average           | 100%                | 101%                |
 
 <p align="center"><img src="./docs/assets/img_bp_plus_creation_extension_degrees.png" width="550" /></p>
 
@@ -59,45 +65,52 @@ Core(TM) i7-7820HQ CPU laptop without using the `simd_backend` feature.
 
 #### BP vs. BP+ (verification)
 
-| Agg. size | BP mean (ms) | BP median (ms) | BP+ mean (ms) | BP+ median (ms) | Diff Mean (%) | Diff Median (%) |
-|-----------|--------------|----------------|---------------|-----------------|---------------|-----------------|
-| 1         | 2.19         | 2.34           | 2.44          | 2.39            | 111%          | 102%            |
-| 2         | 3.75         | 3.76           | 3.77          | 3.68            | 100%          | 98%             |
-| 4         | 6.44         | 6.44           | 6.00          | 6.01            | 93%           | 93%             |
-| 8         | 11.02        | 11.10          | 10.58         | 10.59           | 96%           | 95%             |
-| 16        | 18.94        | 17.57          | 19.13         | 18.83           | 101%          | 107%            |
-| 32        | 36.69        | 33.69          | 37.56         | 36.54           | 102%          | 108%            |
-|           |              |                |               | Average         | 101%          | 101%            |
+BP+ verification showed gains for smaller aggregation sizes compared to BP, but is slower for larger aggregation sizes.  
+
+| Size | BP Med (ms) | BP+ Med (ms) | Diff Med (%) |
+|------|-------------|--------------|--------------|
+| 1    | 2.34        | 2.17         | 93%          |
+| 2    | 3.76        | 3.71         | 99%          |
+| 4    | 6.44        | 6.18         | 96%          |
+| 8    | 11.10       | 10.96        | 99%          |
+| 16   | 17.57       | 19.52        | 111%         |
+| 32   | 33.69       | 36.97        | 110%         |
+|      |             | Average      | 101%         |
 
 <p align="center"><img src="./docs/assets/img_bp_vs_bpplus_verification.png" width="550" /></p>
 
 #### BP+ extension degrees (verification)
 
-| Agg. size | BP+ ext_deg 0 (ms) | BP+ ext_deg 1 (ms) | BP+ ext_deg 2 (ms) | Diff ext_deg 0 vs.1 (%) | Diff ext_deg 0 vs. 2 (%) |
-|-----------|--------------------|--------------------|--------------------|-------------------------|--------------------------|
-| 1         | 2.44               | 2.33               | 2.25               | 96%                     | 92%                      |
-| 2         | 3.77               | 4.04               | 3.59               | 107%                    | 95%                      |
-| 4         | 6.00               | 6.08               | 6.05               | 101%                    | 101%                     |
-| 8         | 10.58              | 10.53              | 10.67              | 100%                    | 101%                     |
-| 16        | 19.13              | 18.84              | 20.07              | 98%                     | 105%                     |
-| 32        | 37.56              | 35.68              | 38.05              | 95%                     | 101%                     |
-|           |                    |                    | Average            | 100%                    | 99%                      |
+Extended commitments add virtually no overhead to verification time.
+
+| Size | BP+ Med ed_0 (ms) | BP+ Med ed_1 (ms) | BP+ Med ed_2 (ms) | Diff Med ed_0-1 (%) | Diff Med ed_0-2 (%) |
+|------|-------------------|-------------------|-------------------|---------------------|---------------------|
+| 1    | 2.17              | 2.20              | 2.20              | 102%                | 102%                |
+| 2    | 3.71              | 3.74              | 3.76              | 101%                | 101%                |
+| 4    | 6.18              | 6.26              | 6.28              | 101%                | 102%                |
+| 8    | 10.96             | 11.05             | 10.97             | 101%                | 100%                |
+| 16   | 19.52             | 19.66             | 19.51             | 101%                | 100%                |
+| 32   | 36.97             | 36.99             | 36.87             | 100%                | 100%                |
+|      |                   |                   | Average           | 101%                | 101%                |
+
 
 <p align="center"><img src="./docs/assets/img_bp_plus_verification_extension_degrees.png" width="550" /></p>
 
 ### Batched 64-bit single range proof verification
 
+Batched verification shows significant gains when compared to linear verification. 
+
 | Batch size | BP+ linear (ms) | BP+ ext_deg 0 (ms) | BP+ ext_deg 1 (ms) | BP+ ext_deg 2 (ms) | Diff (%) | Gains (%) |
 |------------|-----------------|--------------------|--------------------|--------------------|----------|-----------|
-| 1          | 2.36            | 2.36               | 2.35               | 2.45               | 100%     | 0%        |
-| 2          | 4.73            | 2.83               | 2.98               | 3.05               | 60%      | 40%       |
-| 4          | 9.46            | 4.05               | 4.20               | 4.32               | 43%      | 57%       |
-| 8          | 18.91           | 6.19               | 6.43               | 6.70               | 33%      | 67%       |
-| 16         | 37.83           | 11.19              | 11.01              | 11.82              | 30%      | 70%       |
-| 32         | 75.65           | 19.35              | 20.26              | 21.06              | 26%      | 74%       |
-| 64         | 151.31          | 34.87              | 37.20              | 39.75              | 23%      | 77%       |
-| 128        | 302.62          | 66.70              | 71.40              | 76.73              | 22%      | 78%       |
-| 256        | 605.24          | 133.56             | 140.71             | 150.51             | 22%      | 78%       |
+| 1          | 2.17            | 2.17               | 2.18               | 2.20               | 100%     | 0%        |
+| 2          | 4.34            | 2.73               | 2.73               | 2.76               | 63%      | 37%       |
+| 4          | 8.68            | 3.82               | 3.82               | 3.80               | 44%      | 56%       |
+| 8          | 17.36           | 5.74               | 5.76               | 5.75               | 33%      | 67%       |
+| 16         | 34.72           | 9.57               | 9.60               | 9.74               | 28%      | 72%       |
+| 32         | 69.44           | 17.10              | 17.06              | 17.05              | 25%      | 75%       |
+| 64         | 138.89          | 32.04              | 32.06              | 31.85              | 23%      | 77%       |
+| 128        | 277.77          | 60.56              | 60.75              | 60.71              | 22%      | 78%       |
+| 256        | 555.55          | 118.55             | 118.69             | 119.15             | 21%      | 79%       |
 
 <p align="center"><img src="./docs/assets/img_bp_plus_batched_zoomed.png" width="550" /></p>
 

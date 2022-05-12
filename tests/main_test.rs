@@ -15,6 +15,7 @@ use tari_bulletproofs_plus::{
     range_statement::RangeStatement,
     range_witness::RangeWitness,
 };
+use tari_bulletproofs_plus::range_proof::ExtractMasks;
 
 #[test]
 fn test_non_aggregated_single_proof_multiple_bit_lengths() {
@@ -241,12 +242,21 @@ fn prove_and_verify(
 
         if !proofs.is_empty() {
             // 5. Verify the entire batch as the commitment owner, i.e. the prover self
+            // --- Only recover the masks
             let recovered_private_masks =
-                RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone()).unwrap();
+                RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone(), ExtractMasks::ONLY).unwrap();
             assert_eq!(private_masks, recovered_private_masks);
+            // --- Recover the masks and verify the proofs
+            let recovered_private_masks =
+                RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone(), ExtractMasks::YES).unwrap();
+            assert_eq!(private_masks, recovered_private_masks);
+            // --- Verify the proofs but do not recover the masks
+            let recovered_private_masks =
+                RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone(), ExtractMasks::NO).unwrap();
+            assert_eq!(public_masks, recovered_private_masks);
 
             // 6. Verify the entire batch as public entity
-            let recovered_public_masks = RangeProof::verify(transcript_label, &statements_public, &proofs).unwrap();
+            let recovered_public_masks = RangeProof::verify(transcript_label, &statements_public, &proofs, ExtractMasks::NO).unwrap();
             assert_eq!(public_masks, recovered_public_masks);
 
             // 7. Try to recover the masks with incorrect seed_nonce values
@@ -269,7 +279,7 @@ fn prove_and_verify(
                     });
                 }
                 let recovered_private_masks_changed =
-                    RangeProof::verify(transcript_label, &statements_private_changed, &proofs.clone()).unwrap();
+                    RangeProof::verify(transcript_label, &statements_private_changed, &proofs.clone(), ExtractMasks::YES).unwrap();
                 assert_ne!(private_masks, recovered_private_masks_changed);
             }
 
@@ -295,7 +305,7 @@ fn prove_and_verify(
                     seed_nonce: statement.seed_nonce,
                 });
             }
-            match RangeProof::verify(transcript_label, &statements_public_changed, &proofs.clone()) {
+            match RangeProof::verify(transcript_label, &statements_public_changed, &proofs.clone(), ExtractMasks::NO) {
                 Ok(_) => {
                     panic!("Range proof should not verify")
                 },
