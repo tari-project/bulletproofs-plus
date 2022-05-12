@@ -15,7 +15,14 @@ use tari_bulletproofs_plus::{generators::pedersen_gens::ExtensionDegree, Bulletp
 fn pc_gens(c: &mut Criterion) {
     let mut group = c.benchmark_group("PedersenGens");
     group.sampling_mode(SamplingMode::Flat);
-    for extension_degree in &[ExtensionDegree::ZERO, ExtensionDegree::ONE, ExtensionDegree::TWO] {
+    for extension_degree in &[
+        ExtensionDegree::ZERO,
+        ExtensionDegree::ONE,
+        ExtensionDegree::TWO,
+        ExtensionDegree::THREE,
+        ExtensionDegree::FOUR,
+        ExtensionDegree::FIVE,
+    ] {
         let label = format!("PedersenGens::with_extension_degree({:?})", extension_degree);
         group.bench_function(&label, |b|
             // Benchmark this code

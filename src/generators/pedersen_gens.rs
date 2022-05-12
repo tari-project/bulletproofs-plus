@@ -21,9 +21,9 @@ use crate::{errors::ProofError, protocols::ristretto_point_protocol::RistrettoPo
 /// The default generators are:
 ///
 /// * `h_base`: the `ristretto255` basepoint;
-/// * `g_base`: the result of `ristretto255` SHA3-512
+/// * `g_base_vec`: the result of domain separated `ristretto255` SHA3-512 (hash of unique indexed strings)
 /// hash-to-group on input `B_bytes`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PedersenGens {
     /// Base for the committed value
     pub h_base: RistrettoPoint,
@@ -37,7 +37,8 @@ pub struct PedersenGens {
     pub extension_degree: ExtensionDegree,
 }
 
-/// The extension degree for extended commitments
+/// The extension degree for extended commitments. Currently this is limited to 5 extension degrees, but in theory it
+/// could be arbitrarily long, although practically, very few if any test cases will use more than 2 extension degrees.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ExtensionDegree {
     /// Default Pedersen commitment
@@ -46,46 +47,42 @@ pub enum ExtensionDegree {
     ONE = 2,
     /// Pedersen commitment extended with two degrees
     TWO = 3,
+    /// Pedersen commitment extended with three degrees
+    THREE = 4,
+    /// Pedersen commitment extended with four degrees
+    FOUR = 5,
+    /// Pedersen commitment extended with five degrees
+    FIVE = 6,
 }
 
 lazy_static! {
     static ref RISTRETTO_BASEPOINT_POINT_BLINDING_1: RistrettoPoint =
-        RistrettoPoint::hash_from_bytes_sha3_512(RISTRETTO_BASEPOINT_COMPRESSED.as_bytes());
-    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_2: RistrettoPoint = RistrettoPoint::hash_from_bytes_sha3_512(
-        RistrettoPoint::hash_from_bytes_sha3_512(RISTRETTO_BASEPOINT_COMPRESSED.as_bytes())
-            .compress()
-            .as_bytes()
-    );
-    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_3: RistrettoPoint = RistrettoPoint::hash_from_bytes_sha3_512(
-        RistrettoPoint::hash_from_bytes_sha3_512(
-            RistrettoPoint::hash_from_bytes_sha3_512(RISTRETTO_BASEPOINT_COMPRESSED.as_bytes())
-                .compress()
-                .as_bytes()
-        )
-        .compress()
-        .as_bytes()
-    );
+        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_1 degree ZERO");
+    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_2: RistrettoPoint =
+        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_2 degree ONE");
+    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_3: RistrettoPoint =
+        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_3 degree TWO");
+    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_4: RistrettoPoint =
+        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_4 degree THREE");
+    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_5: RistrettoPoint =
+        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_5 degree FOUR");
+    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_6: RistrettoPoint =
+        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_6 degree FIVE");
+    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1: CompressedRistretto =
+        (*RISTRETTO_BASEPOINT_POINT_BLINDING_1).compress();
     static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2: CompressedRistretto =
         (*RISTRETTO_BASEPOINT_POINT_BLINDING_2).compress();
     static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3: CompressedRistretto =
         (*RISTRETTO_BASEPOINT_POINT_BLINDING_3).compress();
+    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_4: CompressedRistretto =
+        (*RISTRETTO_BASEPOINT_POINT_BLINDING_4).compress();
+    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_5: CompressedRistretto =
+        (*RISTRETTO_BASEPOINT_POINT_BLINDING_5).compress();
+    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_6: CompressedRistretto =
+        (*RISTRETTO_BASEPOINT_POINT_BLINDING_6).compress();
 }
 
 impl PedersenGens {
-    // Pre-calculated compressed base points
-    const RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1: CompressedRistretto = CompressedRistretto([
-        140, 146, 64, 180, 86, 169, 230, 220, 101, 195, 119, 161, 4, 141, 116, 95, 148, 160, 140, 219, 127, 68, 203,
-        205, 123, 70, 243, 64, 72, 135, 17, 52,
-    ]);
-    const RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2: CompressedRistretto = CompressedRistretto([
-        22, 71, 181, 26, 192, 136, 81, 194, 135, 98, 165, 113, 214, 100, 253, 85, 86, 117, 211, 33, 9, 68, 70, 67, 168,
-        225, 172, 171, 166, 53, 36, 21,
-    ]);
-    const RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3: CompressedRistretto = CompressedRistretto([
-        52, 193, 44, 14, 233, 178, 175, 56, 80, 198, 174, 186, 11, 191, 138, 91, 163, 168, 10, 85, 147, 242, 17, 126,
-        236, 165, 8, 171, 159, 203, 127, 107,
-    ]);
-
     /// Creates a Pedersen commitment using the value scalar and a blinding factor.
     pub fn commit(&self, value: Scalar, blindings: &[Scalar]) -> Result<RistrettoPoint, ProofError> {
         let extension_degree = self.extension_degree as usize;
@@ -106,36 +103,98 @@ impl PedersenGens {
         }
     }
 
-    /// Create extended Pedersen generators for the required extension degree
+    /// Create extended Pedersen generators for the required extension degree using pre-calculated compressed constants
     pub fn with_extension_degree(extension_degree: ExtensionDegree) -> Self {
+        let (g_base_vec, g_base_compressed_vec) = PedersenGens::g_base(extension_degree);
+        let index = extension_degree as usize;
         match extension_degree {
             ExtensionDegree::ZERO => PedersenGens::default(),
-            ExtensionDegree::ONE => PedersenGens {
-                g_base_vec: vec![
-                    *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
-                    *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
-                ],
-                g_base_compressed_vec: vec![
-                    PedersenGens::RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
-                    PedersenGens::RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
-                ],
+            _ => PedersenGens {
+                g_base_vec: g_base_vec[..index].to_owned(),
+                g_base_compressed_vec: g_base_compressed_vec[..index].to_owned(),
                 extension_degree,
                 ..Default::default()
             },
-            ExtensionDegree::TWO => PedersenGens {
-                g_base_vec: vec![
+        }
+    }
+
+    // Assign vectors only performing the number of lazy static base point calculations that is necessary, using
+    // on the fly compression for compressed base points otherwise
+    fn g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<CompressedRistretto>) {
+        match extension_degree {
+            ExtensionDegree::ZERO => (vec![*RISTRETTO_BASEPOINT_POINT_BLINDING_1], vec![
+                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
+            ]),
+            ExtensionDegree::ONE => (
+                vec![
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
+                ],
+                vec![
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
+                ],
+            ),
+            ExtensionDegree::TWO => (
+                vec![
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_3,
                 ],
-                g_base_compressed_vec: vec![
-                    PedersenGens::RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
-                    PedersenGens::RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
-                    PedersenGens::RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
+                vec![
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
                 ],
-                extension_degree,
-                ..Default::default()
-            },
+            ),
+            ExtensionDegree::THREE => (
+                vec![
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_3,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_4,
+                ],
+                vec![
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_4,
+                ],
+            ),
+            ExtensionDegree::FOUR => (
+                vec![
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_3,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_4,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_5,
+                ],
+                vec![
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_4,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_5,
+                ],
+            ),
+            ExtensionDegree::FIVE => (
+                vec![
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_3,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_4,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_5,
+                    *RISTRETTO_BASEPOINT_POINT_BLINDING_6,
+                ],
+                vec![
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_4,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_5,
+                    *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_6,
+                ],
+            ),
         }
     }
 
@@ -145,6 +204,9 @@ impl PedersenGens {
             1 => Ok(ExtensionDegree::ZERO),
             2 => Ok(ExtensionDegree::ONE),
             3 => Ok(ExtensionDegree::TWO),
+            4 => Ok(ExtensionDegree::THREE),
+            5 => Ok(ExtensionDegree::FOUR),
+            6 => Ok(ExtensionDegree::FIVE),
             _ => Err(ProofError::InvalidArgument("Extension degree not valid".to_string())),
         }
     }
@@ -152,11 +214,12 @@ impl PedersenGens {
 
 impl Default for PedersenGens {
     fn default() -> Self {
+        let (g_base_vec, g_base_compressed_vec) = PedersenGens::g_base(ExtensionDegree::ZERO);
         PedersenGens {
             h_base: RISTRETTO_BASEPOINT_POINT,
-            g_base_vec: vec![*RISTRETTO_BASEPOINT_POINT_BLINDING_1],
+            g_base_vec,
             h_base_compressed: RISTRETTO_BASEPOINT_COMPRESSED,
-            g_base_compressed_vec: vec![PedersenGens::RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1],
+            g_base_compressed_vec,
             extension_degree: ExtensionDegree::ZERO,
         }
     }
@@ -172,89 +235,80 @@ mod tests {
             RISTRETTO_BASEPOINT_POINT_BLINDING_1,
             RISTRETTO_BASEPOINT_POINT_BLINDING_2,
             RISTRETTO_BASEPOINT_POINT_BLINDING_3,
+            RISTRETTO_BASEPOINT_POINT_BLINDING_4,
+            RISTRETTO_BASEPOINT_POINT_BLINDING_5,
+            RISTRETTO_BASEPOINT_POINT_BLINDING_6,
         },
         protocols::scalar_protocol::ScalarProtocol,
         PedersenGens,
     };
 
     #[test]
-    fn test_const() {
-        // Extended Pedersen generators with extension degree of zero
-        let pc_gens = PedersenGens::with_extension_degree(ExtensionDegree::ZERO);
-        for i in 0..pc_gens.extension_degree as usize {
-            assert_eq!(pc_gens.g_base_vec[i].compress(), pc_gens.g_base_compressed_vec[i]);
+    fn test_constants() {
+        // Extended Pedersen generators with extension degree of zero to five
+        let lazy_statics = [
+            *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
+            *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
+            *RISTRETTO_BASEPOINT_POINT_BLINDING_3,
+            *RISTRETTO_BASEPOINT_POINT_BLINDING_4,
+            *RISTRETTO_BASEPOINT_POINT_BLINDING_5,
+            *RISTRETTO_BASEPOINT_POINT_BLINDING_6,
+        ];
+        for extension_degree in [
+            ExtensionDegree::ZERO,
+            ExtensionDegree::ONE,
+            ExtensionDegree::TWO,
+            ExtensionDegree::THREE,
+            ExtensionDegree::FOUR,
+            ExtensionDegree::FIVE,
+        ] {
+            let pc_gens = PedersenGens::with_extension_degree(extension_degree);
+            for (i, item) in lazy_statics.iter().enumerate().take(pc_gens.extension_degree as usize) {
+                assert_eq!(pc_gens.g_base_vec[i].compress(), pc_gens.g_base_compressed_vec[i]);
+                assert_eq!(item.compress(), pc_gens.g_base_compressed_vec[i]);
+            }
+            assert_eq!(pc_gens.g_base_vec.len(), extension_degree as usize);
+            assert_eq!(pc_gens.g_base_compressed_vec.len(), extension_degree as usize);
         }
-        assert_eq!(
-            (*RISTRETTO_BASEPOINT_POINT_BLINDING_1).compress(),
-            pc_gens.g_base_compressed_vec[0]
-        );
-        assert_eq!(pc_gens.g_base_vec.len(), ExtensionDegree::ZERO as usize);
-        assert_eq!(pc_gens.g_base_compressed_vec.len(), ExtensionDegree::ZERO as usize);
-
-        // Extended Pedersen generators with extension degree of one
-        let pc_gens = PedersenGens::with_extension_degree(ExtensionDegree::ONE);
-        for i in 0..pc_gens.extension_degree as usize {
-            assert_eq!(pc_gens.g_base_vec[i].compress(), pc_gens.g_base_compressed_vec[i]);
-        }
-        assert_eq!(
-            (*RISTRETTO_BASEPOINT_POINT_BLINDING_1).compress(),
-            pc_gens.g_base_compressed_vec[0]
-        );
-        assert_eq!(
-            (*RISTRETTO_BASEPOINT_POINT_BLINDING_2).compress(),
-            pc_gens.g_base_compressed_vec[1]
-        );
-        assert_eq!(pc_gens.g_base_vec.len(), ExtensionDegree::ONE as usize);
-        assert_eq!(pc_gens.g_base_compressed_vec.len(), ExtensionDegree::ONE as usize);
-
-        // Extended Pedersen generators with extension degree of two
-        let pc_gens = PedersenGens::with_extension_degree(ExtensionDegree::TWO);
-        for i in 0..pc_gens.extension_degree as usize {
-            assert_eq!(pc_gens.g_base_vec[i].compress(), pc_gens.g_base_compressed_vec[i]);
-        }
-        assert_eq!(
-            (*RISTRETTO_BASEPOINT_POINT_BLINDING_1).compress(),
-            pc_gens.g_base_compressed_vec[0]
-        );
-        assert_eq!(
-            (*RISTRETTO_BASEPOINT_POINT_BLINDING_2).compress(),
-            pc_gens.g_base_compressed_vec[1]
-        );
-        assert_eq!(
-            (*RISTRETTO_BASEPOINT_POINT_BLINDING_3).compress(),
-            pc_gens.g_base_compressed_vec[2]
-        );
-        assert_eq!(pc_gens.g_base_vec.len(), ExtensionDegree::TWO as usize);
-        assert_eq!(pc_gens.g_base_compressed_vec.len(), ExtensionDegree::TWO as usize);
     }
 
     #[test]
-    fn test_commitment() {
+    fn test_default() {
+        assert_eq!(
+            PedersenGens::with_extension_degree(ExtensionDegree::ZERO),
+            PedersenGens::default()
+        );
+    }
+
+    #[test]
+    fn test_commitments() {
         let mut rng = rand::thread_rng();
         let value = Scalar::random_not_zero(&mut rng);
-        let blinding_1 = Scalar::random_not_zero(&mut rng);
-        let blinding_2 = Scalar::random_not_zero(&mut rng);
-        let blinding_3 = Scalar::random_not_zero(&mut rng);
+        let blindings = vec![
+            Scalar::random_not_zero(&mut rng),
+            Scalar::random_not_zero(&mut rng),
+            Scalar::random_not_zero(&mut rng),
+            Scalar::random_not_zero(&mut rng),
+            Scalar::random_not_zero(&mut rng),
+            Scalar::random_not_zero(&mut rng),
+        ];
 
-        let pc_gens = PedersenGens::with_extension_degree(ExtensionDegree::ZERO);
-        assert!(pc_gens.commit(value, vec![blinding_1].as_slice()).is_ok());
-        assert!(pc_gens.commit(value, vec![blinding_1, blinding_2].as_slice()).is_err());
-        assert!(pc_gens
-            .commit(value, vec![blinding_1, blinding_2, blinding_3].as_slice())
-            .is_err());
-
-        let pc_gens = PedersenGens::with_extension_degree(ExtensionDegree::ONE);
-        assert!(pc_gens.commit(value, vec![blinding_1].as_slice()).is_err());
-        assert!(pc_gens.commit(value, vec![blinding_1, blinding_2].as_slice()).is_ok());
-        assert!(pc_gens
-            .commit(value, vec![blinding_1, blinding_2, blinding_3].as_slice())
-            .is_err());
-
-        let pc_gens = PedersenGens::with_extension_degree(ExtensionDegree::TWO);
-        assert!(pc_gens.commit(value, vec![blinding_1].as_slice()).is_err());
-        assert!(pc_gens.commit(value, vec![blinding_1, blinding_2].as_slice()).is_err());
-        assert!(pc_gens
-            .commit(value, vec![blinding_1, blinding_2, blinding_3].as_slice())
-            .is_ok());
+        for extension_degree in [
+            ExtensionDegree::ZERO,
+            ExtensionDegree::ONE,
+            ExtensionDegree::TWO,
+            ExtensionDegree::THREE,
+            ExtensionDegree::FOUR,
+            ExtensionDegree::FIVE,
+        ] {
+            let pc_gens = PedersenGens::with_extension_degree(extension_degree);
+            for i in 0..ExtensionDegree::FIVE as usize {
+                if i == extension_degree as usize {
+                    assert!(pc_gens.commit(value, blindings[..i].to_owned().as_slice()).is_ok());
+                } else {
+                    assert!(pc_gens.commit(value, blindings[..i].to_owned().as_slice()).is_err());
+                }
+            }
+        }
     }
 }
