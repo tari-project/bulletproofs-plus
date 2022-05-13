@@ -60,11 +60,10 @@ pub struct RangeProof {
 ///     generators::pedersen_gens::ExtensionDegree,
 ///     protocols::scalar_protocol::ScalarProtocol,
 ///     range_parameters::RangeParameters,
-///     range_proof::RangeProof,
+///     range_proof::{ExtractMasks, RangeProof},
 ///     range_statement::RangeStatement,
 ///     range_witness::RangeWitness,
 /// };
-/// use tari_bulletproofs_plus::range_proof::ExtractMasks;
 /// let mut rng = rand::thread_rng();
 /// let transcript_label: &'static str = "BatchedRangeProofTest";
 /// let bit_length = 64; // Other powers of two are permissible up to 2^6 = 64
@@ -140,12 +139,18 @@ pub struct RangeProof {
 /// }
 ///
 /// // 5. Verify the entire batch as the commitment owner, i.e. the prover self
-/// let recovered_private_masks =
-///     RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone(), ExtractMasks::YES).unwrap();
+/// let recovered_private_masks = RangeProof::verify(
+///     transcript_label,
+///     &statements_private.clone(),
+///     &proofs.clone(),
+///     ExtractMasks::YES,
+/// )
+/// .unwrap();
 /// assert_eq!(private_masks, recovered_private_masks);
 ///
 /// // 6. Verify the entire batch as public entity
-/// let recovered_public_masks = RangeProof::verify(transcript_label, &statements_public, &proofs, ExtractMasks::NO).unwrap();
+/// let recovered_public_masks =
+///     RangeProof::verify(transcript_label, &statements_public, &proofs, ExtractMasks::NO).unwrap();
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
 /// # }
@@ -432,7 +437,7 @@ impl RangeProof {
         two_n_minus_one -= Scalar::one();
 
         // Weighted coefficients for common generators
-        let mut g_base_scalar = vec![Scalar::zero(); extension_degree];
+        let mut g_base_scalars = vec![Scalar::zero(); extension_degree];
         let mut h_base_scalar = Scalar::zero();
         let mut gi_base_scalars = vec![Scalar::zero(); max_mn];
         let mut hi_base_scalars = vec![Scalar::zero(); max_mn];
@@ -448,14 +453,16 @@ impl RangeProof {
 
         // Recovered masks
         let mut masks = match extract_masks {
-            ExtractMasks::NO => {vec![]}
+            ExtractMasks::NO => {
+                vec![]
+            },
             _ => {
                 let extended_masks = statements
                     .iter()
                     .fold(0usize, |acc, x| acc + if x.seed_nonce.is_some() { 1 } else { 0 }) *
                     (extension_degree - 1);
                 Vec::with_capacity(range_proofs.len() + extended_masks)
-            }
+            },
         };
 
         let two = Scalar::from(2u8);
@@ -562,7 +569,7 @@ impl RangeProof {
 
             // Recover the mask if possible (only for non-aggregated proofs)
             match extract_masks {
-                ExtractMasks::NO => {masks.push(None)},
+                ExtractMasks::NO => masks.push(None),
                 _ => {
                     if let Some(seed_nonce) = statements[index].seed_nonce {
                         for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
@@ -620,7 +627,7 @@ impl RangeProof {
 
             h_base_scalar += weight * (r1 * y * s1 + e_square * (y_nm_1 * z * d_sum + (z_square - z) * y_sum));
             for k in 0..extension_degree {
-                g_base_scalar[k] += weight * d1[k];
+                g_base_scalars[k] += weight * d1[k];
             }
 
             scalars.push(weight * (-e));
@@ -643,7 +650,7 @@ impl RangeProof {
 
         // Common generators
         for k in 0..extension_degree {
-            scalars.push(g_base_scalar[k]);
+            scalars.push(g_base_scalars[k]);
             points.push(g_base_vec[k]);
         }
         scalars.push(h_base_scalar);

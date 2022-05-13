@@ -83,7 +83,7 @@ lazy_static! {
 }
 
 impl PedersenGens {
-    /// Creates a Pedersen commitment using the value scalar and a blinding factor.
+    /// Creates a Pedersen commitment using the value scalar and a blinding factor vector
     pub fn commit(&self, value: Scalar, blindings: &[Scalar]) -> Result<RistrettoPoint, ProofError> {
         let extension_degree = self.extension_degree as usize;
         if blindings.is_empty() || blindings.len() != extension_degree {

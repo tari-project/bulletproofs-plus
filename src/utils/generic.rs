@@ -14,41 +14,39 @@ use core::{
     },
 };
 
-use blake2::{crypto_mac::Mac, Blake2b};
+use blake2::Blake2b;
 use curve25519_dalek::scalar::Scalar;
 
 use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::RangeProof};
 
-/// Create a Blake2B deterministic nonce given a seed, label and index
+/// Create a Blake2B deterministic nonce given a seed, label and two indexes
 pub fn nonce(
     seed_nonce: &Scalar,
     label: &str,
     index_j: Option<usize>,
     index_k: Option<usize>,
 ) -> Result<Scalar, ProofError> {
+    // Using `Blake2b::with_params(key: &[u8], salt: &[u8], persona: &[u8])`, if the `persona` or `salt` parameters
+    // exceed 16 bytes, unhandled exceptions occur, so we have to do the length check ourselves. In our implementation
+    // a length check on `salt` is not required as its length is limited by the byte representation of `2 x usize::MAX`,
+    // which is `= 16`.
+    // See https://www.blake2.net/blake2.pdf section 2.8
     let encoded_label = label.as_bytes();
     if encoded_label.len() > 16 {
-        // See https://www.blake2.net/blake2.pdf section 2.8
         return Err(ProofError::InvalidLength("nonce label".to_string()));
     };
-    let mut hasher = if let Some(salt) = index_j {
-        let encoded_salt = salt.to_le_bytes();
-        if encoded_salt.len() > 16 {
-            // See https://www.blake2.net/blake2.pdf section 2.8
-            return Err(ProofError::InvalidLength("nonce index_j".to_string()));
-        };
-        Blake2b::with_params(&seed_nonce.to_bytes(), &encoded_salt, encoded_label)
-    } else {
-        Blake2b::with_params(&seed_nonce.to_bytes(), &[], encoded_label)
-    };
-    if let Some(salt) = index_k {
-        let encoded_salt = salt.to_le_bytes();
-        if encoded_salt.len() > 16 {
-            // See https://www.blake2.net/blake2.pdf section 2.8
-            return Err(ProofError::InvalidLength("nonce index_k".to_string()));
-        };
-        hasher.update(&encoded_salt);
+    let mut key = Vec::with_capacity(51); // 1 + 32 + 1 + 8 + 1 + 8
+    key.push(0u8); // Add one byte to initialize the vector
+    key.append(&mut seed_nonce.to_bytes().to_vec());
+    if let Some(index) = index_j {
+        key.append(&mut b"j".to_vec()); // Domain separated index label
+        key.append(&mut index.to_le_bytes().to_vec());
     }
+    if let Some(index) = index_k {
+        key.append(&mut b"k".to_vec()); // Domain separated index label
+        key.append(&mut index.to_le_bytes().to_vec());
+    }
+    let hasher = Blake2b::with_params(&key, &[], encoded_label);
 
     Ok(Scalar::from_hasher_blake2b(hasher))
 }
@@ -103,6 +101,7 @@ mod tests {
         // Create personalized nonces
         let ref_nonce_eta = nonce(&seed_nonce, "eta", None, None).unwrap();
         let ref_nonce_a = nonce(&seed_nonce, "a", None, None).unwrap();
+        assert_ne!(ref_nonce_eta, ref_nonce_a);
         let mut ref_nonces_dl = vec![];
         let mut ref_nonces_dr = vec![];
         for i in 0..16 {
@@ -110,7 +109,7 @@ mod tests {
             ref_nonces_dr.push(nonce(&seed_nonce, "dR", Some(i), Some(2)).unwrap());
         }
 
-        // Verify
+        // Verify deterministic nonces
         for i in 0..16 {
             assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dR", Some(i), Some(2)).unwrap());
             assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dL", Some(i), Some(1)).unwrap());
@@ -136,6 +135,96 @@ mod tests {
         }
         assert_eq!(ref_nonce_a, nonce(&seed_nonce, "a", None, None).unwrap());
         assert_eq!(ref_nonce_eta, nonce(&seed_nonce, "eta", None, None).unwrap());
+
+        // Verify domain separation for indexes
+        assert_ne!(
+            nonce(&seed_nonce, "", None, Some(1)).unwrap(),
+            nonce(&seed_nonce, "", Some(1), None).unwrap()
+        );
+        assert_eq!(
+            nonce(&seed_nonce, "", Some(1), None).unwrap(),
+            nonce(&seed_nonce, "", Some(1), None).unwrap()
+        );
+        assert_eq!(
+            nonce(&seed_nonce, "", None, Some(1)).unwrap(),
+            nonce(&seed_nonce, "", None, Some(1)).unwrap()
+        );
+        assert_ne!(
+            nonce(&seed_nonce, "", None, None).unwrap(),
+            nonce(&seed_nonce, "", Some(1), None).unwrap()
+        );
+        assert_ne!(
+            nonce(&seed_nonce, "", None, None).unwrap(),
+            nonce(&seed_nonce, "", None, Some(1)).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_blake2b_parameter_lengths() {
+        let mut rng = rand::thread_rng();
+        assert!(nonce(
+            &Scalar::random(&mut rng),
+            "1234567890123",
+            Some(usize::MIN),
+            Some(usize::MIN)
+        )
+        .is_ok());
+        assert!(nonce(
+            &Scalar::random(&mut rng),
+            "12345678901234",
+            Some(usize::MAX),
+            Some(usize::MIN)
+        )
+        .is_ok());
+        assert!(nonce(
+            &Scalar::random(&mut rng),
+            "123456789012345",
+            Some(usize::MIN),
+            Some(usize::MAX)
+        )
+        .is_ok());
+        assert!(nonce(
+            &Scalar::random(&mut rng),
+            "1234567890123456",
+            Some(usize::MAX),
+            Some(usize::MAX)
+        )
+        .is_ok());
+        assert!(nonce(
+            &Scalar::random(&mut rng),
+            "1234567890123456",
+            Some(usize::MAX),
+            Some(usize::MAX)
+        )
+        .is_ok());
+        assert!(nonce(
+            &Scalar::random(&mut rng),
+            "12345678901234567",
+            Some(usize::MAX),
+            Some(usize::MAX)
+        )
+        .is_err());
+        assert!(nonce(
+            &Scalar::random(&mut rng),
+            "123456789012345678",
+            Some(usize::MAX),
+            Some(usize::MAX)
+        )
+        .is_err());
+        assert!(nonce(
+            &Scalar::random(&mut rng),
+            "1234567890123456789",
+            Some(usize::MAX),
+            Some(usize::MAX)
+        )
+        .is_err());
+        assert!(nonce(
+            &Scalar::random(&mut rng),
+            "12345678901234567890",
+            Some(usize::MAX),
+            Some(usize::MAX)
+        )
+        .is_err());
     }
 
     fn bit_vector_to_value(bit_vector: &[Scalar]) -> Result<u64, ProofError> {

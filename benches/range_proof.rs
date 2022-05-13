@@ -19,11 +19,10 @@ use tari_bulletproofs_plus::{
     generators::pedersen_gens::ExtensionDegree,
     protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
-    range_proof::RangeProof,
+    range_proof::{ExtractMasks, RangeProof},
     range_statement::RangeStatement,
     range_witness::RangeWitness,
 };
-use tari_bulletproofs_plus::range_proof::ExtractMasks;
 
 static AGGREGATION_SIZES: [usize; 6] = [1, 2, 4, 8, 16, 32];
 static BATCHED_SIZES: [usize; 9] = [1, 2, 4, 8, 16, 32, 64, 128, 256];
@@ -38,7 +37,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
 
     for aggregation_factor in AGGREGATION_SIZES {
         let label = format!(
-            "Aggregated {}-bit BP+ creation aggregation factor {} degree {:?}",
+            "Agg {}-bit BP+ create agg factor {} degree {:?}",
             bit_length, aggregation_factor, extension_degree
         );
         group.bench_function(&label, move |b| {
@@ -105,7 +104,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
 
     for aggregation_factor in AGGREGATION_SIZES {
         let label = format!(
-            "Aggregated {}-bit BP+ verification aggregation factor {} degree {:?}",
+            "Agg {}-bit BP+ verify agg factor {} degree {:?}",
             bit_length, aggregation_factor, extension_degree
         );
         group.bench_function(&label, move |b| {
@@ -152,7 +151,9 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the aggregated proof
-                let _masks = RangeProof::verify(transcript_label, &statements.clone(), &proofs.clone(), ExtractMasks::NO).unwrap();
+                let _masks =
+                    RangeProof::verify(transcript_label, &statements.clone(), &proofs.clone(), ExtractMasks::NO)
+                        .unwrap();
             });
         });
     }
@@ -218,21 +219,23 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
         proofs.push(proof.unwrap());
     }
 
-    for number_of_range_proofs in BATCHED_SIZES {
-        let label = format!(
-            "Batched {}-bit BP+ verification {} single proofs degree {:?}",
-            bit_length, number_of_range_proofs, extension_degree
-        );
-        let statements = &statements[0..number_of_range_proofs];
-        let proofs = &proofs[0..number_of_range_proofs];
+    for extract_masks in [ExtractMasks::NO, ExtractMasks::ONLY] {
+        for number_of_range_proofs in BATCHED_SIZES {
+            let label = format!(
+                "Batched {}-bit BP+ verify {} deg {:?} masks {:?}",
+                bit_length, number_of_range_proofs, extension_degree, extract_masks
+            );
+            let statements = &statements[0..number_of_range_proofs];
+            let proofs = &proofs[0..number_of_range_proofs];
 
-        group.bench_function(&label, move |b| {
-            // Benchmark this code
-            b.iter(|| {
-                // 5. Verify the entire batch of single proofs
-                let _masks = RangeProof::verify(transcript_label, statements, proofs, ExtractMasks::NO).unwrap();
+            group.bench_function(&label, move |b| {
+                // Benchmark this code
+                b.iter(|| {
+                    // 5. Verify the entire batch of single proofs
+                    let _masks = RangeProof::verify(transcript_label, statements, proofs, extract_masks).unwrap();
+                });
             });
-        });
+        }
     }
     group.finish();
 }
