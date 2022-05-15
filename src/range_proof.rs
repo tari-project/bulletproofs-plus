@@ -622,9 +622,9 @@ impl RangeProof {
 
     /// Deserializes the proof from a byte slice
     pub fn from_bytes(slice: &[u8]) -> Result<RangeProof, ProofError> {
-        if slice.len() % 32 != 0 {
+        if slice.len() % 32 != 0 || slice.is_empty() || slice.len() / 32 < 6 {
             return Err(ProofError::InvalidLength(
-                "Serialized proof bytes must be a factor of 32".to_string(),
+                "Invalid serialized proof bytes length".to_string(),
             ));
         }
         let num_elements = slice.len() / 32;
@@ -760,5 +760,72 @@ impl<'de> Deserialize<'de> for RangeProof {
         }
 
         deserializer.deserialize_bytes(RangeProofVisitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use curve25519_dalek::{ristretto::CompressedRistretto, scalar::Scalar};
+
+    use crate::range_proof::RangeProof;
+
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct RangeProofMimic {
+        a: CompressedRistretto,
+        a1: CompressedRistretto,
+        b: CompressedRistretto,
+        r1: Scalar,
+        s1: Scalar,
+        d1: Scalar,
+        li: Vec<CompressedRistretto>,
+        ri: Vec<CompressedRistretto>,
+    }
+
+    #[test]
+    fn test_from_bytes() {
+        assert!((RangeProof::from_bytes(&[])).is_err());
+        assert!((RangeProof::from_bytes(Scalar::zero().as_bytes().as_slice())).is_err());
+        let proof = RangeProof {
+            a: Default::default(),
+            a1: Default::default(),
+            b: Default::default(),
+            r1: Default::default(),
+            s1: Default::default(),
+            d1: Default::default(),
+            li: vec![],
+            ri: vec![],
+        };
+        let proof_bytes = proof.to_bytes();
+        for i in 0..proof_bytes.len() {
+            match RangeProof::from_bytes(&proof_bytes[..proof_bytes.len() - i]) {
+                Ok(proof_from_bytes) => {
+                    assert_eq!(proof, proof_from_bytes);
+                    assert_eq!(i, 0)
+                },
+                Err(_) => {
+                    assert_ne!(i, 0)
+                },
+            }
+        }
+        let mut proof_bytes_meddled = proof_bytes.clone();
+        for i in 0..proof_bytes.len() * 10 {
+            proof_bytes_meddled.append(&mut 0u8.to_le_bytes().to_vec());
+            match RangeProof::from_bytes(&proof_bytes_meddled) {
+                Ok(_) => {
+                    // Adding two zero-valued byte representations of CompressedRistretto would be valid
+                    assert_eq!((i + 1) % 64, 0);
+                },
+                Err(_) => {
+                    assert_ne!((i + 1) % 64, 0);
+                },
+            }
+        }
+        let mut proof_bytes_meddled = proof_bytes.clone();
+        for _i in 0..proof_bytes.len() * 10 {
+            proof_bytes_meddled.append(&mut u8::MAX.to_le_bytes().to_vec());
+            if RangeProof::from_bytes(&proof_bytes_meddled).is_ok() {
+                panic!("Should err");
+            }
+        }
     }
 }
