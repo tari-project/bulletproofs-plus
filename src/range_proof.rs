@@ -16,11 +16,12 @@ use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     errors::ProofError,
+    generators::pedersen_gens::ExtensionDegree,
     inner_product_round::InnerProductRound,
     protocols::{scalar_protocol::ScalarProtocol, transcript_protocol::TranscriptProtocol},
     range_statement::RangeStatement,
     range_witness::RangeWitness,
-    utils::generic::{bit_vector_of_scalars, nonce, read32},
+    utils::generic::{bit_vector_of_scalars, nonce, read32, read8},
     PedersenGens,
 };
 
@@ -46,6 +47,7 @@ pub struct RangeProof {
     d1: Vec<Scalar>,
     li: Vec<CompressedRistretto>,
     ri: Vec<CompressedRistretto>,
+    extension_degree: ExtensionDegree,
 }
 
 /// # Example
@@ -139,18 +141,13 @@ pub struct RangeProof {
 /// }
 ///
 /// // 5. Verify the entire batch as the commitment owner, i.e. the prover self
-/// let recovered_private_masks = RangeProof::verify(
-///     transcript_label,
-///     &statements_private.clone(),
-///     &proofs.clone(),
-///     ExtractMasks::YES,
-/// )
-/// .unwrap();
+/// let recovered_private_masks =
+///     RangeProof::verify_and_recover_masks(transcript_label, &statements_private.clone(), &proofs.clone()).unwrap();
 /// assert_eq!(private_masks, recovered_private_masks);
 ///
 /// // 6. Verify the entire batch as public entity
 /// let recovered_public_masks =
-///     RangeProof::verify(transcript_label, &statements_public, &proofs, ExtractMasks::NO).unwrap();
+///     RangeProof::verify_do_not_recover_masks(transcript_label, &statements_public, &proofs).unwrap();
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
 /// # }
@@ -317,6 +314,7 @@ impl RangeProof {
                     d1: ip_data.d1()?,
                     li: ip_data.li_compressed()?,
                     ri: ip_data.ri_compressed()?,
+                    extension_degree: statement.generators.extension_degree(),
                 });
             }
         }
@@ -377,6 +375,13 @@ impl RangeProof {
             statements[max_index].generators.hi_base_ref(),
         );
         for (i, statement) in statements.iter().enumerate() {
+            for value in statement.minimum_value_promises.iter().flatten() {
+                if value >> (bit_length - 1) > 1 {
+                    return Err(ProofError::InvalidLength(
+                        "Minimum value promise exceeds bit vector capacity".to_string(),
+                    ));
+                }
+            }
             if i == max_index {
                 continue;
             }
@@ -401,9 +406,37 @@ impl RangeProof {
         Ok((max_mn, max_index))
     }
 
-    /// Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
-    /// range proofs by a party that can supply the optional seed nonces
-    pub fn verify(
+    /// Verify a batch of single and/or aggregated range proofs as the commitment owner and recover the masks for single
+    /// range proofs by supplying the optional seed nonces
+    pub fn verify_and_recover_masks(
+        transcript_label: &'static str,
+        statements: &[RangeStatement],
+        range_proofs: &[RangeProof],
+    ) -> Result<Vec<Option<Scalar>>, ProofError> {
+        RangeProof::verify(transcript_label, statements, range_proofs, ExtractMasks::YES)
+    }
+
+    /// Verify a batch of single and/or aggregated range proofs as a public entity
+    pub fn verify_do_not_recover_masks(
+        transcript_label: &'static str,
+        statements: &[RangeStatement],
+        range_proofs: &[RangeProof],
+    ) -> Result<Vec<Option<Scalar>>, ProofError> {
+        RangeProof::verify(transcript_label, statements, range_proofs, ExtractMasks::NO)
+    }
+
+    /// Recover the masks for single range proofs by supplying the optional seed nonces
+    pub fn recover_masks_ony(
+        transcript_label: &'static str,
+        statements: &[RangeStatement],
+        range_proofs: &[RangeProof],
+    ) -> Result<Vec<Option<Scalar>>, ProofError> {
+        RangeProof::verify(transcript_label, statements, range_proofs, ExtractMasks::ONLY)
+    }
+
+    // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
+    // range proofs by a party that can supply the optional seed nonces
+    fn verify(
         transcript_label: &'static str,
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
@@ -674,7 +707,8 @@ impl RangeProof {
     /// Serializes the proof into a byte array of 32-byte elements
     pub fn to_bytes(&self) -> Vec<u8> {
         // 6 elements, 2 vectors
-        let mut buf = Vec::with_capacity((6 + self.li.len() + self.ri.len()) * 32);
+        let mut buf = Vec::with_capacity(1 + (self.li.len() + self.ri.len() + 5 + self.d1.len()) * 32);
+        buf.extend_from_slice(&(self.extension_degree as u8).to_le_bytes());
         for l in &self.li {
             buf.extend_from_slice(l.as_bytes());
         }
@@ -686,35 +720,44 @@ impl RangeProof {
         buf.extend_from_slice(self.b.as_bytes());
         buf.extend_from_slice(self.r1.as_bytes());
         buf.extend_from_slice(self.s1.as_bytes());
-        buf.extend_from_slice(self.d1.as_bytes());
+        for d1 in &self.d1 {
+            buf.extend_from_slice(d1.as_bytes());
+        }
         buf
     }
 
     /// Deserializes the proof from a byte slice
     pub fn from_bytes(slice: &[u8]) -> Result<RangeProof, ProofError> {
-        if slice.len() % 32 != 0 || slice.is_empty() || slice.len() / 32 < 6 {
+        if slice.is_empty() || (slice.len() - 1) % 32 != 0 {
             return Err(ProofError::InvalidLength(
                 "Invalid serialized proof bytes length".to_string(),
             ));
         }
-        let num_elements = slice.len() / 32;
-        if (num_elements - 6) % 2 != 0 {
+        let extension_degree = PedersenGens::extension_degree(read8(&slice[0..])[0] as usize)?;
+        let num_elements = (slice.len() - 1) / 32;
+        if num_elements < 2 + 5 + extension_degree as usize {
+            return Err(ProofError::InvalidLength(
+                "Serialized proof has incorrect number of elements".to_string(),
+            ));
+        };
+        let num_inner_prod_vec_elements = num_elements - 5 - extension_degree as usize;
+        if num_inner_prod_vec_elements % 2 != 0 {
             return Err(ProofError::InvalidLength(
                 "Serialized proof has incorrect number of elements".to_string(),
             ));
         }
-        let n = (num_elements - 6) / 2;
+        let n = num_inner_prod_vec_elements / 2;
 
         let mut li: Vec<CompressedRistretto> = Vec::with_capacity(n);
         let mut ri: Vec<CompressedRistretto> = Vec::with_capacity(n);
         for i in 0..n {
-            li.push(CompressedRistretto(read32(&slice[i * 32..])));
+            li.push(CompressedRistretto(read32(&slice[1 + i * 32..])));
         }
         for i in n..2 * n {
-            ri.push(CompressedRistretto(read32(&slice[i * 32..])));
+            ri.push(CompressedRistretto(read32(&slice[1 + i * 32..])));
         }
 
-        let pos = 2 * n * 32;
+        let pos = 1 + 2 * n * 32;
         let a = CompressedRistretto(read32(&slice[pos..]));
         let a1 = CompressedRistretto(read32(&slice[pos + 32..]));
         let b = CompressedRistretto(read32(&slice[pos + 64..]));
@@ -722,8 +765,14 @@ impl RangeProof {
             .ok_or_else(|| ProofError::InvalidArgument("r1 bytes not a canonical byte representation".to_string()))?;
         let s1 = Scalar::from_canonical_bytes(read32(&slice[pos + 128..]))
             .ok_or_else(|| ProofError::InvalidArgument("s1 bytes not a canonical byte representation".to_string()))?;
-        let d1 = Scalar::from_canonical_bytes(read32(&slice[pos + 160..]))
-            .ok_or_else(|| ProofError::InvalidArgument("d1 bytes not a canonical byte representation".to_string()))?;
+        let mut d1 = Vec::with_capacity(extension_degree as usize);
+        for i in 0..extension_degree as usize {
+            d1.push(
+                Scalar::from_canonical_bytes(read32(&slice[pos + 160 + i * 32..])).ok_or_else(|| {
+                    ProofError::InvalidArgument("d1 bytes not a canonical byte representation".to_string())
+                })?,
+            );
+        }
 
         Ok(RangeProof {
             a,
@@ -734,6 +783,7 @@ impl RangeProof {
             d1,
             li,
             ri,
+            extension_degree,
         })
     }
 
@@ -905,19 +955,7 @@ impl<'de> Deserialize<'de> for RangeProof {
 mod tests {
     use curve25519_dalek::{ristretto::CompressedRistretto, scalar::Scalar};
 
-    use crate::range_proof::RangeProof;
-
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct RangeProofMimic {
-        a: CompressedRistretto,
-        a1: CompressedRistretto,
-        b: CompressedRistretto,
-        r1: Scalar,
-        s1: Scalar,
-        d1: Scalar,
-        li: Vec<CompressedRistretto>,
-        ri: Vec<CompressedRistretto>,
-    }
+    use crate::{generators::pedersen_gens::ExtensionDegree, range_proof::RangeProof, PedersenGens};
 
     #[test]
     fn test_from_bytes() {
@@ -929,11 +967,60 @@ mod tests {
             b: Default::default(),
             r1: Default::default(),
             s1: Default::default(),
-            d1: Default::default(),
+            d1: vec![],
             li: vec![],
             ri: vec![],
+            extension_degree: ExtensionDegree::ZERO,
         };
         let proof_bytes = proof.to_bytes();
+        assert!(RangeProof::from_bytes(&proof_bytes).is_err());
+
+        let proof = RangeProof {
+            a: Default::default(),
+            a1: Default::default(),
+            b: Default::default(),
+            r1: Default::default(),
+            s1: Default::default(),
+            d1: vec![Scalar::default()],
+            li: vec![CompressedRistretto::default()],
+            ri: vec![CompressedRistretto::default()],
+            extension_degree: ExtensionDegree::ZERO,
+        };
+        let proof_bytes = proof.to_bytes();
+        assert!(RangeProof::from_bytes(&proof_bytes).is_ok());
+
+        let proof = RangeProof {
+            a: Default::default(),
+            a1: Default::default(),
+            b: Default::default(),
+            r1: Default::default(),
+            s1: Default::default(),
+            d1: vec![
+                Scalar::default(),
+                Scalar::default(),
+                Scalar::default(),
+                Scalar::default(),
+                Scalar::default(),
+                Scalar::default(),
+            ],
+            li: vec![CompressedRistretto::default()],
+            ri: vec![CompressedRistretto::default()],
+            extension_degree: ExtensionDegree::FIVE,
+        };
+        let proof_bytes = proof.to_bytes();
+        assert!(RangeProof::from_bytes(&proof_bytes).is_ok());
+        let mut proof_bytes_meddled = proof_bytes.clone();
+
+        for i in 0..u8::MAX {
+            if PedersenGens::extension_degree(i as usize).is_err() {
+                proof_bytes_meddled[0] = i;
+                if RangeProof::from_bytes(&proof_bytes_meddled).is_ok() {
+                    panic!("Should err");
+                }
+                break;
+            }
+        }
+
         for i in 0..proof_bytes.len() {
             match RangeProof::from_bytes(&proof_bytes[..proof_bytes.len() - i]) {
                 Ok(proof_from_bytes) => {
@@ -945,6 +1032,7 @@ mod tests {
                 },
             }
         }
+
         let mut proof_bytes_meddled = proof_bytes.clone();
         for i in 0..proof_bytes.len() * 10 {
             proof_bytes_meddled.append(&mut 0u8.to_le_bytes().to_vec());
@@ -958,6 +1046,7 @@ mod tests {
                 },
             }
         }
+
         let mut proof_bytes_meddled = proof_bytes.clone();
         for _i in 0..proof_bytes.len() * 10 {
             proof_bytes_meddled.append(&mut u8::MAX.to_le_bytes().to_vec());

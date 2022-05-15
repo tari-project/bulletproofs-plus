@@ -27,24 +27,30 @@ pub fn nonce(
     index_k: Option<usize>,
 ) -> Result<Scalar, ProofError> {
     // Using `Blake2b::with_params(key: &[u8], salt: &[u8], persona: &[u8])`, if the `persona` or `salt` parameters
-    // exceed 16 bytes, unhandled exceptions occur, so we have to do the length check ourselves. In our implementation
-    // a length check on `salt` is not required as its length is limited by the byte representation of `2 x usize::MAX`,
-    // which is `= 16`.
+    // exceed 16 bytes, unhandled exceptions occur, so we have to do the length check ourselves.
     // See https://www.blake2.net/blake2.pdf section 2.8
     let encoded_label = label.as_bytes();
     if encoded_label.len() > 16 {
         return Err(ProofError::InvalidLength("nonce label".to_string()));
     };
-    let mut key = Vec::with_capacity(51); // 1 + 32 + 1 + 8 + 1 + 8
-    key.push(0u8); // Add one byte to initialize the vector
-    key.append(&mut seed_nonce.to_bytes().to_vec());
+    // Notes:
+    // - Fixed length encodings of 'seed_nonce', optional('j', 'index_j') and optional('k', 'index_k') are concatenated
+    //   to form the Blake2B key input
+    // - Domain separation labels 'j' an 'k' ensure that collisions for any combination of inputs to this function is
+    //   not possible
+    // - Enough memory is allocated to hold the two optional elements as well in lieu of performing calculations based
+    //   on optional logic to determine the exact length
+    // - 'append' performance is O(log n)
+    let mut key = Vec::with_capacity(51); // 1 + 32 + optional(1 + 8)  + optional(1 + 8)
+    key.push(0u8); // Initialize the vector to enable 'append' (1 byte)
+    key.append(&mut seed_nonce.to_bytes().to_vec()); // Fixed length encoding of 'seed_nonce' (32 bytes)
     if let Some(index) = index_j {
-        key.append(&mut b"j".to_vec()); // Domain separated index label
-        key.append(&mut index.to_le_bytes().to_vec());
+        key.append(&mut b"j".to_vec()); // Domain separated index label (1 byte)
+        key.append(&mut index.to_le_bytes().to_vec()); // Fixed length encoding of 'index_j' (8 bytes)
     }
     if let Some(index) = index_k {
-        key.append(&mut b"k".to_vec()); // Domain separated index label
-        key.append(&mut index.to_le_bytes().to_vec());
+        key.append(&mut b"k".to_vec()); // Domain separated index label (1 byte)
+        key.append(&mut index.to_le_bytes().to_vec()); // Fixed length encoding of 'index_k' (8 bytes)
     }
     let hasher = Blake2b::with_params(&key, &[], encoded_label);
 
@@ -81,10 +87,17 @@ pub fn read32(data: &[u8]) -> [u8; 32] {
     buf32
 }
 
+/// Given `data` with `len >= 1`, return the first 1 byte.
+pub fn read8(data: &[u8]) -> [u8; 1] {
+    let mut buf8 = [0u8; 1];
+    buf8[..].copy_from_slice(&data[..1]);
+    buf8
+}
+
 #[cfg(test)]
 mod tests {
     use curve25519_dalek::scalar::Scalar;
-    use rand::thread_rng;
+    use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
     use crate::{
         errors::ProofError,
@@ -95,8 +108,8 @@ mod tests {
 
     #[test]
     fn test_nonce() {
-        let rng = &mut thread_rng();
-        let seed_nonce = Scalar::random_not_zero(rng);
+        let mut rng = thread_rng();
+        let seed_nonce = Scalar::random_not_zero(&mut rng);
 
         // Create personalized nonces
         let ref_nonce_eta = nonce(&seed_nonce, "eta", None, None).unwrap();
@@ -157,74 +170,28 @@ mod tests {
             nonce(&seed_nonce, "", None, None).unwrap(),
             nonce(&seed_nonce, "", None, Some(1)).unwrap()
         );
-    }
 
-    #[test]
-    fn test_blake2b_parameter_lengths() {
-        let mut rng = rand::thread_rng();
-        assert!(nonce(
-            &Scalar::random(&mut rng),
-            "1234567890123",
-            Some(usize::MIN),
-            Some(usize::MIN)
-        )
-        .is_ok());
-        assert!(nonce(
-            &Scalar::random(&mut rng),
-            "12345678901234",
-            Some(usize::MAX),
-            Some(usize::MIN)
-        )
-        .is_ok());
-        assert!(nonce(
-            &Scalar::random(&mut rng),
-            "123456789012345",
-            Some(usize::MIN),
-            Some(usize::MAX)
-        )
-        .is_ok());
-        assert!(nonce(
-            &Scalar::random(&mut rng),
-            "1234567890123456",
-            Some(usize::MAX),
-            Some(usize::MAX)
-        )
-        .is_ok());
-        assert!(nonce(
-            &Scalar::random(&mut rng),
-            "1234567890123456",
-            Some(usize::MAX),
-            Some(usize::MAX)
-        )
-        .is_ok());
-        assert!(nonce(
-            &Scalar::random(&mut rng),
-            "12345678901234567",
-            Some(usize::MAX),
-            Some(usize::MAX)
-        )
-        .is_err());
-        assert!(nonce(
-            &Scalar::random(&mut rng),
-            "123456789012345678",
-            Some(usize::MAX),
-            Some(usize::MAX)
-        )
-        .is_err());
-        assert!(nonce(
-            &Scalar::random(&mut rng),
-            "1234567890123456789",
-            Some(usize::MAX),
-            Some(usize::MAX)
-        )
-        .is_err());
-        assert!(nonce(
-            &Scalar::random(&mut rng),
-            "12345678901234567890",
-            Some(usize::MAX),
-            Some(usize::MAX)
-        )
-        .is_err());
+        // Verify no unhandled exceptions occur with varying label parameter lengths
+        for i in 0..32 {
+            let label: String = (&mut rng).sample_iter(Alphanumeric).take(i).map(char::from).collect();
+            match nonce(
+                &Scalar::random(&mut rng),
+                label.as_str(),
+                Some(usize::MAX),
+                Some(usize::MAX),
+            ) {
+                Ok(_) => {
+                    if i > 16 {
+                        panic!("Should err on label size >16")
+                    }
+                },
+                Err(_) => {
+                    if i <= 16 {
+                        panic!("Should not err on label size <=16")
+                    }
+                },
+            }
+        }
     }
 
     fn bit_vector_to_value(bit_vector: &[Scalar]) -> Result<u64, ProofError> {
