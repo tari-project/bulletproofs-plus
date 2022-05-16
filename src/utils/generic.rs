@@ -1,5 +1,8 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
+//   Modified from:
+//     Copyright (c) 2018 Chain, Inc.
+//     SPDX-License-Identifier: MIT
 
 //! Bulletproofs+ utilities
 
@@ -58,6 +61,13 @@ pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar
         }
     }
     Ok(result)
+}
+
+/// Given `data` with `len >= 32`, return the first 32 bytes.
+pub fn read32(data: &[u8]) -> [u8; 32] {
+    let mut buf32 = [0u8; 32];
+    buf32[..].copy_from_slice(&data[..32]);
+    buf32
 }
 
 #[cfg(test)]

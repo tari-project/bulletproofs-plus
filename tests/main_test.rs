@@ -231,5 +231,19 @@ fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strate
                 },
             };
         }
+
+        // 9. Test serialize/deserialize
+        for proof in proofs {
+            // This will test the underlying proof to bytes and from bytes
+            let serialized_proof = proof.to_bytes();
+            let deserialized_proof = RangeProof::from_bytes(&serialized_proof).unwrap();
+            assert_eq!(proof, deserialized_proof);
+
+            // This will test using serde as the serializer/deserializer
+            let serialized_proof_bincode = bincode::serialize(&proof).unwrap();
+            let deserialized_proof_bincode: RangeProof =
+                bincode::deserialize(serialized_proof_bincode.as_slice()).unwrap();
+            assert_eq!(proof, deserialized_proof_bincode);
+        }
     }
 }
