@@ -621,6 +621,9 @@ impl RangeProof {
                     } else {
                         masks.push(None);
                     }
+                    if extract_masks == ExtractMasks::ONLY {
+                        continue;
+                    }
                 },
             }
 
