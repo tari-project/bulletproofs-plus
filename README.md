@@ -18,13 +18,14 @@ prover time; however, our 1% increase in verification time is on par with their 
 when employing batch verification; exponential gains range from 37% to 79% for batch sizes from 2 to 256 proofs.
 
 Extended commitments add virtually no overhead in single or aggregated range proof creation or verification time, 
-neither in batched verification time, nor when compared to regular Pedersen commitments.
+neither in batched verification time nor when compared to regular Pedersen commitments.
 
 Mask/blinding factor recovery adds moderate (5% for single proof-verification with extension degree zero) to significant 
 (22% for 256 single batched proofs verification with extension degree two) overhead to verification performance; 
 comparisons below were made without activating the recovery feature. Deactivating proof verification for a 
 "mask-recovery-only" mode of operation is possible and omits the expensive multi-exponentiation multiplication, 
-resulting in a strictly linear performance.
+resulting in linear performance (as opposed to exponential gains/cost). Batched "mask-recovery-only" is approximately 
+10% more costly on average when compared to non-batched recovery. 
 
 **Note:** The test results listed here are relative; the numbers are not absolute. The tests were run on an Intel(R) 
 Core(TM) i7-7820HQ CPU laptop without using the `simd_backend` feature.
@@ -127,19 +128,19 @@ Batched verification shows significant gains when compared to linear verificatio
 
 ### Batched 64-bit single range proof mask recovery
 
-Mask-recovery-only mode is linear and does not benefit from batched operations.
+Mask-recovery-only mode is linear and does not benefit from batched operations; batched recovery is suboptimal.
 
 | Batch size | No mask ed_0 (ms) | Mask only ed_0 (ms) | Linear mask only (ms) | Linear vs. mask only (%) | No mask vs. mask only (%) |
-|------------|-------------------|---------------------|-----------------------|--------------------------|---------------------------|
-| 1          | 2.36              | 0.38                | 0.38                  | 100.0%                   | 15.9%                     |
-| 2          | 2.94              | 0.67                | 0.75                  | 112.1%                   | 22.8%                     |
-| 4          | 4.11              | 1.69                | 1.50                  | 88.9%                    | 41.0%                     |
-| 8          | 6.24              | 3.46                | 3.00                  | 86.6%                    | 55.5%                     |
-| 16         | 10.55             | 6.97                | 6.00                  | 86.1%                    | 66.0%                     |
-| 32         | 18.77             | 14.00               | 12.00                 | 85.7%                    | 74.6%                     |
-| 64         | 31.01             | 23.72               | 24.01                 | 101.2%                   | 76.5%                     |
-| 128        | 59.76             | 47.50               | 48.02                 | 101.1%                   | 79.5%                     |
-| 256        | 117.79            | 94.43               | 96.03                 | 101.7%                   | 80.2%                     |
+| ---------- | ----------------- | ------------------- | --------------------- | ------------------------ | ------------------------- |
+| 1          | 2.10              | 0.22                | 0.22                  | 100.0%                   | 10.4%                     |
+| 2          | 2.59              | 0.43                | 0.44                  | 102.2%                   | 16.5%                     |
+| 4          | 3.59              | 0.90                | 0.87                  | 97.0%                    | 25.0%                     |
+| 8          | 5.46              | 1.87                | 1.74                  | 93.4%                    | 34.2%                     |
+| 16         | 9.31              | 3.78                | 3.49                  | 92.3%                    | 40.6%                     |
+| 32         | 16.54             | 9.31                | 6.97                  | 74.9%                    | 56.3%                     |
+| 64         | 30.39             | 15.27               | 13.95                 | 91.3%                    | 50.3%                     |
+| 128        | 58.25             | 30.60               | 27.90                 | 91.2%                    | 52.5%                     |
+| 256        | 113.18            | 61.36               | 55.80                 | 90.9%                    | 54.2%                     |
 
 <p align="center"><img src="./docs/assets/img_bp_plus_batched_masks.png" width="550" /></p>
 
@@ -158,7 +159,7 @@ Mask-recovery-only mode is linear and does not benefit from batched operations.
     [Bulletproofs](https://github.com/dalek-cryptography/bulletproofs), which in turn is built on top of Dalek's 
     [group operations on Ristretto and Curve25519](https://github.com/dalek-cryptography/curve25519-dalek).
 
-[5] Another pre-cursor to this work is 
+[5] Another precursor to this work is 
     [Monero's implementation](https://www.getmonero.org/2020/12/24/Bulletproofs+-in-Monero.html) of Bulletproofs+.
 
 ## Copyright
