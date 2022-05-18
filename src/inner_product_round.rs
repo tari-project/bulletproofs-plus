@@ -19,13 +19,12 @@ use crate::{
     generators::pedersen_gens::ExtensionDegree,
     protocols::{ristretto_point_protocol::RistrettoPointProtocol, scalar_protocol::ScalarProtocol},
     range_proof::RangeProof,
-    utils::generic::nonce,
+    utils::{generic::nonce, non_debug::NonDebug},
     PedersenGens,
 };
 
 /// The struct that will hold the inner product calculation for each round, called consecutively
-#[derive(derivative::Derivative)]
-#[derivative(Debug)]
+#[derive(Debug)]
 pub struct InnerProductRound<'a> {
     // Common data
     gi_base: Vec<RistrettoPoint>,
@@ -51,8 +50,7 @@ pub struct InnerProductRound<'a> {
     ri: Vec<RistrettoPoint>,
 
     // Transcript
-    #[derivative(Debug = "ignore")]
-    transcript: &'a mut Transcript,
+    transcript: NonDebug<&'a mut Transcript>,
 
     // Seed for mask recovery
     round: usize,
@@ -108,7 +106,7 @@ impl<'a> InnerProductRound<'a> {
             d1: Vec::with_capacity(extension_degree as usize),
             li: Vec::with_capacity(n * aggregation_factor + 2),
             ri: Vec::with_capacity(n * aggregation_factor + 2),
-            transcript,
+            transcript: transcript.into(),
             round: 0,
             seed_nonce,
         })
@@ -152,7 +150,7 @@ impl<'a> InnerProductRound<'a> {
             self.a1 = Some(a1);
             self.b = Some(b);
 
-            let e = RangeProof::transcript_points_a1_b_challenge_e(self.transcript, &a1.compress(), &b.compress())?;
+            let e = RangeProof::transcript_points_a1_b_challenge_e(*self.transcript, &a1.compress(), &b.compress())?;
 
             self.r1 = Some(r + self.ai[0] * e);
             self.s1 = Some(s + self.bi[0] * e);
@@ -237,7 +235,7 @@ impl<'a> InnerProductRound<'a> {
             .push(RistrettoPoint::vartime_multiscalar_mul(ri_scalars, ri_points));
 
         let e = RangeProof::transcript_points_l_r_challenge_e(
-            self.transcript,
+            *self.transcript,
             &self.li[self.li.len() - 1].compress(),
             &self.ri[self.ri.len() - 1].compress(),
         )?;

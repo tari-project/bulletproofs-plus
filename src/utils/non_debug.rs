@@ -13,14 +13,6 @@ pub struct NonDebug<T> {
     inner: T,
 }
 
-impl<T> NonDebug<T> {
-    #[allow(dead_code)]
-    /// Return the inner
-    pub fn into_inner(self) -> T {
-        self.inner
-    }
-}
-
 /// Custom implementation for 'Debug'
 impl<T> fmt::Debug for NonDebug<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

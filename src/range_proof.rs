@@ -846,8 +846,8 @@ impl RangeProof {
     }
 
     /// Helper function to construct the e challenge scalar after points A1 and B
-    pub fn transcript_points_a1_b_challenge_e<'a>(
-        transcript: &'a mut Transcript,
+    pub fn transcript_points_a1_b_challenge_e(
+        transcript: &mut Transcript,
         a1: &CompressedRistretto,
         b: &CompressedRistretto,
     ) -> Result<Scalar, ProofError> {
