@@ -23,25 +23,25 @@ fn test_non_aggregated_single_proof_multiple_bit_lengths() {
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ZERO,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::NoOffset,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ONE,
+        ExtensionDegree::One,
         &ProofOfMinimumValueStrategy::Intermediate,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::TWO,
+        ExtensionDegree::Two,
         &ProofOfMinimumValueStrategy::EqualToValue,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ZERO,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -53,25 +53,25 @@ fn test_aggregated_single_proof_multiple_bit_lengths() {
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ZERO,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::NoOffset,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ONE,
+        ExtensionDegree::One,
         &ProofOfMinimumValueStrategy::Intermediate,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::TWO,
+        ExtensionDegree::Two,
         &ProofOfMinimumValueStrategy::EqualToValue,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ZERO,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -83,25 +83,25 @@ fn test_non_aggregated_multiple_proofs_single_bit_length() {
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ZERO,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::NoOffset,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ONE,
+        ExtensionDegree::One,
         &ProofOfMinimumValueStrategy::Intermediate,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::TWO,
+        ExtensionDegree::Two,
         &ProofOfMinimumValueStrategy::EqualToValue,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ZERO,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -113,25 +113,25 @@ fn test_mixed_aggregation_multiple_proofs_single_bit_length() {
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ZERO,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::NoOffset,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ONE,
+        ExtensionDegree::One,
         &ProofOfMinimumValueStrategy::Intermediate,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::TWO,
+        ExtensionDegree::Two,
         &ProofOfMinimumValueStrategy::EqualToValue,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::ZERO,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }

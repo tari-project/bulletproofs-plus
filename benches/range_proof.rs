@@ -19,7 +19,7 @@ use tari_bulletproofs_plus::{
     generators::pedersen_gens::ExtensionDegree,
     protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
-    range_proof::{ExtractMasks, RangeProof},
+    range_proof::{RangeProof, VerifyAction},
     range_statement::RangeStatement,
     range_witness::RangeWitness,
 };
@@ -84,12 +84,12 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
 
 fn create_aggregated_rangeproof_n_8_16_32(c: &mut Criterion) {
     for bit_length in [8, 16, 32] {
-        create_aggregated_rangeproof_helper(bit_length, ExtensionDegree::ZERO, c);
+        create_aggregated_rangeproof_helper(bit_length, ExtensionDegree::Zero, c);
     }
 }
 
 fn create_aggregated_rangeproof_n_64(c: &mut Criterion) {
-    for extension_degree in &[ExtensionDegree::ZERO, ExtensionDegree::ONE, ExtensionDegree::TWO] {
+    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::One, ExtensionDegree::Two] {
         create_aggregated_rangeproof_helper(64, *extension_degree, c);
     }
 }
@@ -162,12 +162,12 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
 
 fn verify_aggregated_rangeproof_n_8_16_32(c: &mut Criterion) {
     for bit_length in [8, 16, 32] {
-        verify_aggregated_rangeproof_helper(bit_length, ExtensionDegree::ZERO, c);
+        verify_aggregated_rangeproof_helper(bit_length, ExtensionDegree::Zero, c);
     }
 }
 
 fn verify_aggregated_rangeproof_n_64(c: &mut Criterion) {
-    for extension_degree in &[ExtensionDegree::ZERO, ExtensionDegree::ONE, ExtensionDegree::TWO] {
+    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::One, ExtensionDegree::Two] {
         verify_aggregated_rangeproof_helper(64, *extension_degree, c);
     }
 }
@@ -219,7 +219,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
         proofs.push(proof.unwrap());
     }
 
-    for extract_masks in [ExtractMasks::NO, ExtractMasks::ONLY] {
+    for extract_masks in [VerifyAction::VerifyOnly, VerifyAction::RecoverOnly] {
         for number_of_range_proofs in BATCHED_SIZES {
             let label = format!(
                 "Batched {}-bit BP+ verify {} deg {:?} masks {:?}",
@@ -233,11 +233,11 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                 b.iter(|| {
                     // 5. Verify the entire batch of single proofs
                     match extract_masks {
-                        ExtractMasks::NO => {
+                        VerifyAction::VerifyOnly => {
                             let _masks =
                                 RangeProof::verify_do_not_recover_masks(transcript_label, statements, proofs).unwrap();
                         },
-                        ExtractMasks::ONLY => {
+                        VerifyAction::RecoverOnly => {
                             let _masks = RangeProof::recover_masks_ony(transcript_label, statements, proofs).unwrap();
                         },
                         _ => {},
@@ -250,7 +250,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
 }
 
 fn verify_batched_rangeproof_n_64(c: &mut Criterion) {
-    for extension_degree in &[ExtensionDegree::ZERO, ExtensionDegree::ONE, ExtensionDegree::TWO] {
+    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::One, ExtensionDegree::Two] {
         verify_batched_rangeproofs_helper(64, *extension_degree, c);
     }
 }

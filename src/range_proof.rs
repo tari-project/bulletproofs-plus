@@ -27,13 +27,13 @@ use crate::{
 
 /// Optionally extract masks when verifying the proofs
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum ExtractMasks {
+pub enum VerifyAction {
     /// No masks will be recovered (e.g. as a public entity)
-    NO,
+    VerifyOnly,
     /// Recover masks and verify the proofs (e.g. as the commitment owner)
-    YES,
+    RecoverAndVerify,
     /// Only recover masks but do not verify the proofs (e.g. as the commitment owner)
-    ONLY,
+    RecoverOnly,
 }
 
 /// Contains the public range proof parameters intended for a verifier
@@ -62,7 +62,7 @@ pub struct RangeProof {
 ///     generators::pedersen_gens::ExtensionDegree,
 ///     protocols::scalar_protocol::ScalarProtocol,
 ///     range_parameters::RangeParameters,
-///     range_proof::{ExtractMasks, RangeProof},
+///     range_proof::{RangeProof, VerifyAction},
 ///     range_statement::RangeStatement,
 ///     range_witness::RangeWitness,
 /// };
@@ -80,7 +80,7 @@ pub struct RangeProof {
 ///
 /// for aggregation_size in proof_batch {
 ///     // 1. Generators
-///     let generators = RangeParameters::init(bit_length, aggregation_size, ExtensionDegree::ZERO).unwrap();
+///     let generators = RangeParameters::init(bit_length, aggregation_size, ExtensionDegree::Zero).unwrap();
 ///
 ///     // 2. Create witness data
 ///     let mut commitments = vec![];
@@ -413,7 +413,12 @@ impl RangeProof {
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
     ) -> Result<Vec<Option<Scalar>>, ProofError> {
-        RangeProof::verify(transcript_label, statements, range_proofs, ExtractMasks::YES)
+        RangeProof::verify(
+            transcript_label,
+            statements,
+            range_proofs,
+            VerifyAction::RecoverAndVerify,
+        )
     }
 
     /// Verify a batch of single and/or aggregated range proofs as a public entity
@@ -422,7 +427,7 @@ impl RangeProof {
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
     ) -> Result<Vec<Option<Scalar>>, ProofError> {
-        RangeProof::verify(transcript_label, statements, range_proofs, ExtractMasks::NO)
+        RangeProof::verify(transcript_label, statements, range_proofs, VerifyAction::VerifyOnly)
     }
 
     /// Recover the masks for single range proofs by supplying the optional seed nonces
@@ -431,7 +436,7 @@ impl RangeProof {
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
     ) -> Result<Vec<Option<Scalar>>, ProofError> {
-        RangeProof::verify(transcript_label, statements, range_proofs, ExtractMasks::ONLY)
+        RangeProof::verify(transcript_label, statements, range_proofs, VerifyAction::RecoverOnly)
     }
 
     // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
@@ -440,7 +445,7 @@ impl RangeProof {
         transcript_label: &'static str,
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
-        extract_masks: ExtractMasks,
+        extract_masks: VerifyAction,
     ) -> Result<Vec<Option<Scalar>>, ProofError> {
         // Verify generators consistency & select largest aggregation factor
         let (max_mn, max_index) = RangeProof::verify_statements_and_generators_consistency(statements, range_proofs)?;
@@ -486,7 +491,7 @@ impl RangeProof {
 
         // Recovered masks
         let mut masks = match extract_masks {
-            ExtractMasks::NO => {
+            VerifyAction::VerifyOnly => {
                 vec![]
             },
             _ => {
@@ -602,7 +607,7 @@ impl RangeProof {
 
             // Recover the mask if possible (only for non-aggregated proofs)
             match extract_masks {
-                ExtractMasks::NO => masks.push(None),
+                VerifyAction::VerifyOnly => masks.push(None),
                 _ => {
                     if let Some(seed_nonce) = statements[index].seed_nonce {
                         for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
@@ -621,7 +626,7 @@ impl RangeProof {
                     } else {
                         masks.push(None);
                     }
-                    if extract_masks == ExtractMasks::ONLY {
+                    if extract_masks == VerifyAction::RecoverOnly {
                         continue;
                     }
                 },
@@ -680,7 +685,7 @@ impl RangeProof {
                 points.push(ri[j]);
             }
         }
-        if extract_masks == ExtractMasks::ONLY {
+        if extract_masks == VerifyAction::RecoverOnly {
             return Ok(masks);
         }
 
@@ -973,7 +978,7 @@ mod tests {
             d1: vec![],
             li: vec![],
             ri: vec![],
-            extension_degree: ExtensionDegree::ZERO,
+            extension_degree: ExtensionDegree::Zero,
         };
         let proof_bytes = proof.to_bytes();
         assert!(RangeProof::from_bytes(&proof_bytes).is_err());
@@ -987,7 +992,7 @@ mod tests {
             d1: vec![Scalar::default()],
             li: vec![CompressedRistretto::default()],
             ri: vec![CompressedRistretto::default()],
-            extension_degree: ExtensionDegree::ZERO,
+            extension_degree: ExtensionDegree::Zero,
         };
         let proof_bytes = proof.to_bytes();
         assert!(RangeProof::from_bytes(&proof_bytes).is_ok());
@@ -1008,7 +1013,7 @@ mod tests {
             ],
             li: vec![CompressedRistretto::default()],
             ri: vec![CompressedRistretto::default()],
-            extension_degree: ExtensionDegree::FIVE,
+            extension_degree: ExtensionDegree::Five,
         };
         let proof_bytes = proof.to_bytes();
         assert!(RangeProof::from_bytes(&proof_bytes).is_ok());

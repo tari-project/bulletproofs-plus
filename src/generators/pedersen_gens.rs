@@ -42,17 +42,17 @@ pub struct PedersenGens {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ExtensionDegree {
     /// Default Pedersen commitment
-    ZERO = 1,
+    Zero = 1,
     /// Pedersen commitment extended with one degree
-    ONE = 2,
+    One = 2,
     /// Pedersen commitment extended with two degrees
-    TWO = 3,
+    Two = 3,
     /// Pedersen commitment extended with three degrees
-    THREE = 4,
+    Three = 4,
     /// Pedersen commitment extended with four degrees
-    FOUR = 5,
+    Four = 5,
     /// Pedersen commitment extended with five degrees
-    FIVE = 6,
+    Five = 6,
 }
 
 lazy_static! {
@@ -108,7 +108,7 @@ impl PedersenGens {
         let (g_base_vec, g_base_compressed_vec) = PedersenGens::g_base(extension_degree);
         let index = extension_degree as usize;
         match extension_degree {
-            ExtensionDegree::ZERO => PedersenGens::default(),
+            ExtensionDegree::Zero => PedersenGens::default(),
             _ => PedersenGens {
                 g_base_vec: g_base_vec[..index].to_owned(),
                 g_base_compressed_vec: g_base_compressed_vec[..index].to_owned(),
@@ -122,10 +122,10 @@ impl PedersenGens {
     // on the fly compression for compressed base points otherwise
     fn g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<CompressedRistretto>) {
         match extension_degree {
-            ExtensionDegree::ZERO => (vec![*RISTRETTO_BASEPOINT_POINT_BLINDING_1], vec![
+            ExtensionDegree::Zero => (vec![*RISTRETTO_BASEPOINT_POINT_BLINDING_1], vec![
                 *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
             ]),
-            ExtensionDegree::ONE => (
+            ExtensionDegree::One => (
                 vec![
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
@@ -135,7 +135,7 @@ impl PedersenGens {
                     *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
                 ],
             ),
-            ExtensionDegree::TWO => (
+            ExtensionDegree::Two => (
                 vec![
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
@@ -147,7 +147,7 @@ impl PedersenGens {
                     *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
                 ],
             ),
-            ExtensionDegree::THREE => (
+            ExtensionDegree::Three => (
                 vec![
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
@@ -161,7 +161,7 @@ impl PedersenGens {
                     *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_4,
                 ],
             ),
-            ExtensionDegree::FOUR => (
+            ExtensionDegree::Four => (
                 vec![
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
@@ -177,7 +177,7 @@ impl PedersenGens {
                     *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_5,
                 ],
             ),
-            ExtensionDegree::FIVE => (
+            ExtensionDegree::Five => (
                 vec![
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                     *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
@@ -201,12 +201,12 @@ impl PedersenGens {
     /// Helper function to convert a size into an extension degree
     pub fn extension_degree(size: usize) -> Result<ExtensionDegree, ProofError> {
         match size {
-            1 => Ok(ExtensionDegree::ZERO),
-            2 => Ok(ExtensionDegree::ONE),
-            3 => Ok(ExtensionDegree::TWO),
-            4 => Ok(ExtensionDegree::THREE),
-            5 => Ok(ExtensionDegree::FOUR),
-            6 => Ok(ExtensionDegree::FIVE),
+            1 => Ok(ExtensionDegree::Zero),
+            2 => Ok(ExtensionDegree::One),
+            3 => Ok(ExtensionDegree::Two),
+            4 => Ok(ExtensionDegree::Three),
+            5 => Ok(ExtensionDegree::Four),
+            6 => Ok(ExtensionDegree::Five),
             _ => Err(ProofError::InvalidArgument("Extension degree not valid".to_string())),
         }
     }
@@ -214,13 +214,13 @@ impl PedersenGens {
 
 impl Default for PedersenGens {
     fn default() -> Self {
-        let (g_base_vec, g_base_compressed_vec) = PedersenGens::g_base(ExtensionDegree::ZERO);
+        let (g_base_vec, g_base_compressed_vec) = PedersenGens::g_base(ExtensionDegree::Zero);
         PedersenGens {
             h_base: RISTRETTO_BASEPOINT_POINT,
             g_base_vec,
             h_base_compressed: RISTRETTO_BASEPOINT_COMPRESSED,
             g_base_compressed_vec,
-            extension_degree: ExtensionDegree::ZERO,
+            extension_degree: ExtensionDegree::Zero,
         }
     }
 }
@@ -255,12 +255,12 @@ mod tests {
             *RISTRETTO_BASEPOINT_POINT_BLINDING_6,
         ];
         for extension_degree in [
-            ExtensionDegree::ZERO,
-            ExtensionDegree::ONE,
-            ExtensionDegree::TWO,
-            ExtensionDegree::THREE,
-            ExtensionDegree::FOUR,
-            ExtensionDegree::FIVE,
+            ExtensionDegree::Zero,
+            ExtensionDegree::One,
+            ExtensionDegree::Two,
+            ExtensionDegree::Three,
+            ExtensionDegree::Four,
+            ExtensionDegree::Five,
         ] {
             let pc_gens = PedersenGens::with_extension_degree(extension_degree);
             for (i, item) in lazy_statics.iter().enumerate().take(pc_gens.extension_degree as usize) {
@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn test_default() {
         assert_eq!(
-            PedersenGens::with_extension_degree(ExtensionDegree::ZERO),
+            PedersenGens::with_extension_degree(ExtensionDegree::Zero),
             PedersenGens::default()
         );
     }
@@ -294,15 +294,15 @@ mod tests {
         ];
 
         for extension_degree in [
-            ExtensionDegree::ZERO,
-            ExtensionDegree::ONE,
-            ExtensionDegree::TWO,
-            ExtensionDegree::THREE,
-            ExtensionDegree::FOUR,
-            ExtensionDegree::FIVE,
+            ExtensionDegree::Zero,
+            ExtensionDegree::One,
+            ExtensionDegree::Two,
+            ExtensionDegree::Three,
+            ExtensionDegree::Four,
+            ExtensionDegree::Five,
         ] {
             let pc_gens = PedersenGens::with_extension_degree(extension_degree);
-            for i in 0..ExtensionDegree::FIVE as usize {
+            for i in 0..ExtensionDegree::Five as usize {
                 if i == extension_degree as usize {
                     assert!(pc_gens.commit(value, blindings[..i].to_owned().as_slice()).is_ok());
                 } else {

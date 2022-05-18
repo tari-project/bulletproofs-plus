@@ -16,12 +16,12 @@ fn pc_gens(c: &mut Criterion) {
     let mut group = c.benchmark_group("PedersenGens");
     group.sampling_mode(SamplingMode::Flat);
     for extension_degree in &[
-        ExtensionDegree::ZERO,
-        ExtensionDegree::ONE,
-        ExtensionDegree::TWO,
-        ExtensionDegree::THREE,
-        ExtensionDegree::FOUR,
-        ExtensionDegree::FIVE,
+        ExtensionDegree::Zero,
+        ExtensionDegree::One,
+        ExtensionDegree::Two,
+        ExtensionDegree::Three,
+        ExtensionDegree::Four,
+        ExtensionDegree::Five,
     ] {
         let label = format!("PedersenGens::with_extension_degree({:?})", extension_degree);
         group.bench_function(&label, |b|
