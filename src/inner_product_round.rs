@@ -16,12 +16,11 @@ use zeroize::Zeroize;
 
 use crate::{
     errors::ProofError,
-    protocols::{
-        ristretto_point_protocol::RistrettoPointProtocol,
-        scalar_protocol::ScalarProtocol,
-        transcript_protocol::TranscriptProtocol,
-    },
+    generators::pedersen_gens::ExtensionDegree,
+    protocols::{ristretto_point_protocol::RistrettoPointProtocol, scalar_protocol::ScalarProtocol},
+    range_proof::RangeProof,
     utils::{generic::nonce, non_debug::NonDebug},
+    PedersenGens,
 };
 
 /// The struct that will hold the inner product calculation for each round, called consecutively
@@ -30,22 +29,23 @@ pub struct InnerProductRound<'a> {
     // Common data
     gi_base: Vec<RistrettoPoint>,
     hi_base: Vec<RistrettoPoint>,
-    g_base: RistrettoPoint,
+    g_base: Vec<RistrettoPoint>,
     h_base: RistrettoPoint,
     y_powers: Vec<Scalar>,
     done: bool,
+    extension_degree: ExtensionDegree,
 
     // Prover data
     ai: Vec<Scalar>,
     bi: Vec<Scalar>,
-    alpha: Scalar,
+    alpha: Vec<Scalar>,
 
     // Verifier data
     a1: Option<RistrettoPoint>,
     b: Option<RistrettoPoint>,
     r1: Option<Scalar>,
     s1: Option<Scalar>,
-    d1: Option<Scalar>,
+    d1: Vec<Scalar>,
     li: Vec<RistrettoPoint>,
     ri: Vec<RistrettoPoint>,
 
@@ -63,11 +63,11 @@ impl<'a> InnerProductRound<'a> {
     pub fn init(
         gi_base: Vec<RistrettoPoint>,
         hi_base: Vec<RistrettoPoint>,
-        g_base: RistrettoPoint,
+        g_base: Vec<RistrettoPoint>,
         h_base: RistrettoPoint,
         ai: Vec<Scalar>,
         bi: Vec<Scalar>,
-        alpha: Scalar,
+        alpha: Vec<Scalar>,
         y_powers: Vec<Scalar>,
         transcript: &'a mut Transcript,
         seed_nonce: Option<Scalar>,
@@ -75,69 +75,89 @@ impl<'a> InnerProductRound<'a> {
     ) -> Result<Self, ProofError> {
         let n = gi_base.len();
         if gi_base.is_empty() || hi_base.is_empty() || ai.is_empty() || bi.is_empty() || y_powers.is_empty() {
-            Err(ProofError::InvalidLength(
+            return Err(ProofError::InvalidLength(
                 "Vectors gi_base, hi_base, ai, bi and y_powers cannot be empty".to_string(),
-            ))
-        } else if !(hi_base.len() == n && ai.len() == n && bi.len() == n) || (y_powers.len() != (n + 2)) {
-            Err(ProofError::InvalidArgument(
-                "Vector length for inner product round".to_string(),
-            ))
-        } else {
-            Ok(Self {
-                gi_base,
-                hi_base,
-                g_base,
-                h_base,
-                y_powers,
-                done: false,
-                ai,
-                bi,
-                alpha,
-                a1: None,
-                b: None,
-                r1: None,
-                s1: None,
-                d1: None,
-                li: Vec::with_capacity(n * aggregation_factor + 2),
-                ri: Vec::with_capacity(n * aggregation_factor + 2),
-                transcript: transcript.into(),
-                round: 0,
-                seed_nonce,
-            })
+            ));
         }
+        if !(hi_base.len() == n && ai.len() == n && bi.len() == n) || (y_powers.len() != (n + 2)) {
+            return Err(ProofError::InvalidArgument(
+                "Vector length for inner product round".to_string(),
+            ));
+        }
+        let extension_degree = PedersenGens::extension_degree(g_base.len())?;
+        if extension_degree as usize != alpha.len() {
+            return Err(ProofError::InvalidLength("Inconsistent extension degree".to_string()));
+        }
+        Ok(Self {
+            gi_base,
+            hi_base,
+            g_base,
+            h_base,
+            y_powers,
+            done: false,
+            extension_degree,
+            ai,
+            bi,
+            alpha,
+            a1: None,
+            b: None,
+            r1: None,
+            s1: None,
+            d1: Vec::with_capacity(extension_degree as usize),
+            li: Vec::with_capacity(n * aggregation_factor + 2),
+            ri: Vec::with_capacity(n * aggregation_factor + 2),
+            transcript: transcript.into(),
+            round: 0,
+            seed_nonce,
+        })
     }
 
     /// Calculate the inner product, updating 'self' for each round
     pub fn inner_product<T: RngCore + CryptoRng>(&mut self, rng: &mut T) -> Result<(), ProofError> {
         let mut n = self.gi_base.len();
+        let extension_degree = self.extension_degree as usize;
         if n == 1 {
             self.done = true;
 
             // Random masks
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
             let (r, s) = (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng));
-            let (d, eta) = if let Some(seed_nonce) = self.seed_nonce {
-                (nonce(&seed_nonce, "d", None)?, nonce(&seed_nonce, "eta", None)?)
+            let (mut d, mut eta) = (
+                Vec::with_capacity(extension_degree),
+                Vec::with_capacity(extension_degree),
+            );
+            if let Some(seed_nonce) = self.seed_nonce {
+                for k in 0..extension_degree {
+                    d.push((nonce(&seed_nonce, "d", None, Some(k)))?);
+                    eta.push((nonce(&seed_nonce, "eta", None, Some(k)))?);
+                }
             } else {
-                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-                (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng))
+                for _k in 0..extension_degree {
+                    // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+                    d.push(Scalar::random_not_zero(rng));
+                    eta.push(Scalar::random_not_zero(rng));
+                }
             };
 
-            let a1 = self.gi_base[0] * r +
+            let mut a1 = self.gi_base[0] * r +
                 self.hi_base[0] * s +
-                self.h_base * (r * self.y_powers[1] * self.bi[0] + s * self.y_powers[1] * self.ai[0]) +
-                self.g_base * d;
+                self.h_base * (r * self.y_powers[1] * self.bi[0] + s * self.y_powers[1] * self.ai[0]);
+            let mut b = self.h_base * (r * self.y_powers[1] * s);
+            for k in 0..extension_degree {
+                a1 += self.g_base[k] * d[k];
+                b += self.g_base[k] * eta[k]
+            }
             self.a1 = Some(a1);
-            let b = self.h_base * (r * self.y_powers[1] * s) + self.g_base * eta;
             self.b = Some(b);
 
-            self.transcript.validate_and_append_point(b"A1", &a1.compress())?;
-            self.transcript.validate_and_append_point(b"B", &b.compress())?;
-            let e = self.transcript.challenge_scalar(b"e")?;
+            let e = RangeProof::transcript_points_a1_b_challenge_e(*self.transcript, &a1.compress(), &b.compress())?;
 
             self.r1 = Some(r + self.ai[0] * e);
             self.s1 = Some(s + self.bi[0] * e);
-            self.d1 = Some(eta + d * e + self.alpha * e * e);
+            let e_square = e * e;
+            for k in 0..extension_degree {
+                self.d1.push(eta[k] + d[k] * e + self.alpha[k] * e_square)
+            }
 
             return Ok(());
         };
@@ -159,14 +179,21 @@ impl<'a> InnerProductRound<'a> {
             self.y_powers[n].invert()
         };
 
-        let (d_l, d_r) = if let Some(seed_nonce) = self.seed_nonce {
-            (
-                nonce(&seed_nonce, "dL", Some(self.round))?,
-                nonce(&seed_nonce, "dR", Some(self.round))?,
-            )
+        let (mut d_l, mut d_r) = (
+            Vec::with_capacity(extension_degree),
+            Vec::with_capacity(extension_degree),
+        );
+        if let Some(seed_nonce) = self.seed_nonce {
+            for k in 0..extension_degree {
+                d_l.push((nonce(&seed_nonce, "dL", Some(self.round), Some(k)))?);
+                d_r.push((nonce(&seed_nonce, "dR", Some(self.round), Some(k)))?);
+            }
         } else {
-            // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-            (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng))
+            for _k in 0..extension_degree {
+                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+                d_l.push(Scalar::random_not_zero(rng));
+                d_r.push(Scalar::random_not_zero(rng));
+            }
         };
         self.round += 1;
 
@@ -178,18 +205,20 @@ impl<'a> InnerProductRound<'a> {
         }
 
         // Compute L and R by multi-scalar multiplication
-        let mut li_scalars = Vec::with_capacity(2 * n + 2);
+        let mut li_scalars = Vec::with_capacity(2 * n + 1 + extension_degree);
         li_scalars.push(c_l);
-        li_scalars.push(d_l);
-        let mut li_points = Vec::with_capacity(2 * n + 2);
+        let mut li_points = Vec::with_capacity(2 * n + 1 + extension_degree);
         li_points.push(self.h_base);
-        li_points.push(self.g_base);
-        let mut ri_scalars = Vec::with_capacity(2 * n + 2);
+        let mut ri_scalars = Vec::with_capacity(2 * n + 1 + extension_degree);
         ri_scalars.push(c_r);
-        ri_scalars.push(d_r);
-        let mut ri_points = Vec::with_capacity(2 * n + 2);
+        let mut ri_points = Vec::with_capacity(2 * n + 1 + extension_degree);
         ri_points.push(self.h_base);
-        ri_points.push(self.g_base);
+        for k in 0..extension_degree {
+            li_scalars.push(d_l[k]);
+            li_points.push(self.g_base[k]);
+            ri_scalars.push(d_r[k]);
+            ri_points.push(self.g_base[k]);
+        }
         for i in 0..n {
             li_scalars.push(a1[i] * y_n_inverse);
             li_points.push(gi_base_hi[i]);
@@ -205,11 +234,11 @@ impl<'a> InnerProductRound<'a> {
         self.ri
             .push(RistrettoPoint::vartime_multiscalar_mul(ri_scalars, ri_points));
 
-        self.transcript
-            .validate_and_append_point(b"L", &self.li[self.li.len() - 1].compress())?;
-        self.transcript
-            .validate_and_append_point(b"R", &self.ri[self.ri.len() - 1].compress())?;
-        let e = self.transcript.challenge_scalar(b"e")?;
+        let e = RangeProof::transcript_points_l_r_challenge_e(
+            *self.transcript,
+            &self.li[self.li.len() - 1].compress(),
+            &self.ri[self.ri.len() - 1].compress(),
+        )?;
         let e_inverse = e.invert();
 
         self.gi_base = RistrettoPoint::add_point_vectors(
@@ -222,14 +251,18 @@ impl<'a> InnerProductRound<'a> {
         )?;
 
         self.ai = Scalar::add_scalar_vectors(
-            Scalar::mul_with_scalar_vec_with_scalar(a1, &e)?.as_slice(),
-            Scalar::mul_with_scalar_vec_with_scalar(a2, &(self.y_powers[n] * e_inverse))?.as_slice(),
+            Scalar::mul_scalar_vec_with_scalar(a1, &e)?.as_slice(),
+            Scalar::mul_scalar_vec_with_scalar(a2, &(self.y_powers[n] * e_inverse))?.as_slice(),
         )?;
         self.bi = Scalar::add_scalar_vectors(
-            Scalar::mul_with_scalar_vec_with_scalar(b1, &e_inverse)?.as_slice(),
-            Scalar::mul_with_scalar_vec_with_scalar(b2, &e)?.as_slice(),
+            Scalar::mul_scalar_vec_with_scalar(b1, &e_inverse)?.as_slice(),
+            Scalar::mul_scalar_vec_with_scalar(b2, &e)?.as_slice(),
         )?;
-        self.alpha += d_l * e * e + d_r * e_inverse * e_inverse;
+        let e_square = e * e;
+        let e_inverse_square = e_inverse * e_inverse;
+        for k in 0..extension_degree {
+            self.alpha[k] += d_l[k] * e_square + d_r[k] * e_inverse_square;
+        }
 
         Ok(())
     }
@@ -276,11 +309,11 @@ impl<'a> InnerProductRound<'a> {
     }
 
     /// Returns the non-public scalar 'd1'
-    pub fn d1(&self) -> Result<Scalar, ProofError> {
-        if let Some(d1) = self.d1 {
-            Ok(d1)
-        } else {
+    pub fn d1(&self) -> Result<Vec<Scalar>, ProofError> {
+        if self.d1.is_empty() {
             Err(ProofError::InvalidArgument("Value 'd1' not assigned yet".to_string()))
+        } else {
+            Ok(self.d1.clone())
         }
     }
 

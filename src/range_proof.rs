@@ -16,12 +16,26 @@ use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     errors::ProofError,
+    extended_mask::ExtendedMask,
+    generators::pedersen_gens::ExtensionDegree,
     inner_product_round::InnerProductRound,
     protocols::{scalar_protocol::ScalarProtocol, transcript_protocol::TranscriptProtocol},
     range_statement::RangeStatement,
     range_witness::RangeWitness,
-    utils::generic::{bit_vector_of_scalars, nonce, read32},
+    utils::generic::{bit_vector_of_scalars, nonce, read32, read8},
+    PedersenGens,
 };
+
+/// Optionally extract masks when verifying the proofs
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum VerifyAction {
+    /// No masks will be recovered (e.g. as a public entity)
+    VerifyOnly,
+    /// Recover masks and verify the proofs (e.g. as the commitment owner)
+    RecoverAndVerify,
+    /// Only recover masks but do not verify the proofs (e.g. as the commitment owner)
+    RecoverOnly,
+}
 
 /// Contains the public range proof parameters intended for a verifier
 #[derive(Clone, Debug, PartialEq)]
@@ -31,9 +45,10 @@ pub struct RangeProof {
     b: CompressedRistretto,
     r1: Scalar,
     s1: Scalar,
-    d1: Scalar,
+    d1: Vec<Scalar>,
     li: Vec<CompressedRistretto>,
     ri: Vec<CompressedRistretto>,
+    extension_degree: ExtensionDegree,
 }
 
 /// # Example
@@ -41,52 +56,59 @@ pub struct RangeProof {
 /// use curve25519_dalek::scalar::Scalar;
 /// use merlin::Transcript;
 /// use rand::Rng;
+/// # fn main() {
 /// use tari_bulletproofs_plus::{
 ///     commitment_opening::CommitmentOpening,
 ///     errors::ProofError,
+///     extended_mask::ExtendedMask,
+///     generators::pedersen_gens::ExtensionDegree,
 ///     protocols::scalar_protocol::ScalarProtocol,
 ///     range_parameters::RangeParameters,
-///     range_proof::RangeProof,
+///     range_proof::{RangeProof, VerifyAction},
 ///     range_statement::RangeStatement,
 ///     range_witness::RangeWitness,
 /// };
-///
-/// # fn main() {
 /// let mut rng = rand::thread_rng();
 /// let transcript_label: &'static str = "BatchedRangeProofTest";
 /// let bit_length = 64; // Other powers of two are permissible up to 2^6 = 64
 ///
 /// // 0.  Batch data
 /// let proof_batch = vec![1, 2, 1, 4];
-/// let mut private_masks: Vec<Option<Scalar>> = vec![];
-/// let mut public_masks: Vec<Option<Scalar>> = vec![];
+/// let mut private_masks: Vec<Option<ExtendedMask>> = vec![];
+/// let mut public_masks = vec![];
 /// let mut statements_private = vec![];
 /// let mut statements_public = vec![];
 /// let mut proofs = vec![];
 ///
 /// for aggregation_size in proof_batch {
 ///     // 1. Generators
-///     let generators = RangeParameters::init(bit_length, aggregation_size).unwrap();
+///     let extension_degree = ExtensionDegree::Zero;
+///     let generators = RangeParameters::init(bit_length, aggregation_size, extension_degree).unwrap();
 ///
 ///     // 2. Create witness data
-///     let mut witness = RangeWitness::new(vec![]);
 ///     let mut commitments = vec![];
+///     let mut openings = vec![];
 ///     let mut minimum_values = vec![];
 ///     for m in 0..aggregation_size {
 ///         let value = 123000111222333 * m as u64; // Value in uT
-///         let blinding = Scalar::random_not_zero(&mut rng);
+///         let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
 ///         if m == 2 {
 ///             // Minimum value proofs other than zero are can be built into the proof
 ///             minimum_values.push(Some(value / 3));
 ///         } else {
 ///             minimum_values.push(None);
 ///         }
-///         commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
-///         witness.openings.push(CommitmentOpening::new(value, blinding));
+///         commitments.push(
+///             generators
+///                 .pc_gens()
+///                 .commit(Scalar::from(value), blindings.as_slice())
+///                 .unwrap(),
+///         );
+///         openings.push(CommitmentOpening::new(value, blindings.clone()));
 ///         if m == 0 {
 ///             if aggregation_size == 1 {
 ///                 // Masks (any secret scalar) can be embedded for proofs with aggregation size = 1
-///                 private_masks.push(Some(blinding));
+///                 private_masks.push(Some(ExtendedMask::assign(extension_degree, blindings).unwrap()));
 ///                 public_masks.push(None);
 ///             } else {
 ///                 private_masks.push(None);
@@ -94,6 +116,7 @@ pub struct RangeProof {
 ///             }
 ///         }
 ///     }
+///     let mut witness = RangeWitness::init(openings).unwrap();
 ///
 ///     // 3. Generate the statement
 ///     let seed_nonce = if aggregation_size == 1 {
@@ -122,11 +145,12 @@ pub struct RangeProof {
 ///
 /// // 5. Verify the entire batch as the commitment owner, i.e. the prover self
 /// let recovered_private_masks =
-///     RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone()).unwrap();
+///     RangeProof::verify_and_recover_masks(transcript_label, &statements_private.clone(), &proofs.clone()).unwrap();
 /// assert_eq!(private_masks, recovered_private_masks);
 ///
 /// // 6. Verify the entire batch as public entity
-/// let recovered_public_masks = RangeProof::verify(transcript_label, &statements_public, &proofs).unwrap();
+/// let recovered_public_masks =
+///     RangeProof::verify_do_not_recover_masks(transcript_label, &statements_public, &proofs).unwrap();
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
 /// # }
@@ -146,38 +170,37 @@ impl RangeProof {
         let aggregation_factor = statement.commitments.len();
         if witness.openings.len() != aggregation_factor {
             return Err(ProofError::InvalidLength(
-                "Invalid range statement - commitments and openings do not match!".to_string(),
+                "Witness openings statement commitments do not match!".to_string(),
             ));
         }
+        if witness.extension_degree != statement.generators.extension_degree() {
+            return Err(ProofError::InvalidArgument(
+                "Witness and statement extension degrees do not match!".to_string(),
+            ));
+        }
+        let extension_degree = statement.generators.extension_degree() as usize;
 
         let bit_length = statement.generators.bit_length();
 
         // Global generators
-        let (h_base, g_base) = (statement.generators.h_base(), statement.generators.g_base());
+        let (h_base, g_base_vec) = (statement.generators.h_base(), statement.generators.g_base_vec());
         let h_base_compressed = statement.generators.h_base_compressed();
-        let g_base_compressed = statement.generators.g_base_compressed();
-        let (hi_base, gi_base) = (
-            statement.generators.hi_base_copied(),
-            statement.generators.gi_base_copied(),
-        );
+        let g_base_compressed = statement.generators.g_base_compressed_vec();
+        let hi_base = statement.generators.hi_base_copied();
+        let gi_base = statement.generators.gi_base_copied();
 
         // Start the transcript
         let mut transcript = Transcript::new(transcript_label.as_bytes());
         transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
-        transcript.validate_and_append_point(b"H", &h_base_compressed)?;
-        transcript.validate_and_append_point(b"G", &g_base_compressed)?;
-        transcript.append_u64(b"N", bit_length as u64);
-        transcript.append_u64(b"M", aggregation_factor as u64);
-        for item in &statement.commitments_compressed {
-            transcript.append_point(b"Ci", item);
-        }
-        for item in &statement.minimum_value_promises {
-            if let Some(minimum_value) = item {
-                transcript.append_u64(b"vi - minimum_value", *minimum_value);
-            } else {
-                transcript.append_u64(b"vi - minimum_value", 0);
-            }
-        }
+        RangeProof::transcript_initialize(
+            &mut transcript,
+            &h_base_compressed,
+            &g_base_compressed,
+            bit_length,
+            extension_degree,
+            aggregation_factor,
+            statement,
+        )?;
 
         // Set bit arrays
         let mut a_li = Vec::with_capacity(bit_length * aggregation_factor);
@@ -202,16 +225,21 @@ impl RangeProof {
 
         // Compute A by multi-scalar multiplication
         let rng = &mut thread_rng();
-        let alpha = if let Some(seed_nonce) = statement.seed_nonce {
-            nonce(&seed_nonce, "alpha", None)?
-        } else {
-            // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-            Scalar::random_not_zero(rng)
-        };
-        let mut ai_scalars = Vec::with_capacity(bit_length * aggregation_factor + 1);
-        ai_scalars.push(alpha);
-        let mut ai_points = Vec::with_capacity(bit_length * aggregation_factor + 1);
-        ai_points.push(g_base);
+        let mut alpha = Vec::with_capacity(extension_degree);
+        for k in 0..extension_degree {
+            alpha.push(if let Some(seed_nonce) = statement.seed_nonce {
+                nonce(&seed_nonce, "alpha", None, Some(k))?
+            } else {
+                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+                Scalar::random_not_zero(rng)
+            });
+        }
+        let mut ai_scalars = Vec::with_capacity(bit_length * aggregation_factor + extension_degree);
+        let mut ai_points = Vec::with_capacity(bit_length * aggregation_factor + extension_degree);
+        for k in 0..extension_degree {
+            ai_scalars.push(alpha[k]);
+            ai_points.push(g_base_vec[k]);
+        }
         for i in 0..(bit_length * aggregation_factor) {
             ai_scalars.push(a_li[i]);
             ai_points.push(gi_base[i]);
@@ -219,10 +247,9 @@ impl RangeProof {
             ai_points.push(hi_base[i]);
         }
         let a = RistrettoPoint::vartime_multiscalar_mul(ai_scalars, ai_points);
-        transcript.validate_and_append_point(b"A", &a.compress())?;
 
         // Get challenges
-        let (y, z) = (transcript.challenge_scalar(b"y")?, transcript.challenge_scalar(b"z")?);
+        let (y, z) = RangeProof::transcript_point_a_challenges_y_z(&mut transcript, &a.compress())?;
         let z_square = z * z;
 
         // Compute powers of the challenge
@@ -258,7 +285,9 @@ impl RangeProof {
         let mut z_even_powers = Scalar::one();
         for j in 0..aggregation_factor {
             z_even_powers *= z_square;
-            alpha1 += z_even_powers * witness.openings[j].r * y_powers[bit_length * aggregation_factor + 1];
+            for (k, alpha1_val) in alpha1.iter_mut().enumerate().take(extension_degree) {
+                *alpha1_val += z_even_powers * witness.openings[j].r[k] * y_powers[bit_length * aggregation_factor + 1];
+            }
         }
 
         // Calculate the inner product
@@ -266,7 +295,7 @@ impl RangeProof {
         let mut ip_data = InnerProductRound::init(
             gi_base,
             hi_base,
-            g_base,
+            g_base_vec,
             h_base,
             a_li_1,
             a_ri_1,
@@ -288,19 +317,16 @@ impl RangeProof {
                     d1: ip_data.d1()?,
                     li: ip_data.li_compressed()?,
                     ri: ip_data.ri_compressed()?,
+                    extension_degree: statement.generators.extension_degree(),
                 });
             }
         }
     }
 
-    /// Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
-    /// range proofs by a party that can supply the optional seed nonces
-    pub fn verify(
-        transcript_label: &'static str,
+    fn verify_statements_and_generators_consistency(
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
-    ) -> Result<Vec<Option<Scalar>>, ProofError> {
-        // Consistency checks
+    ) -> Result<(usize, usize), ProofError> {
         if statements.is_empty() || range_proofs.is_empty() {
             return Err(ProofError::InvalidArgument(
                 "Range statements or proofs length empty".to_string(),
@@ -312,17 +338,17 @@ impl RangeProof {
             ));
         }
 
-        // Verify generators consistency & select largest aggregation factor
-        let (g_base, h_base) = (statements[0].generators.g_base(), statements[0].generators.h_base());
-        let (g_base_compressed, h_base_compressed) = (
-            statements[0].generators.g_base_compressed(),
-            statements[0].generators.h_base_compressed(),
-        );
+        let (g_base_vec, h_base) = (statements[0].generators.g_base_vec(), statements[0].generators.h_base());
         let bit_length = statements[0].generators.bit_length();
         let mut max_mn = statements[0].commitments.len() * statements[0].generators.bit_length();
         let mut max_index = 0;
+        let extension_degree = statements[0].generators.extension_degree();
+
+        if extension_degree != PedersenGens::extension_degree(range_proofs[0].d1.len())? {
+            return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
+        }
         for (i, statement) in statements.iter().enumerate().skip(1) {
-            if g_base != statement.generators.g_base() {
+            if g_base_vec != statement.generators.g_base_vec() {
                 return Err(ProofError::InvalidArgument(
                     "Inconsistent G generator point in batch statement".to_string(),
                 ));
@@ -337,6 +363,11 @@ impl RangeProof {
                     "Inconsistent bit length in batch statement".to_string(),
                 ));
             }
+            if extension_degree != statement.generators.extension_degree() ||
+                extension_degree != PedersenGens::extension_degree(range_proofs[i].d1.len())?
+            {
+                return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
+            }
             if statement.commitments.len() * statement.generators.bit_length() > max_mn {
                 max_mn = statement.commitments.len() * statement.generators.bit_length();
                 max_index = i;
@@ -347,6 +378,13 @@ impl RangeProof {
             statements[max_index].generators.hi_base_ref(),
         );
         for (i, statement) in statements.iter().enumerate() {
+            for value in statement.minimum_value_promises.iter().flatten() {
+                if value >> (bit_length - 1) > 1 {
+                    return Err(ProofError::InvalidLength(
+                        "Minimum value promise exceeds bit vector capacity".to_string(),
+                    ));
+                }
+            }
             if i == max_index {
                 continue;
             }
@@ -368,6 +406,62 @@ impl RangeProof {
             }
         }
 
+        Ok((max_mn, max_index))
+    }
+
+    /// Verify a batch of single and/or aggregated range proofs as the commitment owner and recover the masks for single
+    /// range proofs by supplying the optional seed nonces
+    pub fn verify_and_recover_masks(
+        transcript_label: &'static str,
+        statements: &[RangeStatement],
+        range_proofs: &[RangeProof],
+    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
+        RangeProof::verify(
+            transcript_label,
+            statements,
+            range_proofs,
+            VerifyAction::RecoverAndVerify,
+        )
+    }
+
+    /// Verify a batch of single and/or aggregated range proofs as a public entity
+    pub fn verify_do_not_recover_masks(
+        transcript_label: &'static str,
+        statements: &[RangeStatement],
+        range_proofs: &[RangeProof],
+    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
+        RangeProof::verify(transcript_label, statements, range_proofs, VerifyAction::VerifyOnly)
+    }
+
+    /// Recover the masks for single range proofs by supplying the optional seed nonces
+    pub fn recover_masks_ony(
+        transcript_label: &'static str,
+        statements: &[RangeStatement],
+        range_proofs: &[RangeProof],
+    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
+        RangeProof::verify(transcript_label, statements, range_proofs, VerifyAction::RecoverOnly)
+    }
+
+    // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
+    // range proofs by a party that can supply the optional seed nonces
+    fn verify(
+        transcript_label: &'static str,
+        statements: &[RangeStatement],
+        range_proofs: &[RangeProof],
+        extract_masks: VerifyAction,
+    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
+        // Verify generators consistency & select largest aggregation factor
+        let (max_mn, max_index) = RangeProof::verify_statements_and_generators_consistency(statements, range_proofs)?;
+        let (g_base_vec, h_base) = (statements[0].generators.g_base_vec(), statements[0].generators.h_base());
+        let bit_length = statements[0].generators.bit_length();
+        let (gi_base_ref, hi_base_ref) = (
+            statements[max_index].generators.gi_base_ref(),
+            statements[max_index].generators.hi_base_ref(),
+        );
+        let extension_degree = statements[0].generators.extension_degree() as usize;
+        let g_base_compressed = statements[0].generators.g_base_compressed_vec();
+        let h_base_compressed = statements[0].generators.h_base_compressed();
+
         // Compute log2(N)
         let mut log_n = 0;
         let mut temp_n = bit_length >> 1;
@@ -384,7 +478,7 @@ impl RangeProof {
         two_n_minus_one -= Scalar::one();
 
         // Weighted coefficients for common generators
-        let mut g_base_scalar = Scalar::zero();
+        let mut g_base_scalars = vec![Scalar::zero(); extension_degree];
         let mut h_base_scalar = Scalar::zero();
         let mut gi_base_scalars = vec![Scalar::zero(); max_mn];
         let mut hi_base_scalars = vec![Scalar::zero(); max_mn];
@@ -394,12 +488,17 @@ impl RangeProof {
         for (index, item) in statements.iter().enumerate() {
             msm_len += item.generators.aggregation_factor() + 3 + range_proofs[index].li.len() * 2;
         }
-        msm_len += 2 + max_mn * 2;
+        msm_len += 2 + max_mn * 2 + (extension_degree - 1);
         let mut scalars: Vec<Scalar> = Vec::with_capacity(msm_len);
         let mut points: Vec<RistrettoPoint> = Vec::with_capacity(msm_len);
 
         // Recovered masks
-        let mut masks = Vec::with_capacity(range_proofs.len());
+        let mut masks = match extract_masks {
+            VerifyAction::VerifyOnly => {
+                vec![]
+            },
+            _ => Vec::with_capacity(range_proofs.len()),
+        };
 
         let two = Scalar::from(2u8);
 
@@ -413,7 +512,7 @@ impl RangeProof {
             let b = proof.b_decompressed()?;
             let r1 = proof.r1;
             let s1 = proof.s1;
-            let d1 = proof.d1;
+            let d1 = proof.d1.clone();
             let li = proof.li_decompressed()?;
             let ri = proof.ri_decompressed()?;
 
@@ -437,38 +536,28 @@ impl RangeProof {
             // Start the transcript
             let mut transcript = Transcript::new(transcript_label.as_bytes());
             transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
-            transcript.validate_and_append_point(b"H", &h_base_compressed)?;
-            transcript.validate_and_append_point(b"G", &g_base_compressed)?;
-            transcript.append_u64(b"N", bit_length as u64);
-            transcript.append_u64(b"M", aggregation_factor as u64);
-            for i in 0..(statements[index].commitments_compressed.len()) {
-                transcript.append_point(b"Ci", &statements[index].commitments_compressed[i]);
-            }
-            for item in statements[index].minimum_value_promises.clone() {
-                if let Some(minimum_value) = item {
-                    transcript.append_u64(b"vi - minimum_value", minimum_value);
-                } else {
-                    transcript.append_u64(b"vi - minimum_value", 0);
-                }
-            }
+            RangeProof::transcript_initialize(
+                &mut transcript,
+                &h_base_compressed,
+                &g_base_compressed,
+                bit_length,
+                extension_degree,
+                aggregation_factor,
+                &statements[index],
+            )?;
 
             // Reconstruct challenges
-            transcript.validate_and_append_point(b"A", &proof.a)?;
-            let y = transcript.challenge_scalar(b"y")?;
-            let z = transcript.challenge_scalar(b"z")?;
+            let (y, z) = RangeProof::transcript_point_a_challenges_y_z(&mut transcript, &proof.a)?;
             transcript.domain_separator(b"Bulletproofs+", b"Inner Product Proof");
             let mut challenges = Vec::with_capacity(rounds);
             for j in 0..rounds {
-                transcript.validate_and_append_point(b"L", &proof.li()?[j])?;
-                transcript.validate_and_append_point(b"R", &proof.ri()?[j])?;
-                let e = transcript.challenge_scalar(b"e")?;
+                let e =
+                    RangeProof::transcript_points_l_r_challenge_e(&mut transcript, &proof.li()?[j], &proof.ri()?[j])?;
                 challenges.push(e);
             }
             let mut challenges_inv = challenges.clone();
             let challenges_inv_prod = Scalar::batch_invert(&mut challenges_inv);
-            transcript.validate_and_append_point(b"A1", &proof.a1)?;
-            transcript.validate_and_append_point(b"B", &proof.b)?;
-            let e = transcript.challenge_scalar(b"e")?;
+            let e = RangeProof::transcript_points_a1_b_challenge_e(&mut transcript, &proof.a1, &proof.b)?;
 
             // Compute useful challenge values
             let z_square = z * z;
@@ -502,7 +591,7 @@ impl RangeProof {
                 }
             }
 
-            // Compute its sum efficiently
+            // Compute d's sum efficiently
             let mut d_sum = z_square;
             let mut d_sum_temp_z = z_square;
             let mut d_sum_temp_2m = 2 * aggregation_factor;
@@ -514,18 +603,35 @@ impl RangeProof {
             d_sum *= two_n_minus_one;
 
             // Recover the mask if possible (only for non-aggregated proofs)
-            if let Some(seed_nonce) = statements[index].seed_nonce {
-                let mut mask =
-                    (d1 - nonce(&seed_nonce, "eta", None)? - e * nonce(&seed_nonce, "d", None)?) * e_square.invert();
-                mask -= nonce(&seed_nonce, "alpha", None)?;
-                for j in 0..rounds {
-                    mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j))?;
-                    mask -= challenges_sq_inv[j] * nonce(&seed_nonce, "dR", Some(j))?;
-                }
-                mask *= (z_square * y_nm_1).invert();
-                masks.push(Some(mask));
-            } else {
-                masks.push(None);
+            match extract_masks {
+                VerifyAction::VerifyOnly => masks.push(None),
+                _ => {
+                    if let Some(seed_nonce) = statements[index].seed_nonce {
+                        let mut temp_masks = Vec::with_capacity(extension_degree);
+                        for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
+                            let mut this_mask = (*d1_val -
+                                nonce(&seed_nonce, "eta", None, Some(k))? -
+                                e * nonce(&seed_nonce, "d", None, Some(k))?) *
+                                e_square.invert();
+                            this_mask -= nonce(&seed_nonce, "alpha", None, Some(k))?;
+                            for j in 0..rounds {
+                                this_mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
+                                this_mask -= challenges_sq_inv[j] * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
+                            }
+                            this_mask *= (z_square * y_nm_1).invert();
+                            temp_masks.push(this_mask);
+                        }
+                        masks.push(Some(ExtendedMask::assign(
+                            PedersenGens::extension_degree(extension_degree)?,
+                            temp_masks,
+                        )?));
+                    } else {
+                        masks.push(None);
+                    }
+                    if extract_masks == VerifyAction::RecoverOnly {
+                        continue;
+                    }
+                },
             }
 
             // Aggregate the generator scalars
@@ -563,7 +669,9 @@ impl RangeProof {
             }
 
             h_base_scalar += weight * (r1 * y * s1 + e_square * (y_nm_1 * z * d_sum + (z_square - z) * y_sum));
-            g_base_scalar += weight * d1;
+            for k in 0..extension_degree {
+                g_base_scalars[k] += weight * d1[k];
+            }
 
             scalars.push(weight * (-e));
             points.push(a1);
@@ -579,10 +687,15 @@ impl RangeProof {
                 points.push(ri[j]);
             }
         }
+        if extract_masks == VerifyAction::RecoverOnly {
+            return Ok(masks);
+        }
 
         // Common generators
-        scalars.push(g_base_scalar);
-        points.push(g_base);
+        for k in 0..extension_degree {
+            scalars.push(g_base_scalars[k]);
+            points.push(g_base_vec[k]);
+        }
         scalars.push(h_base_scalar);
         points.push(h_base);
         for i in 0..max_mn {
@@ -604,7 +717,8 @@ impl RangeProof {
     /// Serializes the proof into a byte array of 32-byte elements
     pub fn to_bytes(&self) -> Vec<u8> {
         // 6 elements, 2 vectors
-        let mut buf = Vec::with_capacity((6 + self.li.len() + self.ri.len()) * 32);
+        let mut buf = Vec::with_capacity(1 + (self.li.len() + self.ri.len() + 5 + self.d1.len()) * 32);
+        buf.extend_from_slice(&(self.extension_degree as u8).to_le_bytes());
         for l in &self.li {
             buf.extend_from_slice(l.as_bytes());
         }
@@ -616,35 +730,44 @@ impl RangeProof {
         buf.extend_from_slice(self.b.as_bytes());
         buf.extend_from_slice(self.r1.as_bytes());
         buf.extend_from_slice(self.s1.as_bytes());
-        buf.extend_from_slice(self.d1.as_bytes());
+        for d1 in &self.d1 {
+            buf.extend_from_slice(d1.as_bytes());
+        }
         buf
     }
 
     /// Deserializes the proof from a byte slice
     pub fn from_bytes(slice: &[u8]) -> Result<RangeProof, ProofError> {
-        if slice.len() % 32 != 0 || slice.is_empty() || slice.len() / 32 < 6 {
+        if slice.is_empty() || (slice.len() - 1) % 32 != 0 {
             return Err(ProofError::InvalidLength(
                 "Invalid serialized proof bytes length".to_string(),
             ));
         }
-        let num_elements = slice.len() / 32;
-        if (num_elements - 6) % 2 != 0 {
+        let extension_degree = PedersenGens::extension_degree(read8(&slice[0..])[0] as usize)?;
+        let num_elements = (slice.len() - 1) / 32;
+        if num_elements < 2 + 5 + extension_degree as usize {
+            return Err(ProofError::InvalidLength(
+                "Serialized proof has incorrect number of elements".to_string(),
+            ));
+        };
+        let num_inner_prod_vec_elements = num_elements - 5 - extension_degree as usize;
+        if num_inner_prod_vec_elements % 2 != 0 {
             return Err(ProofError::InvalidLength(
                 "Serialized proof has incorrect number of elements".to_string(),
             ));
         }
-        let n = (num_elements - 6) / 2;
+        let n = num_inner_prod_vec_elements / 2;
 
         let mut li: Vec<CompressedRistretto> = Vec::with_capacity(n);
         let mut ri: Vec<CompressedRistretto> = Vec::with_capacity(n);
         for i in 0..n {
-            li.push(CompressedRistretto(read32(&slice[i * 32..])));
+            li.push(CompressedRistretto(read32(&slice[1 + i * 32..])));
         }
         for i in n..2 * n {
-            ri.push(CompressedRistretto(read32(&slice[i * 32..])));
+            ri.push(CompressedRistretto(read32(&slice[1 + i * 32..])));
         }
 
-        let pos = 2 * n * 32;
+        let pos = 1 + 2 * n * 32;
         let a = CompressedRistretto(read32(&slice[pos..]));
         let a1 = CompressedRistretto(read32(&slice[pos + 32..]));
         let b = CompressedRistretto(read32(&slice[pos + 64..]));
@@ -652,8 +775,14 @@ impl RangeProof {
             .ok_or_else(|| ProofError::InvalidArgument("r1 bytes not a canonical byte representation".to_string()))?;
         let s1 = Scalar::from_canonical_bytes(read32(&slice[pos + 128..]))
             .ok_or_else(|| ProofError::InvalidArgument("s1 bytes not a canonical byte representation".to_string()))?;
-        let d1 = Scalar::from_canonical_bytes(read32(&slice[pos + 160..]))
-            .ok_or_else(|| ProofError::InvalidArgument("d1 bytes not a canonical byte representation".to_string()))?;
+        let mut d1 = Vec::with_capacity(extension_degree as usize);
+        for i in 0..extension_degree as usize {
+            d1.push(
+                Scalar::from_canonical_bytes(read32(&slice[pos + 160 + i * 32..])).ok_or_else(|| {
+                    ProofError::InvalidArgument("d1 bytes not a canonical byte representation".to_string())
+                })?,
+            );
+        }
 
         Ok(RangeProof {
             a,
@@ -664,27 +793,93 @@ impl RangeProof {
             d1,
             li,
             ri,
+            extension_degree,
         })
     }
 
+    // Helper function to construct the initial transcript
+    fn transcript_initialize(
+        transcript: &mut Transcript,
+        h_base_compressed: &CompressedRistretto,
+        g_base_compressed: &[CompressedRistretto],
+        bit_length: usize,
+        extension_degree: usize,
+        aggregation_factor: usize,
+        statement: &RangeStatement,
+    ) -> Result<(), ProofError> {
+        transcript.validate_and_append_point(b"H", h_base_compressed)?;
+        for item in g_base_compressed {
+            transcript.validate_and_append_point(b"G", item)?;
+        }
+        transcript.append_u64(b"N", bit_length as u64);
+        transcript.append_u64(b"T", extension_degree as u64);
+        transcript.append_u64(b"M", aggregation_factor as u64);
+        for item in &statement.commitments_compressed {
+            transcript.append_point(b"Ci", item);
+        }
+        for item in &statement.minimum_value_promises {
+            if let Some(minimum_value) = item {
+                transcript.append_u64(b"vi - minimum_value", *minimum_value);
+            } else {
+                transcript.append_u64(b"vi - minimum_value", 0);
+            }
+        }
+        Ok(())
+    }
+
+    // Helper function to construct the y and z challenge scalars after points A
+    fn transcript_point_a_challenges_y_z(
+        transcript: &mut Transcript,
+        a: &CompressedRistretto,
+    ) -> Result<(Scalar, Scalar), ProofError> {
+        transcript.validate_and_append_point(b"A", a)?;
+        Ok((transcript.challenge_scalar(b"y")?, transcript.challenge_scalar(b"z")?))
+    }
+
+    /// Helper function to construct the e challenge scalar after points L and R
+    pub fn transcript_points_l_r_challenge_e(
+        transcript: &mut Transcript,
+        l: &CompressedRistretto,
+        r: &CompressedRistretto,
+    ) -> Result<Scalar, ProofError> {
+        transcript.validate_and_append_point(b"L", l)?;
+        transcript.validate_and_append_point(b"R", r)?;
+        transcript.challenge_scalar(b"e")
+    }
+
+    /// Helper function to construct the e challenge scalar after points A1 and B
+    pub fn transcript_points_a1_b_challenge_e(
+        transcript: &mut Transcript,
+        a1: &CompressedRistretto,
+        b: &CompressedRistretto,
+    ) -> Result<Scalar, ProofError> {
+        transcript.validate_and_append_point(b"A1", a1)?;
+        transcript.validate_and_append_point(b"B", b)?;
+        transcript.challenge_scalar(b"e")
+    }
+
+    // Helper function to decompress A
     fn a_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
         self.a.decompress().ok_or_else(|| {
             ProofError::InvalidArgument("Member 'a' was not the canonical encoding of a point".to_string())
         })
     }
 
+    // Helper function to decompress A1
     fn a1_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
         self.a1.decompress().ok_or_else(|| {
             ProofError::InvalidArgument("Member 'a1' was not the canonical encoding of a point".to_string())
         })
     }
 
+    // Helper function to decompress B
     fn b_decompressed(&self) -> Result<RistrettoPoint, ProofError> {
         self.b.decompress().ok_or_else(|| {
             ProofError::InvalidArgument("Member 'b' was not the canonical encoding of a point".to_string())
         })
     }
 
+    // Helper function to decompress Li
     fn li_decompressed(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
         if self.li.is_empty() {
             Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
@@ -701,6 +896,7 @@ impl RangeProof {
         }
     }
 
+    // Helper function to return compressed Li
     fn li(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
         if self.li.is_empty() {
             Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
@@ -709,6 +905,7 @@ impl RangeProof {
         }
     }
 
+    // Helper function to decompress Ri
     fn ri_decompressed(&self) -> Result<Vec<RistrettoPoint>, ProofError> {
         if self.ri.is_empty() {
             Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
@@ -725,6 +922,7 @@ impl RangeProof {
         }
     }
 
+    // Helper function to return compressed Ri
     fn ri(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
         if self.ri.is_empty() {
             Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
@@ -767,19 +965,7 @@ impl<'de> Deserialize<'de> for RangeProof {
 mod tests {
     use curve25519_dalek::{ristretto::CompressedRistretto, scalar::Scalar};
 
-    use crate::range_proof::RangeProof;
-
-    #[derive(Clone, Debug, PartialEq)]
-    pub struct RangeProofMimic {
-        a: CompressedRistretto,
-        a1: CompressedRistretto,
-        b: CompressedRistretto,
-        r1: Scalar,
-        s1: Scalar,
-        d1: Scalar,
-        li: Vec<CompressedRistretto>,
-        ri: Vec<CompressedRistretto>,
-    }
+    use crate::{generators::pedersen_gens::ExtensionDegree, range_proof::RangeProof, PedersenGens};
 
     #[test]
     fn test_from_bytes() {
@@ -791,11 +977,60 @@ mod tests {
             b: Default::default(),
             r1: Default::default(),
             s1: Default::default(),
-            d1: Default::default(),
+            d1: vec![],
             li: vec![],
             ri: vec![],
+            extension_degree: ExtensionDegree::Zero,
         };
         let proof_bytes = proof.to_bytes();
+        assert!(RangeProof::from_bytes(&proof_bytes).is_err());
+
+        let proof = RangeProof {
+            a: Default::default(),
+            a1: Default::default(),
+            b: Default::default(),
+            r1: Default::default(),
+            s1: Default::default(),
+            d1: vec![Scalar::default()],
+            li: vec![CompressedRistretto::default()],
+            ri: vec![CompressedRistretto::default()],
+            extension_degree: ExtensionDegree::Zero,
+        };
+        let proof_bytes = proof.to_bytes();
+        assert!(RangeProof::from_bytes(&proof_bytes).is_ok());
+
+        let proof = RangeProof {
+            a: Default::default(),
+            a1: Default::default(),
+            b: Default::default(),
+            r1: Default::default(),
+            s1: Default::default(),
+            d1: vec![
+                Scalar::default(),
+                Scalar::default(),
+                Scalar::default(),
+                Scalar::default(),
+                Scalar::default(),
+                Scalar::default(),
+            ],
+            li: vec![CompressedRistretto::default()],
+            ri: vec![CompressedRistretto::default()],
+            extension_degree: ExtensionDegree::Five,
+        };
+        let proof_bytes = proof.to_bytes();
+        assert!(RangeProof::from_bytes(&proof_bytes).is_ok());
+        let mut proof_bytes_meddled = proof_bytes.clone();
+
+        for i in 0..u8::MAX {
+            if PedersenGens::extension_degree(i as usize).is_err() {
+                proof_bytes_meddled[0] = i;
+                if RangeProof::from_bytes(&proof_bytes_meddled).is_ok() {
+                    panic!("Should err");
+                }
+                break;
+            }
+        }
+
         for i in 0..proof_bytes.len() {
             match RangeProof::from_bytes(&proof_bytes[..proof_bytes.len() - i]) {
                 Ok(proof_from_bytes) => {
@@ -807,6 +1042,7 @@ mod tests {
                 },
             }
         }
+
         let mut proof_bytes_meddled = proof_bytes.clone();
         for i in 0..proof_bytes.len() * 10 {
             proof_bytes_meddled.append(&mut 0u8.to_le_bytes().to_vec());
@@ -820,6 +1056,7 @@ mod tests {
                 },
             }
         }
+
         let mut proof_bytes_meddled = proof_bytes.clone();
         for _i in 0..proof_bytes.len() * 10 {
             proof_bytes_meddled.append(&mut u8::MAX.to_le_bytes().to_vec());

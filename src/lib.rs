@@ -12,6 +12,8 @@ extern crate lazy_static;
 pub mod commitment_opening;
 /// Bulletproofs+ error definitions
 pub mod errors;
+/// Bulletproofs+ mask embedding and recovery
+pub mod extended_mask;
 /// Bulletproofs+ `generators` module contains API for producing a set of generators for a range proof
 pub mod generators;
 /// Bulletproofs+ inner product calculation for each round

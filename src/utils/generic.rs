@@ -19,23 +19,40 @@ use curve25519_dalek::scalar::Scalar;
 
 use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::RangeProof};
 
-/// Create a Blake2B deterministic nonce given a seed, label and index
-pub fn nonce(seed_nonce: &Scalar, label: &str, index: Option<usize>) -> Result<Scalar, ProofError> {
+/// Create a Blake2B deterministic nonce given a seed, label and two indexes
+pub fn nonce(
+    seed_nonce: &Scalar,
+    label: &str,
+    index_j: Option<usize>,
+    index_k: Option<usize>,
+) -> Result<Scalar, ProofError> {
+    // Using `Blake2b::with_params(key: &[u8], salt: &[u8], persona: &[u8])`, if the `persona` or `salt` parameters
+    // exceed 16 bytes, unhandled exceptions occur, so we have to do the length check ourselves.
+    // See https://www.blake2.net/blake2.pdf section 2.8
     let encoded_label = label.as_bytes();
     if encoded_label.len() > 16 {
-        // See https://www.blake2.net/blake2.pdf section 2.8
         return Err(ProofError::InvalidLength("nonce label".to_string()));
     };
-    let hasher = if let Some(salt) = index {
-        let encoded_index = salt.to_le_bytes();
-        if encoded_index.len() > 16 {
-            // See https://www.blake2.net/blake2.pdf section 2.8
-            return Err(ProofError::InvalidLength("nonce index".to_string()));
-        };
-        Blake2b::with_params(&seed_nonce.to_bytes(), &encoded_index, encoded_label)
-    } else {
-        Blake2b::with_params(&seed_nonce.to_bytes(), &[], encoded_label)
-    };
+    // Notes:
+    // - Fixed length encodings of 'seed_nonce', optional('j', 'index_j') and optional('k', 'index_k') are concatenated
+    //   to form the Blake2B key input
+    // - Domain separation labels 'j' an 'k' ensure that collisions for any combination of inputs to this function is
+    //   not possible
+    // - Enough memory is allocated to hold the two optional elements as well in lieu of performing calculations based
+    //   on optional logic to determine the exact length
+    // - 'append' performance is O(log n)
+    let mut key = Vec::with_capacity(51); // 1 + 32 + optional(1 + 8)  + optional(1 + 8)
+    key.push(0u8); // Initialize the vector to enable 'append' (1 byte)
+    key.append(&mut seed_nonce.to_bytes().to_vec()); // Fixed length encoding of 'seed_nonce' (32 bytes)
+    if let Some(index) = index_j {
+        key.append(&mut b"j".to_vec()); // Domain separated index label (1 byte)
+        key.append(&mut index.to_le_bytes().to_vec()); // Fixed length encoding of 'index_j' (8 bytes)
+    }
+    if let Some(index) = index_k {
+        key.append(&mut b"k".to_vec()); // Domain separated index label (1 byte)
+        key.append(&mut index.to_le_bytes().to_vec()); // Fixed length encoding of 'index_k' (8 bytes)
+    }
+    let hasher = Blake2b::with_params(&key, &[], encoded_label);
 
     Ok(Scalar::from_hasher_blake2b(hasher))
 }
@@ -70,10 +87,17 @@ pub fn read32(data: &[u8]) -> [u8; 32] {
     buf32
 }
 
+/// Given `data` with `len >= 1`, return the first 1 byte.
+pub fn read8(data: &[u8]) -> [u8; 1] {
+    let mut buf8 = [0u8; 1];
+    buf8[..].copy_from_slice(&data[..1]);
+    buf8
+}
+
 #[cfg(test)]
 mod tests {
     use curve25519_dalek::scalar::Scalar;
-    use rand::thread_rng;
+    use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
     use crate::{
         errors::ProofError,
@@ -84,35 +108,90 @@ mod tests {
 
     #[test]
     fn test_nonce() {
-        let rng = &mut thread_rng();
-        let seed_nonce = Scalar::random_not_zero(rng);
+        let mut rng = thread_rng();
+        let seed_nonce = Scalar::random_not_zero(&mut rng);
 
         // Create personalized nonces
-        let ref_nonce_eta = nonce(&seed_nonce, "eta", None).unwrap();
-        let ref_nonce_a = nonce(&seed_nonce, "a", None).unwrap();
+        let ref_nonce_eta = nonce(&seed_nonce, "eta", None, None).unwrap();
+        let ref_nonce_a = nonce(&seed_nonce, "a", None, None).unwrap();
+        assert_ne!(ref_nonce_eta, ref_nonce_a);
         let mut ref_nonces_dl = vec![];
         let mut ref_nonces_dr = vec![];
         for i in 0..16 {
-            ref_nonces_dl.push(nonce(&seed_nonce, "dL", Some(i)).unwrap());
-            ref_nonces_dr.push(nonce(&seed_nonce, "dR", Some(i)).unwrap());
+            ref_nonces_dl.push(nonce(&seed_nonce, "dL", Some(i), Some(1)).unwrap());
+            ref_nonces_dr.push(nonce(&seed_nonce, "dR", Some(i), Some(2)).unwrap());
         }
 
-        // Verify
+        // Verify deterministic nonces
         for i in 0..16 {
-            assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dR", Some(i)).unwrap());
-            assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dL", Some(i)).unwrap());
-            assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dL", Some(i + 1)).unwrap());
-            assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dR", Some(i + 1)).unwrap());
+            assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dR", Some(i), Some(2)).unwrap());
+            assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dL", Some(i), Some(1)).unwrap());
+            assert_ne!(
+                ref_nonces_dl[i],
+                nonce(&seed_nonce, "dL", Some(i + 1), Some(1)).unwrap()
+            );
+            assert_ne!(
+                ref_nonces_dr[i],
+                nonce(&seed_nonce, "dR", Some(i + 1), Some(2)).unwrap()
+            );
+            assert_ne!(ref_nonces_dl[i], nonce(&seed_nonce, "dL", Some(i), Some(2)).unwrap());
+            assert_ne!(ref_nonces_dr[i], nonce(&seed_nonce, "dR", Some(i), Some(1)).unwrap());
         }
-        assert_ne!(ref_nonce_eta, nonce(&seed_nonce, "a", None).unwrap());
-        assert_ne!(ref_nonce_a, nonce(&seed_nonce, "eta", None).unwrap());
+        assert_ne!(ref_nonce_eta, nonce(&seed_nonce, "a", None, None).unwrap());
+        assert_ne!(ref_nonce_a, nonce(&seed_nonce, "eta", None, None).unwrap());
+        assert_ne!(ref_nonce_a, nonce(&seed_nonce, "a", None, Some(1)).unwrap());
+        assert_ne!(ref_nonce_eta, nonce(&seed_nonce, "eta", None, Some(1)).unwrap());
 
         for i in (0..16).rev() {
-            assert_eq!(ref_nonces_dr[i], nonce(&seed_nonce, "dR", Some(i)).unwrap());
-            assert_eq!(ref_nonces_dl[i], nonce(&seed_nonce, "dL", Some(i)).unwrap());
+            assert_eq!(ref_nonces_dr[i], nonce(&seed_nonce, "dR", Some(i), Some(2)).unwrap());
+            assert_eq!(ref_nonces_dl[i], nonce(&seed_nonce, "dL", Some(i), Some(1)).unwrap());
         }
-        assert_eq!(ref_nonce_a, nonce(&seed_nonce, "a", None).unwrap());
-        assert_eq!(ref_nonce_eta, nonce(&seed_nonce, "eta", None).unwrap());
+        assert_eq!(ref_nonce_a, nonce(&seed_nonce, "a", None, None).unwrap());
+        assert_eq!(ref_nonce_eta, nonce(&seed_nonce, "eta", None, None).unwrap());
+
+        // Verify domain separation for indexes
+        assert_ne!(
+            nonce(&seed_nonce, "", None, Some(1)).unwrap(),
+            nonce(&seed_nonce, "", Some(1), None).unwrap()
+        );
+        assert_eq!(
+            nonce(&seed_nonce, "", Some(1), None).unwrap(),
+            nonce(&seed_nonce, "", Some(1), None).unwrap()
+        );
+        assert_eq!(
+            nonce(&seed_nonce, "", None, Some(1)).unwrap(),
+            nonce(&seed_nonce, "", None, Some(1)).unwrap()
+        );
+        assert_ne!(
+            nonce(&seed_nonce, "", None, None).unwrap(),
+            nonce(&seed_nonce, "", Some(1), None).unwrap()
+        );
+        assert_ne!(
+            nonce(&seed_nonce, "", None, None).unwrap(),
+            nonce(&seed_nonce, "", None, Some(1)).unwrap()
+        );
+
+        // Verify no unhandled exceptions occur with varying label parameter lengths
+        for i in 0..32 {
+            let label: String = (&mut rng).sample_iter(Alphanumeric).take(i).map(char::from).collect();
+            match nonce(
+                &Scalar::random(&mut rng),
+                label.as_str(),
+                Some(usize::MAX),
+                Some(usize::MAX),
+            ) {
+                Ok(_) => {
+                    if i > 16 {
+                        panic!("Should err on label size >16")
+                    }
+                },
+                Err(_) => {
+                    if i <= 16 {
+                        panic!("Should not err on label size <=16")
+                    }
+                },
+            }
+        }
     }
 
     fn bit_vector_to_value(bit_vector: &[Scalar]) -> Result<u64, ProofError> {

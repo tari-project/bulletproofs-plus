@@ -8,6 +8,8 @@ use rand::Rng;
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
     errors::ProofError,
+    extended_mask::ExtendedMask,
+    generators::pedersen_gens::ExtensionDegree,
     protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
     range_proof::RangeProof,
@@ -19,12 +21,28 @@ use tari_bulletproofs_plus::{
 fn test_non_aggregated_single_proof_multiple_bit_lengths() {
     let bit_lengths = vec![4, 16, 64];
     let proof_batch = vec![1];
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::NoOffset);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::Intermediate);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::EqualToValue);
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
+        ExtensionDegree::Zero,
+        &ProofOfMinimumValueStrategy::NoOffset,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::One,
+        &ProofOfMinimumValueStrategy::Intermediate,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::Two,
+        &ProofOfMinimumValueStrategy::EqualToValue,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -33,12 +51,28 @@ fn test_non_aggregated_single_proof_multiple_bit_lengths() {
 fn test_aggregated_single_proof_multiple_bit_lengths() {
     let bit_lengths = vec![2, 8, 32];
     let proof_batch = vec![4];
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::NoOffset);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::Intermediate);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::EqualToValue);
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
+        ExtensionDegree::Zero,
+        &ProofOfMinimumValueStrategy::NoOffset,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::One,
+        &ProofOfMinimumValueStrategy::Intermediate,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::Two,
+        &ProofOfMinimumValueStrategy::EqualToValue,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -47,13 +81,28 @@ fn test_aggregated_single_proof_multiple_bit_lengths() {
 fn test_non_aggregated_multiple_proofs_single_bit_length() {
     let bit_lengths = vec![64];
     let proof_batch = vec![1, 1, 1, 1, 1];
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::NoOffset);
-    // panic!("Hansie");
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::Intermediate);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::EqualToValue);
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
+        ExtensionDegree::Zero,
+        &ProofOfMinimumValueStrategy::NoOffset,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::One,
+        &ProofOfMinimumValueStrategy::Intermediate,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::Two,
+        &ProofOfMinimumValueStrategy::EqualToValue,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -62,13 +111,28 @@ fn test_non_aggregated_multiple_proofs_single_bit_length() {
 fn test_mixed_aggregation_multiple_proofs_single_bit_length() {
     let bit_lengths = vec![64];
     let proof_batch = vec![1, 2, 4, 8];
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::NoOffset);
-    // panic!("Hansie");
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::Intermediate);
-    prove_and_verify(&bit_lengths, &proof_batch, &ProofOfMinimumValueStrategy::EqualToValue);
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
+        ExtensionDegree::Zero,
+        &ProofOfMinimumValueStrategy::NoOffset,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::One,
+        &ProofOfMinimumValueStrategy::Intermediate,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::Two,
+        &ProofOfMinimumValueStrategy::EqualToValue,
+    );
+    prove_and_verify(
+        &bit_lengths,
+        &proof_batch,
+        ExtensionDegree::Zero,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -80,14 +144,19 @@ enum ProofOfMinimumValueStrategy {
     LargerThanValue,
 }
 
-fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strategy: &ProofOfMinimumValueStrategy) {
+fn prove_and_verify(
+    bit_lengths: &[usize],
+    proof_batch: &[usize],
+    extension_degree: ExtensionDegree,
+    promise_strategy: &ProofOfMinimumValueStrategy,
+) {
     let mut rng = rand::thread_rng();
     let transcript_label: &'static str = "BatchedRangeProofTest";
 
     for bit_length in bit_lengths {
         // 0.  Batch data
-        let mut private_masks: Vec<Option<Scalar>> = vec![];
-        let mut public_masks: Vec<Option<Scalar>> = vec![];
+        let mut private_masks: Vec<Option<ExtendedMask>> = vec![];
+        let mut public_masks = vec![];
         let mut statements_private = vec![];
         let mut statements_public = vec![];
         let mut proofs = vec![];
@@ -96,10 +165,10 @@ fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strate
         let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
         for aggregation_size in proof_batch {
             // 1. Generators
-            let generators = RangeParameters::init(*bit_length, *aggregation_size).unwrap();
+            let generators = RangeParameters::init(*bit_length, *aggregation_size, extension_degree).unwrap();
 
             // 2. Create witness data
-            let mut witness = RangeWitness::new(vec![]);
+            let mut openings = vec![];
             let mut commitments = vec![];
             let mut minimum_values = vec![];
             for m in 0..*aggregation_size {
@@ -111,12 +180,21 @@ fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strate
                     ProofOfMinimumValueStrategy::LargerThanValue => Some(value + 1),
                 };
                 minimum_values.push(minimum_value);
-                let blinding = Scalar::random_not_zero(&mut rng);
-                commitments.push(generators.pc_gens().commit(Scalar::from(value), blinding));
-                witness.openings.push(CommitmentOpening::new(value, blinding));
+                let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
+                commitments.push(
+                    generators
+                        .pc_gens()
+                        .commit(Scalar::from(value), blindings.as_slice())
+                        .unwrap(),
+                );
+                openings.push(CommitmentOpening::new(value, blindings.clone()));
                 if m == 0 {
                     if *aggregation_size == 1 {
-                        private_masks.push(Some(blinding));
+                        // let mut temp_masks: Vec<Scalar> = Vec::with_capacity(extension_degree as usize);
+                        // for item in blindings {
+                        //     temp_masks.push(item);
+                        // }
+                        private_masks.push(Some(ExtendedMask::assign(extension_degree, blindings).unwrap()));
                         public_masks.push(None);
                     } else {
                         private_masks.push(None);
@@ -124,6 +202,7 @@ fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strate
                     }
                 }
             }
+            let witness = RangeWitness::init(openings).unwrap();
 
             // 3. Generate the statement
             let seed_nonce = if *aggregation_size == 1 {
@@ -165,12 +244,24 @@ fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strate
 
         if !proofs.is_empty() {
             // 5. Verify the entire batch as the commitment owner, i.e. the prover self
+            // --- Only recover the masks
             let recovered_private_masks =
-                RangeProof::verify(transcript_label, &statements_private.clone(), &proofs.clone()).unwrap();
+                RangeProof::recover_masks_ony(transcript_label, &statements_private.clone(), &proofs.clone()).unwrap();
             assert_eq!(private_masks, recovered_private_masks);
+            // --- Recover the masks and verify the proofs
+            let recovered_private_masks =
+                RangeProof::verify_and_recover_masks(transcript_label, &statements_private.clone(), &proofs.clone())
+                    .unwrap();
+            assert_eq!(private_masks, recovered_private_masks);
+            // --- Verify the proofs but do not recover the masks
+            let recovered_private_masks =
+                RangeProof::verify_do_not_recover_masks(transcript_label, &statements_private.clone(), &proofs.clone())
+                    .unwrap();
+            assert_eq!(public_masks, recovered_private_masks);
 
             // 6. Verify the entire batch as public entity
-            let recovered_public_masks = RangeProof::verify(transcript_label, &statements_public, &proofs).unwrap();
+            let recovered_public_masks =
+                RangeProof::verify_do_not_recover_masks(transcript_label, &statements_public, &proofs).unwrap();
             assert_eq!(public_masks, recovered_public_masks);
 
             // 7. Try to recover the masks with incorrect seed_nonce values
@@ -192,8 +283,12 @@ fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strate
                         seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::one()),
                     });
                 }
-                let recovered_private_masks_changed =
-                    RangeProof::verify(transcript_label, &statements_private_changed, &proofs.clone()).unwrap();
+                let recovered_private_masks_changed = RangeProof::verify_and_recover_masks(
+                    transcript_label,
+                    &statements_private_changed,
+                    &proofs.clone(),
+                )
+                .unwrap();
                 assert_ne!(private_masks, recovered_private_masks_changed);
             }
 
@@ -219,7 +314,8 @@ fn prove_and_verify(bit_lengths: &[usize], proof_batch: &[usize], promise_strate
                     seed_nonce: statement.seed_nonce,
                 });
             }
-            match RangeProof::verify(transcript_label, &statements_public_changed, &proofs.clone()) {
+            match RangeProof::verify_do_not_recover_masks(transcript_label, &statements_public_changed, &proofs.clone())
+            {
                 Ok(_) => {
                     panic!("Range proof should not verify")
                 },
