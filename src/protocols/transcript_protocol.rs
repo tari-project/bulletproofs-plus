@@ -6,10 +6,10 @@
 
 //! Bulletproofs+ `TranscriptProtocol` trait for using a Transcript
 
-use curve25519_dalek::{ristretto::CompressedRistretto, scalar::Scalar};
+use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
 use merlin::Transcript;
 
-use crate::errors::ProofError;
+use crate::{errors::ProofError, traits::FixedBytesRepr};
 
 /// Defines a `TranscriptProtocol` trait for using a Merlin transcript.
 pub trait TranscriptProtocol {
@@ -20,14 +20,14 @@ pub trait TranscriptProtocol {
     fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar);
 
     /// Append a `point` with the given `label`.
-    fn append_point(&mut self, label: &'static [u8], point: &CompressedRistretto);
+    fn append_point<P: FixedBytesRepr>(&mut self, label: &'static [u8], point: &P);
 
     /// Check that a point is not the identity, then append it to the
     /// transcript.  Otherwise, return an error.
-    fn validate_and_append_point(
+    fn validate_and_append_point<P: FixedBytesRepr + IsIdentity>(
         &mut self,
         label: &'static [u8],
-        point: &CompressedRistretto,
+        point: &P,
     ) -> Result<(), ProofError>;
 
     /// Compute a `label`ed challenge variable.
@@ -43,23 +43,21 @@ impl TranscriptProtocol for Transcript {
         self.append_message(label, scalar.as_bytes());
     }
 
-    fn append_point(&mut self, label: &'static [u8], point: &CompressedRistretto) {
-        self.append_message(label, point.as_bytes());
+    fn append_point<P: FixedBytesRepr>(&mut self, label: &'static [u8], point: &P) {
+        self.append_message(label, point.as_fixed_bytes());
     }
 
-    fn validate_and_append_point(
+    fn validate_and_append_point<P: FixedBytesRepr + IsIdentity>(
         &mut self,
         label: &'static [u8],
-        point: &CompressedRistretto,
+        point: &P,
     ) -> Result<(), ProofError> {
-        use curve25519_dalek::traits::IsIdentity;
-
         if point.is_identity() {
             Err(ProofError::VerificationFailed(
                 "Identity element cannot be added to the transcript".to_string(),
             ))
         } else {
-            self.append_message(label, point.as_bytes());
+            self.append_message(label, point.as_fixed_bytes());
             Ok(())
         }
     }

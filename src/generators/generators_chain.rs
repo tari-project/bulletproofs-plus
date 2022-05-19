@@ -4,17 +4,21 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
-use curve25519_dalek::ristretto::RistrettoPoint;
+use std::marker::PhantomData;
+
 use digest::{ExtendableOutputDirty, Update, XofReader};
 use sha3::{Sha3XofReader, Shake256};
 
+use crate::traits::FromUniformBytes;
+
 /// The `GeneratorsChain` creates an arbitrary-long sequence of orthogonal generators.  The sequence can be
 /// deterministically produced starting with an arbitrary point.
-pub struct GeneratorsChain {
+pub struct GeneratorsChain<P> {
     reader: Sha3XofReader,
+    _phantom: PhantomData<P>,
 }
 
-impl GeneratorsChain {
+impl<P> GeneratorsChain<P> {
     /// Creates a chain of generators, determined by the hash of `label`
     pub(crate) fn new(label: &[u8]) -> Self {
         let mut shake = Shake256::default();
@@ -23,36 +27,33 @@ impl GeneratorsChain {
 
         GeneratorsChain {
             reader: shake.finalize_xof_dirty(),
+            _phantom: PhantomData,
         }
     }
 
     /// Advances the reader n times, squeezing and discarding the result
     pub(crate) fn fast_forward(mut self, n: usize) -> Self {
+        let mut buf = [0u8; 64];
         for _ in 0..n {
-            let mut buf = [0u8; 64];
             self.reader.read(&mut buf);
         }
         self
     }
 }
 
-impl Default for GeneratorsChain {
+impl<P> Default for GeneratorsChain<P> {
     fn default() -> Self {
         Self::new(&[])
     }
 }
 
-impl Iterator for GeneratorsChain {
-    type Item = RistrettoPoint;
+impl<P: FromUniformBytes> Iterator for GeneratorsChain<P> {
+    type Item = P;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut uniform_bytes = [0u8; 64];
         self.reader.read(&mut uniform_bytes);
 
-        Some(RistrettoPoint::from_uniform_bytes(&uniform_bytes))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (usize::MAX, None)
+        Some(P::from_uniform_bytes(&uniform_bytes))
     }
 }

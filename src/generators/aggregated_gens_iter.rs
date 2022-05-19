@@ -4,19 +4,17 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
-use curve25519_dalek::ristretto::RistrettoPoint;
-
 /// A convenience iterator struct for the generators
-pub struct AggregatedGensIter<'a> {
-    pub(crate) array: &'a Vec<Vec<RistrettoPoint>>,
-    pub(crate) n: usize,
-    pub(crate) m: usize,
-    pub(crate) party_idx: usize,
-    pub(crate) gen_idx: usize,
+pub struct AggregatedGensIter<'a, P> {
+    pub(super) array: &'a Vec<Vec<P>>,
+    pub(super) n: usize,
+    pub(super) m: usize,
+    pub(super) party_idx: usize,
+    pub(super) gen_idx: usize,
 }
 
-impl<'a> Iterator for AggregatedGensIter<'a> {
-    type Item = &'a RistrettoPoint;
+impl<'a, P> Iterator for AggregatedGensIter<'a, P> {
+    type Item = &'a P;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.gen_idx >= self.n {

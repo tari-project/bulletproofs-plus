@@ -10,7 +10,12 @@
 extern crate criterion;
 
 use criterion::{Criterion, SamplingMode};
-use tari_bulletproofs_plus::{generators::pedersen_gens::ExtensionDegree, BulletproofGens, PedersenGens};
+use curve25519_dalek::ristretto::RistrettoPoint;
+use tari_bulletproofs_plus::{
+    generators::pedersen_gens::ExtensionDegree,
+    ristretto::create_pedersen_gens_with_extension_degree,
+    BulletproofGens,
+};
 
 fn pc_gens(c: &mut Criterion) {
     let mut group = c.benchmark_group("PedersenGens");
@@ -26,7 +31,7 @@ fn pc_gens(c: &mut Criterion) {
         let label = format!("PedersenGens::with_extension_degree({:?})", extension_degree);
         group.bench_function(&label, |b|
             // Benchmark this code
-            b.iter(|| PedersenGens::with_extension_degree(*extension_degree)));
+            b.iter(|| create_pedersen_gens_with_extension_degree(*extension_degree)));
     }
     group.finish();
 }
@@ -38,7 +43,7 @@ fn bp_gens(c: &mut Criterion) {
         let label = format!("BulletproofGens::new - size {}", size);
         group.bench_function(&label, |b|
             // Benchmark this code
-            b.iter(|| BulletproofGens::new(size, 1)));
+            b.iter(|| BulletproofGens::<RistrettoPoint>::new(size, 1)));
     }
     group.finish();
 }

@@ -22,6 +22,8 @@ use tari_bulletproofs_plus::{
     range_proof::{RangeProof, VerifyAction},
     range_statement::RangeStatement,
     range_witness::RangeWitness,
+    ristretto,
+    ristretto::RistrettoRangeProof,
 };
 
 static AGGREGATION_SIZES: [usize; 6] = [1, 2, 4, 8, 16, 32];
@@ -42,7 +44,12 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
         );
         group.bench_function(&label, move |b| {
             // 1. Generators
-            let generators = RangeParameters::init(bit_length, aggregation_factor, extension_degree).unwrap();
+            let generators = RangeParameters::init(
+                bit_length,
+                aggregation_factor,
+                ristretto::create_pedersen_gens_with_extension_degree(extension_degree),
+            )
+            .unwrap();
 
             // 2. Create witness data
             let mut commitments = vec![];
@@ -75,7 +82,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             // Benchmark this code
             b.iter(|| {
                 // 4. Create the aggregated proof
-                let _proof = RangeProof::prove(transcript_label, &statement.clone(), &witness);
+                let _proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness);
             })
         });
     }
@@ -103,6 +110,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
     let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
 
     for aggregation_factor in AGGREGATION_SIZES {
+        let pederson_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
         let label = format!(
             "Agg {}-bit BP+ verify agg factor {} degree {:?}",
             bit_length, aggregation_factor, extension_degree
@@ -113,7 +121,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let mut proofs = vec![];
 
             // 1. Generators
-            let generators = RangeParameters::init(bit_length, aggregation_factor, extension_degree).unwrap();
+            let generators = RangeParameters::init(bit_length, aggregation_factor, pederson_gens.clone()).unwrap();
 
             // 2. Create witness data
             let mut commitments = vec![];
@@ -145,15 +153,13 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             statements.push(statement.clone());
 
             // 4. Create the proof
-            let proof = RangeProof::prove(transcript_label, &statement, &witness);
-            proofs.push(proof.unwrap());
+            let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness).unwrap();
+            proofs.push(proof);
 
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the aggregated proof
-                let _masks =
-                    RangeProof::verify_do_not_recover_masks(transcript_label, &statements.clone(), &proofs.clone())
-                        .unwrap();
+                let _masks = RangeProof::verify_do_not_recover_masks(transcript_label, &statements, &proofs).unwrap();
             });
         });
     }
@@ -187,9 +193,10 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
     // 0.  Batch data
     let mut statements = vec![];
     let mut proofs = vec![];
+    let pc_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
 
     // 1. Generators
-    let generators = RangeParameters::init(bit_length, 1, extension_degree).unwrap();
+    let generators = RangeParameters::init(bit_length, 1, pc_gens).unwrap();
 
     let mut rng = rand::thread_rng();
     for _ in 0..max_range_proofs {
@@ -215,8 +222,8 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
         statements.push(statement.clone());
 
         // 4. Create the proof
-        let proof = RangeProof::prove(transcript_label, &statement, &witness);
-        proofs.push(proof.unwrap());
+        let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness).unwrap();
+        proofs.push(proof);
     }
 
     for extract_masks in [VerifyAction::VerifyOnly, VerifyAction::RecoverOnly] {

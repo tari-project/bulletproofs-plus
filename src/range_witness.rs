@@ -3,14 +3,11 @@
 
 //! Bulletproofs+ commitment openings for the aggregated case
 
+use std::convert::TryInto;
+
 use zeroize::Zeroize;
 
-use crate::{
-    commitment_opening::CommitmentOpening,
-    errors::ProofError,
-    generators::pedersen_gens::ExtensionDegree,
-    PedersenGens,
-};
+use crate::{commitment_opening::CommitmentOpening, errors::ProofError, generators::pedersen_gens::ExtensionDegree};
 
 /// A convenience struct for holding commitment openings for the aggregated case
 #[derive(Clone)]
@@ -37,7 +34,7 @@ impl RangeWitness {
         }
         Ok(Self {
             openings,
-            extension_degree: PedersenGens::extension_degree(extension_degree)?,
+            extension_degree: extension_degree.try_into()?,
         })
     }
 }

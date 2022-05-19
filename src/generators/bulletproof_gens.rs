@@ -4,9 +4,7 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
-use curve25519_dalek::ristretto::RistrettoPoint;
-
-use crate::generators::aggregated_gens_iter::AggregatedGensIter;
+use crate::{generators::aggregated_gens_iter::AggregatedGensIter, traits::FromUniformBytes};
 
 /// The `BulletproofGens` struct contains all the generators needed for aggregating up to `m` range proofs of up to `n`
 /// bits each.
@@ -17,7 +15,7 @@ use crate::generators::aggregated_gens_iter::AggregatedGensIter;
 /// party's generators separately.
 ///
 /// To construct an arbitrary-length chain of generators, we apply SHAKE256 to a domain separator label, and feed each
-/// 64 bytes of XOF output into the `ristretto255` hash-to-group function. Each of the `m` parties' generators are
+/// 64 bytes of XOF output into the curve hash-to-group function. Each of the `m` parties' generators are
 /// constructed using a different domain separation label, and proving and verification uses the first `n` elements of
 /// the arbitrary-length chain.
 ///
@@ -28,18 +26,18 @@ use crate::generators::aggregated_gens_iter::AggregatedGensIter;
 /// generator chain, and even forward-compatible to multiparty aggregation of constraint system proofs, since the
 /// generators are namespaced by their party index.
 #[derive(Clone, Debug)]
-pub struct BulletproofGens {
+pub struct BulletproofGens<P> {
     /// The maximum number of usable generators for each party.
     pub gens_capacity: usize,
     /// Number of values or parties
     pub party_capacity: usize,
     /// Precomputed \\(\mathbf G\\) generators for each party.
-    pub(crate) g_vec: Vec<Vec<RistrettoPoint>>,
+    pub(crate) g_vec: Vec<Vec<P>>,
     /// Precomputed \\(\mathbf H\\) generators for each party.
-    pub(crate) h_vec: Vec<Vec<RistrettoPoint>>,
+    pub(crate) h_vec: Vec<Vec<P>>,
 }
 
-impl BulletproofGens {
+impl<P: FromUniformBytes> BulletproofGens<P> {
     /// Create a new `BulletproofGens` object.
     ///
     /// # Inputs
@@ -93,7 +91,7 @@ impl BulletproofGens {
     }
 
     /// Return an iterator over the aggregation of the parties' G generators with given size `n`.
-    pub(crate) fn g_iter(&self, n: usize, m: usize) -> impl Iterator<Item = &RistrettoPoint> {
+    pub(crate) fn g_iter(&self, n: usize, m: usize) -> impl Iterator<Item = &P> {
         AggregatedGensIter {
             n,
             m,
@@ -104,7 +102,7 @@ impl BulletproofGens {
     }
 
     /// Return an iterator over the aggregation of the parties' H generators with given size `n`.
-    pub(crate) fn h_iter(&self, n: usize, m: usize) -> impl Iterator<Item = &RistrettoPoint> {
+    pub(crate) fn h_iter(&self, n: usize, m: usize) -> impl Iterator<Item = &P> {
         AggregatedGensIter {
             n,
             m,

@@ -15,6 +15,8 @@ use tari_bulletproofs_plus::{
     range_proof::RangeProof,
     range_statement::RangeStatement,
     range_witness::RangeWitness,
+    ristretto,
+    ristretto::RistrettoRangeProof,
 };
 
 #[test]
@@ -165,7 +167,8 @@ fn prove_and_verify(
         let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
         for aggregation_size in proof_batch {
             // 1. Generators
-            let generators = RangeParameters::init(*bit_length, *aggregation_size, extension_degree).unwrap();
+            let pc_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
+            let generators = RangeParameters::init(*bit_length, *aggregation_size, pc_gens).unwrap();
 
             // 2. Create witness data
             let mut openings = vec![];
@@ -283,7 +286,7 @@ fn prove_and_verify(
                         seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::one()),
                     });
                 }
-                let recovered_private_masks_changed = RangeProof::verify_and_recover_masks(
+                let recovered_private_masks_changed = RistrettoRangeProof::verify_and_recover_masks(
                     transcript_label,
                     &statements_private_changed,
                     &proofs.clone(),
@@ -293,15 +296,14 @@ fn prove_and_verify(
             }
 
             // 8. Meddle with the minimum value promises
-            let mut statements_public_changed = vec![];
-            for statement in statements_public.clone() {
+            let mut statements_public_changed = Vec::with_capacity(statements_public.len());
+            for statement in statements_public {
                 statements_public_changed.push(RangeStatement {
                     generators: statement.generators.clone(),
                     commitments: statement.commitments.clone(),
                     commitments_compressed: statement.commitments_compressed.clone(),
                     minimum_value_promises: statement
                         .minimum_value_promises
-                        .clone()
                         .iter()
                         .map(|promise| {
                             if let Some(value) = promise {
@@ -314,8 +316,7 @@ fn prove_and_verify(
                     seed_nonce: statement.seed_nonce,
                 });
             }
-            match RangeProof::verify_do_not_recover_masks(transcript_label, &statements_public_changed, &proofs.clone())
-            {
+            match RangeProof::verify_do_not_recover_masks(transcript_label, &statements_public_changed, &proofs) {
                 Ok(_) => {
                     panic!("Range proof should not verify")
                 },
@@ -332,12 +333,12 @@ fn prove_and_verify(
         for proof in proofs {
             // This will test the underlying proof to bytes and from bytes
             let serialized_proof = proof.to_bytes();
-            let deserialized_proof = RangeProof::from_bytes(&serialized_proof).unwrap();
+            let deserialized_proof = RistrettoRangeProof::from_bytes(&serialized_proof).unwrap();
             assert_eq!(proof, deserialized_proof);
 
             // This will test using serde as the serializer/deserializer
             let serialized_proof_bincode = bincode::serialize(&proof).unwrap();
-            let deserialized_proof_bincode: RangeProof =
+            let deserialized_proof_bincode: RistrettoRangeProof =
                 bincode::deserialize(serialized_proof_bincode.as_slice()).unwrap();
             assert_eq!(proof, deserialized_proof_bincode);
         }
