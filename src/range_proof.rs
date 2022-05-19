@@ -16,6 +16,7 @@ use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     errors::ProofError,
+    extended_mask::ExtendedMask,
     generators::pedersen_gens::ExtensionDegree,
     inner_product_round::InnerProductRound,
     protocols::{scalar_protocol::ScalarProtocol, transcript_protocol::TranscriptProtocol},
@@ -59,6 +60,7 @@ pub struct RangeProof {
 /// use tari_bulletproofs_plus::{
 ///     commitment_opening::CommitmentOpening,
 ///     errors::ProofError,
+///     extended_mask::ExtendedMask,
 ///     generators::pedersen_gens::ExtensionDegree,
 ///     protocols::scalar_protocol::ScalarProtocol,
 ///     range_parameters::RangeParameters,
@@ -72,15 +74,16 @@ pub struct RangeProof {
 ///
 /// // 0.  Batch data
 /// let proof_batch = vec![1, 2, 1, 4];
-/// let mut private_masks: Vec<Option<Scalar>> = vec![];
-/// let mut public_masks: Vec<Option<Scalar>> = vec![];
+/// let mut private_masks: Vec<Option<ExtendedMask>> = vec![];
+/// let mut public_masks = vec![];
 /// let mut statements_private = vec![];
 /// let mut statements_public = vec![];
 /// let mut proofs = vec![];
 ///
 /// for aggregation_size in proof_batch {
 ///     // 1. Generators
-///     let generators = RangeParameters::init(bit_length, aggregation_size, ExtensionDegree::Zero).unwrap();
+///     let extension_degree = ExtensionDegree::Zero;
+///     let generators = RangeParameters::init(bit_length, aggregation_size, extension_degree).unwrap();
 ///
 ///     // 2. Create witness data
 ///     let mut commitments = vec![];
@@ -88,7 +91,7 @@ pub struct RangeProof {
 ///     let mut minimum_values = vec![];
 ///     for m in 0..aggregation_size {
 ///         let value = 123000111222333 * m as u64; // Value in uT
-///         let blinding = Scalar::random_not_zero(&mut rng);
+///         let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
 ///         if m == 2 {
 ///             // Minimum value proofs other than zero are can be built into the proof
 ///             minimum_values.push(Some(value / 3));
@@ -98,14 +101,14 @@ pub struct RangeProof {
 ///         commitments.push(
 ///             generators
 ///                 .pc_gens()
-///                 .commit(Scalar::from(value), vec![blinding].as_slice())
+///                 .commit(Scalar::from(value), blindings.as_slice())
 ///                 .unwrap(),
 ///         );
-///         openings.push(CommitmentOpening::new(value, vec![blinding]));
+///         openings.push(CommitmentOpening::new(value, blindings.clone()));
 ///         if m == 0 {
 ///             if aggregation_size == 1 {
 ///                 // Masks (any secret scalar) can be embedded for proofs with aggregation size = 1
-///                 private_masks.push(Some(blinding));
+///                 private_masks.push(Some(ExtendedMask::assign(extension_degree, blindings).unwrap()));
 ///                 public_masks.push(None);
 ///             } else {
 ///                 private_masks.push(None);
@@ -412,7 +415,7 @@ impl RangeProof {
         transcript_label: &'static str,
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
-    ) -> Result<Vec<Option<Scalar>>, ProofError> {
+    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         RangeProof::verify(
             transcript_label,
             statements,
@@ -426,7 +429,7 @@ impl RangeProof {
         transcript_label: &'static str,
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
-    ) -> Result<Vec<Option<Scalar>>, ProofError> {
+    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         RangeProof::verify(transcript_label, statements, range_proofs, VerifyAction::VerifyOnly)
     }
 
@@ -435,7 +438,7 @@ impl RangeProof {
         transcript_label: &'static str,
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
-    ) -> Result<Vec<Option<Scalar>>, ProofError> {
+    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         RangeProof::verify(transcript_label, statements, range_proofs, VerifyAction::RecoverOnly)
     }
 
@@ -446,7 +449,7 @@ impl RangeProof {
         statements: &[RangeStatement],
         range_proofs: &[RangeProof],
         extract_masks: VerifyAction,
-    ) -> Result<Vec<Option<Scalar>>, ProofError> {
+    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // Verify generators consistency & select largest aggregation factor
         let (max_mn, max_index) = RangeProof::verify_statements_and_generators_consistency(statements, range_proofs)?;
         let (g_base_vec, h_base) = (statements[0].generators.g_base_vec(), statements[0].generators.h_base());
@@ -494,13 +497,7 @@ impl RangeProof {
             VerifyAction::VerifyOnly => {
                 vec![]
             },
-            _ => {
-                let extended_masks = statements
-                    .iter()
-                    .fold(0usize, |acc, x| acc + if x.seed_nonce.is_some() { 1 } else { 0 }) *
-                    (extension_degree - 1);
-                Vec::with_capacity(range_proofs.len() + extended_masks)
-            },
+            _ => Vec::with_capacity(range_proofs.len()),
         };
 
         let two = Scalar::from(2u8);
@@ -610,19 +607,24 @@ impl RangeProof {
                 VerifyAction::VerifyOnly => masks.push(None),
                 _ => {
                     if let Some(seed_nonce) = statements[index].seed_nonce {
+                        let mut temp_masks = Vec::with_capacity(extension_degree);
                         for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
-                            let mut temp_mask = (*d1_val -
+                            let mut this_mask = (*d1_val -
                                 nonce(&seed_nonce, "eta", None, Some(k))? -
                                 e * nonce(&seed_nonce, "d", None, Some(k))?) *
                                 e_square.invert();
-                            temp_mask -= nonce(&seed_nonce, "alpha", None, Some(k))?;
+                            this_mask -= nonce(&seed_nonce, "alpha", None, Some(k))?;
                             for j in 0..rounds {
-                                temp_mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
-                                temp_mask -= challenges_sq_inv[j] * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
+                                this_mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
+                                this_mask -= challenges_sq_inv[j] * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
                             }
-                            temp_mask *= (z_square * y_nm_1).invert();
-                            masks.push(Some(temp_mask));
+                            this_mask *= (z_square * y_nm_1).invert();
+                            temp_masks.push(this_mask);
                         }
+                        masks.push(Some(ExtendedMask::assign(
+                            PedersenGens::extension_degree(extension_degree)?,
+                            temp_masks,
+                        )?));
                     } else {
                         masks.push(None);
                     }

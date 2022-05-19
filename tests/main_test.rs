@@ -8,6 +8,7 @@ use rand::Rng;
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
     errors::ProofError,
+    extended_mask::ExtendedMask,
     generators::pedersen_gens::ExtensionDegree,
     protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
@@ -154,8 +155,8 @@ fn prove_and_verify(
 
     for bit_length in bit_lengths {
         // 0.  Batch data
-        let mut private_masks: Vec<Option<Scalar>> = vec![];
-        let mut public_masks: Vec<Option<Scalar>> = vec![];
+        let mut private_masks: Vec<Option<ExtendedMask>> = vec![];
+        let mut public_masks = vec![];
         let mut statements_private = vec![];
         let mut statements_public = vec![];
         let mut proofs = vec![];
@@ -189,9 +190,11 @@ fn prove_and_verify(
                 openings.push(CommitmentOpening::new(value, blindings.clone()));
                 if m == 0 {
                     if *aggregation_size == 1 {
-                        for item in blindings {
-                            private_masks.push(Some(item));
-                        }
+                        // let mut temp_masks: Vec<Scalar> = Vec::with_capacity(extension_degree as usize);
+                        // for item in blindings {
+                        //     temp_masks.push(item);
+                        // }
+                        private_masks.push(Some(ExtendedMask::assign(extension_degree, blindings).unwrap()));
                         public_masks.push(None);
                     } else {
                         private_masks.push(None);
