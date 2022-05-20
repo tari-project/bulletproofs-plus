@@ -100,12 +100,6 @@ pub const MAX_RANGE_PROOF_BIT_LENGTH: usize = 64;
 ///     let extension_degree = ExtensionDegree::Zero;
 ///     let pc_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
 ///     let generators = RangeParameters::init(bit_length, aggregation_size, pc_gens).unwrap();
-///     let generators = RangeParameters::init(
-///         bit_length,
-///         aggregation_size,
-///         ristretto::create_degree_zero_pedersen_gens(),
-///     )
-///     .unwrap();
 ///
 ///     // 2. Create witness data
 ///     let mut commitments = vec![];
