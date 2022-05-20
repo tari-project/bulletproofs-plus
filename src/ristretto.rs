@@ -55,11 +55,6 @@ impl Compressable for RistrettoPoint {
     }
 }
 
-/// Generate `PedersenGens` with an `ExtensionDegree` of zero
-pub fn create_degree_zero_pedersen_gens() -> PedersenGens<RistrettoPoint> {
-    create_pedersen_gens_with_extension_degree(ExtensionDegree::Zero)
-}
-
 /// Create extended Pedersen generators for the required extension degree using pre-calculated compressed constants
 pub fn create_pedersen_gens_with_extension_degree(extension_degree: ExtensionDegree) -> PedersenGens<RistrettoPoint> {
     let (g_base_vec, g_base_compressed_vec) = get_g_base(extension_degree);
@@ -213,14 +208,6 @@ mod tests {
             assert_eq!(pc_gens.g_base_vec.len(), extension_degree as usize);
             assert_eq!(pc_gens.g_base_compressed_vec.len(), extension_degree as usize);
         }
-    }
-
-    #[test]
-    fn test_create_degree_zero_pederson_gens() {
-        assert_eq!(
-            create_pedersen_gens_with_extension_degree(ExtensionDegree::Zero),
-            create_degree_zero_pedersen_gens()
-        );
     }
 
     #[test]
