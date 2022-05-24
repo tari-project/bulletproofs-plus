@@ -17,10 +17,24 @@ use tari_bulletproofs_plus::{
     BulletproofGens,
 };
 
+// Reduced spectrum of tests for the sake of CI bench tests
+static EXTENSION_DEGREE: [ExtensionDegree; 2] = [ExtensionDegree::Zero, ExtensionDegree::Five];
+static BP_GENS_ARR: [usize; 5] = [0, 3, 5, 7, 9];
+// To do a full spectrum of tests, use these constants instead
+// static EXTENSION_DEGREE: [ExtensionDegree; 6] = [
+//     ExtensionDegree::Zero,
+//     ExtensionDegree::One,
+//     ExtensionDegree::Two,
+//     ExtensionDegree::Three,
+//     ExtensionDegree::Four,
+//     ExtensionDegree::Five,
+// ];
+// static BP_GENS_ARR: [usize; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
 fn pc_gens(c: &mut Criterion) {
     let mut group = c.benchmark_group("PedersenGens");
     group.sampling_mode(SamplingMode::Flat);
-    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::Two, ExtensionDegree::Five] {
+    for extension_degree in &EXTENSION_DEGREE {
         let label = format!("PedersenGens::with_extension_degree({:?})", extension_degree);
         group.bench_function(&label, |b|
             // Benchmark this code
@@ -32,7 +46,7 @@ fn pc_gens(c: &mut Criterion) {
 fn bp_gens(c: &mut Criterion) {
     let mut group = c.benchmark_group("BulletproofGens");
     group.sampling_mode(SamplingMode::Flat);
-    for size in [0, 3, 5, 7, 9].map(|i| 2 << i) {
+    for size in BP_GENS_ARR.map(|i| 2 << i) {
         let label = format!("BulletproofGens::new - size {}", size);
         group.bench_function(&label, |b|
             // Benchmark this code
