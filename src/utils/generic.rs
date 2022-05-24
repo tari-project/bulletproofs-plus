@@ -17,7 +17,7 @@ use core::{
 use blake2::Blake2b;
 use curve25519_dalek::scalar::Scalar;
 
-use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::RangeProof};
+use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::MAX_RANGE_PROOF_BIT_LENGTH};
 
 /// Create a Blake2B deterministic nonce given a seed, label and two indexes
 pub fn nonce(
@@ -59,7 +59,7 @@ pub fn nonce(
 
 /// Decompose a given value into a vector of scalars for the required bit length
 pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar>, ProofError> {
-    if !bit_length.is_power_of_two() || bit_length > RangeProof::MAX_BIT_LENGTH {
+    if !bit_length.is_power_of_two() || bit_length > MAX_RANGE_PROOF_BIT_LENGTH {
         return Err(ProofError::InvalidLength(
             "Bit size not valid, must be a power of 2 and <= 64".to_string(),
         ));
@@ -102,7 +102,7 @@ mod tests {
     use crate::{
         errors::ProofError,
         protocols::scalar_protocol::ScalarProtocol,
-        range_proof::RangeProof,
+        range_proof::MAX_RANGE_PROOF_BIT_LENGTH,
         utils::generic::{bit_vector_of_scalars, nonce},
     };
 
@@ -195,7 +195,7 @@ mod tests {
     }
 
     fn bit_vector_to_value(bit_vector: &[Scalar]) -> Result<u64, ProofError> {
-        if !bit_vector.len().is_power_of_two() || bit_vector.len() > RangeProof::MAX_BIT_LENGTH {
+        if !bit_vector.len().is_power_of_two() || bit_vector.len() > MAX_RANGE_PROOF_BIT_LENGTH {
             return Err(ProofError::InvalidLength(
                 "Bit vector must be a power of 2 with length <= 64".to_string(),
             ));
@@ -235,10 +235,10 @@ mod tests {
         if bit_vector_of_scalars(16, 4).is_ok() {
             panic!("Should panic");
         }
-        if bit_vector_of_scalars(0, RangeProof::MAX_BIT_LENGTH * 2).is_ok() {
+        if bit_vector_of_scalars(0, MAX_RANGE_PROOF_BIT_LENGTH * 2).is_ok() {
             panic!("Should panic");
         }
-        match bit_vector_of_scalars(u64::MAX - 12187, RangeProof::MAX_BIT_LENGTH) {
+        match bit_vector_of_scalars(u64::MAX - 12187, MAX_RANGE_PROOF_BIT_LENGTH) {
             Ok(values) => {
                 assert_eq!(u64::MAX - 12187, bit_vector_to_value(&values).unwrap());
             },
@@ -246,7 +246,7 @@ mod tests {
                 panic!("Should not err")
             },
         }
-        match bit_vector_of_scalars(u64::MAX, RangeProof::MAX_BIT_LENGTH) {
+        match bit_vector_of_scalars(u64::MAX, MAX_RANGE_PROOF_BIT_LENGTH) {
             Ok(values) => {
                 assert_eq!(u64::MAX, bit_vector_to_value(&values).unwrap());
             },

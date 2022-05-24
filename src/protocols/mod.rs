@@ -3,8 +3,8 @@
 
 //! Bulletproofs+ `ScalarProtocol` trait for using a Scalar
 
-/// Bulletproofs+ `RistrettoPointProtocol` trait for using a RistrettoPoint
-pub mod ristretto_point_protocol;
+/// Bulletproofs+ `CurvePointProtocol` trait
+pub mod curve_point_protocol;
 /// Bulletproofs+ `ScalarProtocol` trait for using a Scalar
 pub mod scalar_protocol;
 /// Bulletproofs+ `TranscriptProtocol` trait for using a Scalar

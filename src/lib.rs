@@ -29,6 +29,9 @@ pub mod range_proof;
 pub mod range_statement;
 /// Bulletproofs+ commitment openings for the aggregated case
 pub mod range_witness;
+/// Bulletproofs+ trait definitions
+pub mod traits;
+mod transcripts;
 /// Bulletproofs+ utilities
 mod utils;
 
@@ -36,3 +39,5 @@ mod utils;
 pub use generators::bulletproof_gens::BulletproofGens;
 /// Bulletproofs+ generators and base points needed for a batch of range proofs
 pub use generators::pedersen_gens::PedersenGens;
+
+pub mod ristretto;

@@ -5,11 +5,9 @@
 
 #![allow(clippy::too_many_lines)]
 
-use curve25519_dalek::{
-    ristretto::{CompressedRistretto, RistrettoPoint},
-    scalar::Scalar,
-    traits::VartimeMultiscalarMul,
-};
+use std::ops::{Add, Mul};
+
+use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
 use merlin::Transcript;
 use rand::{CryptoRng, RngCore};
 use zeroize::Zeroize;
@@ -17,20 +15,20 @@ use zeroize::Zeroize;
 use crate::{
     errors::ProofError,
     generators::pedersen_gens::ExtensionDegree,
-    protocols::{ristretto_point_protocol::RistrettoPointProtocol, scalar_protocol::ScalarProtocol},
-    range_proof::RangeProof,
+    protocols::{curve_point_protocol::CurvePointProtocol, scalar_protocol::ScalarProtocol},
+    traits::FixedBytesRepr,
+    transcripts,
     utils::{generic::nonce, non_debug::NonDebug},
-    PedersenGens,
 };
 
 /// The struct that will hold the inner product calculation for each round, called consecutively
 #[derive(Debug)]
-pub struct InnerProductRound<'a> {
+pub struct InnerProductRound<'a, P> {
     // Common data
-    gi_base: Vec<RistrettoPoint>,
-    hi_base: Vec<RistrettoPoint>,
-    g_base: Vec<RistrettoPoint>,
-    h_base: RistrettoPoint,
+    gi_base: Vec<P>,
+    hi_base: Vec<P>,
+    g_base: Vec<P>,
+    h_base: P,
     y_powers: Vec<Scalar>,
     done: bool,
     extension_degree: ExtensionDegree,
@@ -41,13 +39,13 @@ pub struct InnerProductRound<'a> {
     alpha: Vec<Scalar>,
 
     // Verifier data
-    a1: Option<RistrettoPoint>,
-    b: Option<RistrettoPoint>,
+    a1: Option<P>,
+    b: Option<P>,
     r1: Option<Scalar>,
     s1: Option<Scalar>,
     d1: Vec<Scalar>,
-    li: Vec<RistrettoPoint>,
-    ri: Vec<RistrettoPoint>,
+    li: Vec<P>,
+    ri: Vec<P>,
 
     // Transcript
     transcript: NonDebug<&'a mut Transcript>,
@@ -57,14 +55,20 @@ pub struct InnerProductRound<'a> {
     seed_nonce: Option<Scalar>,
 }
 
-impl<'a> InnerProductRound<'a> {
+impl<'a, P: 'a> InnerProductRound<'a, P>
+where
+    for<'p> &'p P: Mul<Scalar, Output = P>,
+    for<'p> &'p P: Add<Output = P>,
+    P: CurvePointProtocol + Clone,
+    P::Compressed: FixedBytesRepr + IsIdentity,
+{
     #![allow(clippy::too_many_arguments)]
     /// Initialize a new 'InnerProductRound' with sanity checks
     pub fn init(
-        gi_base: Vec<RistrettoPoint>,
-        hi_base: Vec<RistrettoPoint>,
-        g_base: Vec<RistrettoPoint>,
-        h_base: RistrettoPoint,
+        gi_base: Vec<P>,
+        hi_base: Vec<P>,
+        g_base: Vec<P>,
+        h_base: P,
         ai: Vec<Scalar>,
         bi: Vec<Scalar>,
         alpha: Vec<Scalar>,
@@ -84,7 +88,7 @@ impl<'a> InnerProductRound<'a> {
                 "Vector length for inner product round".to_string(),
             ));
         }
-        let extension_degree = PedersenGens::extension_degree(g_base.len())?;
+        let extension_degree = ExtensionDegree::try_from_size(g_base.len())?;
         if extension_degree as usize != alpha.len() {
             return Err(ProofError::InvalidLength("Inconsistent extension degree".to_string()));
         }
@@ -139,18 +143,18 @@ impl<'a> InnerProductRound<'a> {
                 }
             };
 
-            let mut a1 = self.gi_base[0] * r +
-                self.hi_base[0] * s +
-                self.h_base * (r * self.y_powers[1] * self.bi[0] + s * self.y_powers[1] * self.ai[0]);
-            let mut b = self.h_base * (r * self.y_powers[1] * s);
+            let mut a1 = &self.gi_base[0] * r +
+                &self.hi_base[0] * s +
+                &self.h_base * (r * self.y_powers[1] * self.bi[0] + s * self.y_powers[1] * self.ai[0]);
+            let mut b = &self.h_base * (r * self.y_powers[1] * s);
             for k in 0..extension_degree {
-                a1 += self.g_base[k] * d[k];
-                b += self.g_base[k] * eta[k]
+                a1 += &self.g_base[k] * d[k];
+                b += &self.g_base[k] * eta[k]
             }
-            self.a1 = Some(a1);
-            self.b = Some(b);
+            self.a1 = Some(a1.clone());
+            self.b = Some(b.clone());
 
-            let e = RangeProof::transcript_points_a1_b_challenge_e(*self.transcript, &a1.compress(), &b.compress())?;
+            let e = transcripts::transcript_points_a1_b_challenge_e(*self.transcript, &a1.compress(), &b.compress())?;
 
             self.r1 = Some(r + self.ai[0] * e);
             self.s1 = Some(s + self.bi[0] * e);
@@ -208,46 +212,44 @@ impl<'a> InnerProductRound<'a> {
         let mut li_scalars = Vec::with_capacity(2 * n + 1 + extension_degree);
         li_scalars.push(c_l);
         let mut li_points = Vec::with_capacity(2 * n + 1 + extension_degree);
-        li_points.push(self.h_base);
+        li_points.push(self.h_base.clone());
         let mut ri_scalars = Vec::with_capacity(2 * n + 1 + extension_degree);
         ri_scalars.push(c_r);
         let mut ri_points = Vec::with_capacity(2 * n + 1 + extension_degree);
-        ri_points.push(self.h_base);
+        ri_points.push(self.h_base.clone());
         for k in 0..extension_degree {
             li_scalars.push(d_l[k]);
-            li_points.push(self.g_base[k]);
+            li_points.push(self.g_base[k].clone());
             ri_scalars.push(d_r[k]);
-            ri_points.push(self.g_base[k]);
+            ri_points.push(self.g_base[k].clone());
         }
         for i in 0..n {
             li_scalars.push(a1[i] * y_n_inverse);
-            li_points.push(gi_base_hi[i]);
+            li_points.push(gi_base_hi[i].clone());
             li_scalars.push(b2[i]);
-            li_points.push(hi_base_lo[i]);
+            li_points.push(hi_base_lo[i].clone());
             ri_scalars.push(a2[i] * self.y_powers[n]);
-            ri_points.push(gi_base_lo[i]);
+            ri_points.push(gi_base_lo[i].clone());
             ri_scalars.push(b1[i]);
-            ri_points.push(hi_base_hi[i]);
+            ri_points.push(hi_base_hi[i].clone());
         }
-        self.li
-            .push(RistrettoPoint::vartime_multiscalar_mul(li_scalars, li_points));
-        self.ri
-            .push(RistrettoPoint::vartime_multiscalar_mul(ri_scalars, ri_points));
+        self.li.push(P::vartime_multiscalar_mul(li_scalars, li_points));
+        self.ri.push(P::vartime_multiscalar_mul(ri_scalars, ri_points));
 
-        let e = RangeProof::transcript_points_l_r_challenge_e(
+        let e = transcripts::transcript_points_l_r_challenge_e(
             *self.transcript,
             &self.li[self.li.len() - 1].compress(),
             &self.ri[self.ri.len() - 1].compress(),
         )?;
         let e_inverse = e.invert();
 
-        self.gi_base = RistrettoPoint::add_point_vectors(
-            RistrettoPoint::mul_point_vec_with_scalar(gi_base_lo, &e_inverse)?.as_slice(),
-            RistrettoPoint::mul_point_vec_with_scalar(gi_base_hi, &(e * y_n_inverse))?.as_slice(),
+        self.gi_base = P::add_point_vectors(
+            P::mul_point_vec_with_scalar(gi_base_lo, &e_inverse)?.as_slice(),
+            P::mul_point_vec_with_scalar(gi_base_hi, &(e * y_n_inverse))?.as_slice(),
         )?;
-        self.hi_base = RistrettoPoint::add_point_vectors(
-            RistrettoPoint::mul_point_vec_with_scalar(hi_base_lo, &e)?.as_slice(),
-            RistrettoPoint::mul_point_vec_with_scalar(hi_base_hi, &e_inverse)?.as_slice(),
+        self.hi_base = P::add_point_vectors(
+            P::mul_point_vec_with_scalar(hi_base_lo, &e)?.as_slice(),
+            P::mul_point_vec_with_scalar(hi_base_hi, &e_inverse)?.as_slice(),
         )?;
 
         self.ai = Scalar::add_scalar_vectors(
@@ -272,18 +274,18 @@ impl<'a> InnerProductRound<'a> {
         self.done
     }
 
-    /// Compresses and returns the non-public point 'a1' using the Ristretto encoding
-    pub fn a1_compressed(&self) -> Result<CompressedRistretto, ProofError> {
-        if let Some(a1) = self.a1 {
+    /// Compresses and returns the non-public point 'a1'
+    pub fn a1_compressed(&self) -> Result<P::Compressed, ProofError> {
+        if let Some(ref a1) = self.a1 {
             Ok(a1.compress())
         } else {
             Err(ProofError::InvalidArgument("Value 'A' not assigned yet".to_string()))
         }
     }
 
-    /// Compresses and returns the non-public point 'b' using the Ristretto encoding
-    pub fn b_compressed(&self) -> Result<CompressedRistretto, ProofError> {
-        if let Some(b) = self.b {
+    /// Compresses and returns the non-public point 'b'
+    pub fn b_compressed(&self) -> Result<P::Compressed, ProofError> {
+        if let Some(ref b) = self.b {
             Ok(b.compress())
         } else {
             Err(ProofError::InvalidArgument("Value 'B' not assigned yet".to_string()))
@@ -317,8 +319,8 @@ impl<'a> InnerProductRound<'a> {
         }
     }
 
-    /// Compresses and returns the non-public vector of points 'li' using the Ristretto encoding
-    pub fn li_compressed(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
+    /// Compresses and returns the non-public vector of points 'li'
+    pub fn li_compressed(&self) -> Result<Vec<P::Compressed>, ProofError> {
         if self.li.is_empty() {
             Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
         } else {
@@ -330,8 +332,8 @@ impl<'a> InnerProductRound<'a> {
         }
     }
 
-    /// Compresses and returns the non-public vector of points 'ri' using the Ristretto encoding
-    pub fn ri_compressed(&self) -> Result<Vec<CompressedRistretto>, ProofError> {
+    /// Compresses and returns the non-public vector of points 'ri'
+    pub fn ri_compressed(&self) -> Result<Vec<P::Compressed>, ProofError> {
         if self.ri.is_empty() {
             Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
         } else {
@@ -345,7 +347,7 @@ impl<'a> InnerProductRound<'a> {
 }
 
 /// Overwrite secrets with null bytes when they go out of scope.
-impl<'a> Drop for InnerProductRound<'a> {
+impl<'a, P> Drop for InnerProductRound<'a, P> {
     fn drop(&mut self) {
         for mut item in self.ai.clone() {
             item.zeroize();

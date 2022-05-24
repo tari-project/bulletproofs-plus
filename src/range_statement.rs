@@ -4,38 +4,39 @@
 //! Bulletproofs+ generators, vector of commitments, vector of optional minimum promised
 //! values and a vector of optional seed nonces for mask recovery
 
-use curve25519_dalek::{
-    ristretto::{CompressedRistretto, RistrettoPoint},
-    scalar::Scalar,
-};
+use curve25519_dalek::scalar::Scalar;
 use zeroize::Zeroize;
 
-use crate::{errors::ProofError, range_parameters::RangeParameters};
+use crate::{
+    errors::ProofError,
+    range_parameters::RangeParameters,
+    traits::{Compressable, FromUniformBytes},
+};
 
 /// The range proof statement contains the generators, vector of commitments, vector of optional minimum promised
 /// values and a vector of optional seed nonces for mask recovery
-#[derive(Clone, Debug)]
-pub struct RangeStatement {
+#[derive(Clone)]
+pub struct RangeStatement<P: Compressable> {
     /// The generators and base points needed for aggregating range proofs
-    pub generators: RangeParameters,
+    pub generators: RangeParameters<P>,
     /// The aggregated commitments
-    pub commitments: Vec<RistrettoPoint>,
+    pub commitments: Vec<P>,
     /// The aggregated compressed commitments
-    pub commitments_compressed: Vec<CompressedRistretto>,
+    pub commitments_compressed: Vec<P::Compressed>,
     /// Optional minimum promised values
     pub minimum_value_promises: Vec<Option<u64>>,
     /// Optional seed nonce for mask recovery
     pub seed_nonce: Option<Scalar>,
 }
 
-impl RangeStatement {
+impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
     /// Initialize a new 'RangeStatement' with sanity checks
     pub fn init(
-        generators: RangeParameters,
-        commitments: Vec<RistrettoPoint>,
+        generators: RangeParameters<P>,
+        commitments: Vec<P>,
         minimum_value_promise: Vec<Option<u64>>,
         seed_nonce: Option<Scalar>,
-    ) -> Result<RangeStatement, ProofError> {
+    ) -> Result<Self, ProofError> {
         if !commitments.len().is_power_of_two() {
             return Err(ProofError::InvalidArgument(
                 "Number of commitments must be a power of two".to_string(),
@@ -71,7 +72,7 @@ impl RangeStatement {
 }
 
 /// Overwrite secrets with null bytes when they go out of scope.
-impl Drop for RangeStatement {
+impl<P: Compressable> Drop for RangeStatement<P> {
     fn drop(&mut self) {
         self.seed_nonce.zeroize();
     }
