@@ -26,8 +26,8 @@ use tari_bulletproofs_plus::{
     ristretto::RistrettoRangeProof,
 };
 
-static AGGREGATION_SIZES: [usize; 6] = [1, 2, 4, 8, 16, 32];
-static BATCHED_SIZES: [usize; 9] = [1, 2, 4, 8, 16, 32, 64, 128, 256];
+static AGGREGATION_SIZES: [usize; 4] = [1, 2, 4, 32];
+static BATCHED_SIZES: [usize; 4] = [1, 2, 4, 32];
 
 fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: ExtensionDegree, c: &mut Criterion) {
     let mut group = c.benchmark_group("range_proof_creation");
@@ -89,14 +89,14 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
     group.finish();
 }
 
-fn create_aggregated_rangeproof_n_8_16_32(c: &mut Criterion) {
-    for bit_length in [8, 16, 32] {
+fn create_aggregated_rangeproof_n_2_4_8(c: &mut Criterion) {
+    for bit_length in [2, 4, 8] {
         create_aggregated_rangeproof_helper(bit_length, ExtensionDegree::Zero, c);
     }
 }
 
 fn create_aggregated_rangeproof_n_64(c: &mut Criterion) {
-    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::One, ExtensionDegree::Two] {
+    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::Two] {
         create_aggregated_rangeproof_helper(64, *extension_degree, c);
     }
 }
@@ -166,14 +166,14 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
     group.finish();
 }
 
-fn verify_aggregated_rangeproof_n_8_16_32(c: &mut Criterion) {
-    for bit_length in [8, 16, 32] {
+fn verify_aggregated_rangeproof_n_2_4_8(c: &mut Criterion) {
+    for bit_length in [2, 4, 8] {
         verify_aggregated_rangeproof_helper(bit_length, ExtensionDegree::Zero, c);
     }
 }
 
 fn verify_aggregated_rangeproof_n_64(c: &mut Criterion) {
-    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::One, ExtensionDegree::Two] {
+    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::Two] {
         verify_aggregated_rangeproof_helper(64, *extension_degree, c);
     }
 }
@@ -257,7 +257,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
 }
 
 fn verify_batched_rangeproof_n_64(c: &mut Criterion) {
-    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::One, ExtensionDegree::Two] {
+    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::Two] {
         verify_batched_rangeproofs_helper(64, *extension_degree, c);
     }
 }
@@ -266,7 +266,7 @@ criterion_group! {
     name = create_rp;
     config = Criterion::default();
     targets =
-    create_aggregated_rangeproof_n_8_16_32,
+    create_aggregated_rangeproof_n_2_4_8,
     create_aggregated_rangeproof_n_64,
 }
 
@@ -274,7 +274,7 @@ criterion_group! {
     name = verify_rp;
     config = Criterion::default();
     targets =
-    verify_aggregated_rangeproof_n_8_16_32,
+    verify_aggregated_rangeproof_n_2_4_8,
     verify_aggregated_rangeproof_n_64,
 }
 

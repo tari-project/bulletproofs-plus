@@ -20,14 +20,7 @@ use tari_bulletproofs_plus::{
 fn pc_gens(c: &mut Criterion) {
     let mut group = c.benchmark_group("PedersenGens");
     group.sampling_mode(SamplingMode::Flat);
-    for extension_degree in &[
-        ExtensionDegree::Zero,
-        ExtensionDegree::One,
-        ExtensionDegree::Two,
-        ExtensionDegree::Three,
-        ExtensionDegree::Four,
-        ExtensionDegree::Five,
-    ] {
+    for extension_degree in &[ExtensionDegree::Zero, ExtensionDegree::Two, ExtensionDegree::Five] {
         let label = format!("PedersenGens::with_extension_degree({:?})", extension_degree);
         group.bench_function(&label, |b|
             // Benchmark this code
@@ -39,7 +32,7 @@ fn pc_gens(c: &mut Criterion) {
 fn bp_gens(c: &mut Criterion) {
     let mut group = c.benchmark_group("BulletproofGens");
     group.sampling_mode(SamplingMode::Flat);
-    for size in (0..10).map(|i| 2 << i) {
+    for size in [0, 3, 5, 7, 9].map(|i| 2 << i) {
         let label = format!("BulletproofGens::new - size {}", size);
         group.bench_function(&label, |b|
             // Benchmark this code
