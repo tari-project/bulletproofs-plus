@@ -27,15 +27,17 @@ use tari_bulletproofs_plus::{
 };
 
 // Reduced spectrum of tests for the sake of CI bench tests
-static AGGREGATION_SIZES: [usize; 4] = [1, 2, 4, 16];
-static BATCHED_SIZES: [usize; 4] = [1, 2, 4, 16];
+static AGGREGATION_SIZES: [usize; 4] = [1, 2, 4, 8];
+static BATCHED_SIZES: [usize; 4] = [1, 2, 4, 8];
 static BIT_LENGTHS: [usize; 3] = [2, 4, 8];
-static EXTENSION_DEGREE: [ExtensionDegree; 2] = [ExtensionDegree::Zero, ExtensionDegree::Two];
+static EXTENSION_DEGREE: [ExtensionDegree; 1] = [ExtensionDegree::Zero];
+static EXTRACT_MASKS: [VerifyAction; 1] = [VerifyAction::VerifyOnly];
 // To do a full spectrum of tests, use these constants instead
 // static AGGREGATION_SIZES: [usize; 6] = [1, 2, 4, 8, 16, 32];
 // static BATCHED_SIZES: [usize; 9] = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 // static BIT_LENGTHS: [usize; 3] = [8, 16, 32];
 // static EXTENSION_DEGREE: [ExtensionDegree; 3] = [ExtensionDegree::Zero, ExtensionDegree::Two, ExtensionDegree::Four];
+// static EXTRACT_MASKS: [VerifyAction; 2] =  [VerifyAction::VerifyOnly, VerifyAction::RecoverOnly];
 
 fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: ExtensionDegree, c: &mut Criterion) {
     let mut group = c.benchmark_group("range_proof_creation");
@@ -234,7 +236,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
         proofs.push(proof);
     }
 
-    for extract_masks in [VerifyAction::VerifyOnly, VerifyAction::RecoverOnly] {
+    for extract_masks in EXTRACT_MASKS {
         for number_of_range_proofs in BATCHED_SIZES {
             let label = format!(
                 "Batched {}-bit BP+ verify {} deg {:?} masks {:?}",
