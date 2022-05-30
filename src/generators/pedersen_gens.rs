@@ -94,18 +94,17 @@ where P: Compressable + MultiscalarMul<Point = P> + Clone
 {
     /// Creates a Pedersen commitment using the value scalar and a blinding factor vector
     pub fn commit(&self, value: Scalar, blindings: &[Scalar]) -> Result<P, ProofError> {
-        let extension_degree = self.extension_degree as usize;
-        if blindings.is_empty() || blindings.len() != extension_degree {
+        if blindings.is_empty() || blindings.len() > self.extension_degree as usize {
             Err(ProofError::InvalidLength("blinding vector".to_string()))
         } else {
-            let mut scalars = Vec::with_capacity(1 + extension_degree);
+            let mut scalars = Vec::with_capacity(1 + blindings.len());
             scalars.push(value);
             for item in blindings {
                 scalars.push(*item);
             }
-            let mut points = Vec::with_capacity(1 + extension_degree);
+            let mut points = Vec::with_capacity(1 + blindings.len());
             points.push(self.h_base.clone());
-            for item in self.g_base_vec.iter().take(extension_degree) {
+            for item in self.g_base_vec.iter().take(blindings.len()) {
                 points.push(item.clone());
             }
             Ok(P::multiscalar_mul(&scalars, &points))

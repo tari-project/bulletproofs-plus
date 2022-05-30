@@ -181,6 +181,15 @@ mod tests {
     use super::*;
     use crate::protocols::scalar_protocol::ScalarProtocol;
 
+    static EXTENSION_DEGREE: [ExtensionDegree; 6] = [
+        ExtensionDegree::Zero,
+        ExtensionDegree::One,
+        ExtensionDegree::Two,
+        ExtensionDegree::Three,
+        ExtensionDegree::Four,
+        ExtensionDegree::Five,
+    ];
+
     #[test]
     fn test_constants() {
         // Extended Pedersen generators with extension degree of zero to five
@@ -192,14 +201,7 @@ mod tests {
             *RISTRETTO_BASEPOINT_POINT_BLINDING_5,
             *RISTRETTO_BASEPOINT_POINT_BLINDING_6,
         ];
-        for extension_degree in [
-            ExtensionDegree::Zero,
-            ExtensionDegree::One,
-            ExtensionDegree::Two,
-            ExtensionDegree::Three,
-            ExtensionDegree::Four,
-            ExtensionDegree::Five,
-        ] {
+        for extension_degree in EXTENSION_DEGREE {
             let pc_gens = create_pedersen_gens_with_extension_degree(extension_degree);
             for (i, item) in lazy_statics.iter().enumerate().take(pc_gens.extension_degree as usize) {
                 assert_eq!(pc_gens.g_base_vec[i].compress(), pc_gens.g_base_compressed_vec[i]);
@@ -223,17 +225,12 @@ mod tests {
             Scalar::random_not_zero(&mut rng),
         ];
 
-        for extension_degree in [
-            ExtensionDegree::Zero,
-            ExtensionDegree::One,
-            ExtensionDegree::Two,
-            ExtensionDegree::Three,
-            ExtensionDegree::Four,
-            ExtensionDegree::Five,
-        ] {
+        for extension_degree in EXTENSION_DEGREE {
             let pc_gens = create_pedersen_gens_with_extension_degree(extension_degree);
             for i in 0..ExtensionDegree::Five as usize {
-                if i == extension_degree as usize {
+                // All commitments where enough extended generators are available to enable multi-exponentiation
+                // multiplication of the blinding factor vector will be ok
+                if i > 0 && i <= extension_degree as usize {
                     assert!(pc_gens.commit(value, blindings[..i].to_owned().as_slice()).is_ok());
                 } else {
                     assert!(pc_gens.commit(value, blindings[..i].to_owned().as_slice()).is_err());
