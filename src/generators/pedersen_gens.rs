@@ -4,7 +4,7 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
-use std::{convert::TryFrom, iter::once};
+use std::{borrow::Borrow, convert::TryFrom, iter::once};
 
 use curve25519_dalek::{scalar::Scalar, traits::MultiscalarMul};
 
@@ -93,7 +93,8 @@ impl<P> PedersenGens<P>
 where P: Compressable + MultiscalarMul<Point = P> + Clone
 {
     /// Creates a Pedersen commitment using the value scalar and a blinding factor vector
-    pub fn commit(&self, value: Scalar, blindings: &[Scalar]) -> Result<P, ProofError> {
+    pub fn commit<T>(&self, value: T, blindings: &[T]) -> Result<P, ProofError>
+    where for<'a> &'a T: Borrow<Scalar> {
         if blindings.is_empty() || blindings.len() > self.extension_degree as usize {
             Err(ProofError::InvalidLength("blinding vector".to_string()))
         } else {
