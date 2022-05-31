@@ -1,0 +1,13 @@
+{
+  "sign": true,
+  "skip": {
+    "commit": true,
+    "tag": true
+  },
+  "bumpFiles": [
+    {
+      "filename": "Cargo.toml",
+      "updater": "./scripts/cargo-version-updater.js"
+    }
+  ]
+}
