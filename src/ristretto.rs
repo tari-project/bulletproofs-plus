@@ -231,9 +231,9 @@ mod tests {
                 // All commitments where enough extended generators are available to enable multi-exponentiation
                 // multiplication of the blinding factor vector will be ok
                 if i > 0 && i <= extension_degree as usize {
-                    assert!(pc_gens.commit(value, blindings[..i].to_owned().as_slice()).is_ok());
+                    assert!(pc_gens.commit(&value, &blindings[..i]).is_ok());
                 } else {
-                    assert!(pc_gens.commit(value, blindings[..i].to_owned().as_slice()).is_err());
+                    assert!(pc_gens.commit(&value, &blindings[..i]).is_err());
                 }
             }
         }

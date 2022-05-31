@@ -4,7 +4,7 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
-use std::convert::TryFrom;
+use std::{borrow::Borrow, convert::TryFrom, iter::once};
 
 use curve25519_dalek::{scalar::Scalar, traits::MultiscalarMul};
 
@@ -93,21 +93,15 @@ impl<P> PedersenGens<P>
 where P: Compressable + MultiscalarMul<Point = P> + Clone
 {
     /// Creates a Pedersen commitment using the value scalar and a blinding factor vector
-    pub fn commit(&self, value: Scalar, blindings: &[Scalar]) -> Result<P, ProofError> {
+    pub fn commit<T>(&self, value: &T, blindings: &[T]) -> Result<P, ProofError>
+    where for<'a> &'a T: Borrow<Scalar> {
         if blindings.is_empty() || blindings.len() > self.extension_degree as usize {
             Err(ProofError::InvalidLength("blinding vector".to_string()))
         } else {
-            let mut scalars = Vec::with_capacity(1 + blindings.len());
-            scalars.push(value);
-            for item in blindings {
-                scalars.push(*item);
-            }
-            let mut points = Vec::with_capacity(1 + blindings.len());
-            points.push(self.h_base.clone());
-            for item in self.g_base_vec.iter().take(blindings.len()) {
-                points.push(item.clone());
-            }
-            Ok(P::multiscalar_mul(&scalars, &points))
+            let scalars = once(value).chain(blindings);
+            let g_base_head = self.g_base_vec.iter().take(blindings.len());
+            let points = once(&self.h_base).chain(g_base_head);
+            Ok(P::multiscalar_mul(scalars, points))
         }
     }
 }
