@@ -187,7 +187,7 @@ fn prove_and_verify(
                 commitments.push(
                     generators
                         .pc_gens()
-                        .commit(Scalar::from(value), blindings.as_slice())
+                        .commit(&Scalar::from(value), blindings.as_slice())
                         .unwrap(),
                 );
                 openings.push(CommitmentOpening::new(value, blindings.clone()));

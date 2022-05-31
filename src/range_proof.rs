@@ -117,7 +117,7 @@ pub const MAX_RANGE_PROOF_BIT_LENGTH: usize = 64;
 ///         commitments.push(
 ///             generators
 ///                 .pc_gens()
-///                 .commit(Scalar::from(value), blindings.as_slice())
+///                 .commit(&Scalar::from(value), blindings.as_slice())
 ///                 .unwrap(),
 ///         );
 ///         openings.push(CommitmentOpening::new(value, blindings.clone()));
