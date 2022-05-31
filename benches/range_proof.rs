@@ -73,7 +73,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
                 commitments.push(
                     generators
                         .pc_gens()
-                        .commit(Scalar::from(value), blindings.as_slice())
+                        .commit(&Scalar::from(value), blindings.as_slice())
                         .unwrap(),
                 );
                 openings.push(CommitmentOpening::new(value, blindings.clone()));
@@ -145,7 +145,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
                 commitments.push(
                     generators
                         .pc_gens()
-                        .commit(Scalar::from(value), blindings.as_slice())
+                        .commit(&Scalar::from(value), blindings.as_slice())
                         .unwrap(),
                 );
                 openings.push(CommitmentOpening::new(value, blindings.clone()));
@@ -223,7 +223,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
             generators.clone(),
             vec![generators
                 .pc_gens()
-                .commit(Scalar::from(value), blindings.as_slice())
+                .commit(&Scalar::from(value), blindings.as_slice())
                 .unwrap()],
             vec![Some(value / 3)],
             seed_nonce,
