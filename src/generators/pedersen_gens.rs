@@ -93,12 +93,12 @@ impl<P> PedersenGens<P>
 where P: Compressable + MultiscalarMul<Point = P> + Clone
 {
     /// Creates a Pedersen commitment using the value scalar and a blinding factor vector
-    pub fn commit<T>(&self, value: T, blindings: &[T]) -> Result<P, ProofError>
+    pub fn commit<T>(&self, value: &T, blindings: &[T]) -> Result<P, ProofError>
     where for<'a> &'a T: Borrow<Scalar> {
         if blindings.is_empty() || blindings.len() > self.extension_degree as usize {
             Err(ProofError::InvalidLength("blinding vector".to_string()))
         } else {
-            let scalars = once(&value).chain(blindings);
+            let scalars = once(value).chain(blindings);
             let g_base_head = self.g_base_vec.iter().take(blindings.len());
             let points = once(&self.h_base).chain(g_base_head);
             Ok(P::multiscalar_mul(scalars, points))
