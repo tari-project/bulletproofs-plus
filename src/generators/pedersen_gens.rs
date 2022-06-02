@@ -39,29 +39,29 @@ pub struct PedersenGens<P: Compressable> {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ExtensionDegree {
     /// Default Pedersen commitment
-    Zero = 1,
+    DefaultPedersen = 1,
     /// Pedersen commitment extended with one degree
-    One = 2,
+    AddOneBasePoint = 2,
     /// Pedersen commitment extended with two degrees
-    Two = 3,
+    AddTwoBasePoints = 3,
     /// Pedersen commitment extended with three degrees
-    Three = 4,
+    AddThreeBasePoints = 4,
     /// Pedersen commitment extended with four degrees
-    Four = 5,
+    AddFourBasePoints = 5,
     /// Pedersen commitment extended with five degrees
-    Five = 6,
+    AddFiveBasePoints = 6,
 }
 
 impl ExtensionDegree {
     /// Helper function to convert a size into an extension degree
     pub fn try_from_size(size: usize) -> Result<ExtensionDegree, ProofError> {
         match size {
-            1 => Ok(ExtensionDegree::Zero),
-            2 => Ok(ExtensionDegree::One),
-            3 => Ok(ExtensionDegree::Two),
-            4 => Ok(ExtensionDegree::Three),
-            5 => Ok(ExtensionDegree::Four),
-            6 => Ok(ExtensionDegree::Five),
+            1 => Ok(ExtensionDegree::DefaultPedersen),
+            2 => Ok(ExtensionDegree::AddOneBasePoint),
+            3 => Ok(ExtensionDegree::AddTwoBasePoints),
+            4 => Ok(ExtensionDegree::AddThreeBasePoints),
+            5 => Ok(ExtensionDegree::AddFourBasePoints),
+            6 => Ok(ExtensionDegree::AddFiveBasePoints),
             _ => Err(ProofError::InvalidArgument("Extension degree not valid".to_string())),
         }
     }

@@ -18,7 +18,7 @@ use tari_bulletproofs_plus::{
 };
 
 // Reduced spectrum of tests for the sake of CI bench tests
-static EXTENSION_DEGREE: [ExtensionDegree; 2] = [ExtensionDegree::Zero, ExtensionDegree::Five];
+static EXTENSION_DEGREE: [ExtensionDegree; 2] = [ExtensionDegree::DefaultPedersen, ExtensionDegree::AddFiveBasePoints];
 static BP_GENS_ARR: [usize; 5] = [0, 3, 5, 7, 9];
 // To do a full spectrum of tests, use these constants instead
 // static EXTENSION_DEGREE: [ExtensionDegree; 6] = [

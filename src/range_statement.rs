@@ -34,7 +34,7 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
     pub fn init(
         generators: RangeParameters<P>,
         commitments: Vec<P>,
-        minimum_value_promise: Vec<Option<u64>>,
+        minimum_value_promises: Vec<Option<u64>>,
         seed_nonce: Option<Scalar>,
     ) -> Result<Self, ProofError> {
         if !commitments.len().is_power_of_two() {
@@ -42,7 +42,7 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
                 "Number of commitments must be a power of two".to_string(),
             ));
         }
-        if !minimum_value_promise.len() == commitments.len() {
+        if !minimum_value_promises.len() == commitments.len() {
             return Err(ProofError::InvalidArgument(
                 "Incorrect number of minimum value promises".to_string(),
             ));
@@ -65,7 +65,7 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
             generators,
             commitments,
             commitments_compressed,
-            minimum_value_promises: minimum_value_promise,
+            minimum_value_promises,
             seed_nonce,
         })
     }

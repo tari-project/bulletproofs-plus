@@ -30,7 +30,7 @@ use tari_bulletproofs_plus::{
 static AGGREGATION_SIZES: [usize; 4] = [1, 2, 4, 8];
 static BATCHED_SIZES: [usize; 4] = [1, 2, 4, 8];
 static BIT_LENGTHS: [usize; 3] = [2, 4, 8];
-static EXTENSION_DEGREE: [ExtensionDegree; 1] = [ExtensionDegree::Zero];
+static EXTENSION_DEGREE: [ExtensionDegree; 1] = [ExtensionDegree::DefaultPedersen];
 static EXTRACT_MASKS: [VerifyAction; 1] = [VerifyAction::VerifyOnly];
 // To do a full spectrum of tests, use these constants instead
 // static AGGREGATION_SIZES: [usize; 6] = [1, 2, 4, 8, 16, 32];
@@ -101,7 +101,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
 
 fn create_aggregated_rangeproof_n_small(c: &mut Criterion) {
     for bit_length in BIT_LENGTHS {
-        create_aggregated_rangeproof_helper(bit_length, ExtensionDegree::Zero, c);
+        create_aggregated_rangeproof_helper(bit_length, ExtensionDegree::DefaultPedersen, c);
     }
 }
 
@@ -178,7 +178,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
 
 fn verify_aggregated_rangeproof_n_small(c: &mut Criterion) {
     for bit_length in BIT_LENGTHS {
-        verify_aggregated_rangeproof_helper(bit_length, ExtensionDegree::Zero, c);
+        verify_aggregated_rangeproof_helper(bit_length, ExtensionDegree::DefaultPedersen, c);
     }
 }
 

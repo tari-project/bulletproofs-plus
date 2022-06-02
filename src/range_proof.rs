@@ -97,7 +97,7 @@ pub const MAX_RANGE_PROOF_BIT_LENGTH: usize = 64;
 ///
 /// for aggregation_size in proof_batch {
 ///     // 1. Generators
-///     let extension_degree = ExtensionDegree::Zero;
+///     let extension_degree = ExtensionDegree::DefaultPedersen;
 ///     let pc_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
 ///     let generators = RangeParameters::init(bit_length, aggregation_size, pc_gens).unwrap();
 ///
@@ -954,7 +954,7 @@ mod tests {
             d1: vec![],
             li: vec![],
             ri: vec![],
-            extension_degree: ExtensionDegree::Zero,
+            extension_degree: ExtensionDegree::DefaultPedersen,
         };
         let proof_bytes = proof.to_bytes();
         assert!(RistrettoRangeProof::from_bytes(&proof_bytes).is_err());
@@ -968,7 +968,7 @@ mod tests {
             d1: vec![Scalar::default()],
             li: vec![CompressedRistretto::default()],
             ri: vec![CompressedRistretto::default()],
-            extension_degree: ExtensionDegree::Zero,
+            extension_degree: ExtensionDegree::DefaultPedersen,
         };
         let proof_bytes = proof.to_bytes();
         assert!(RistrettoRangeProof::from_bytes(&proof_bytes).is_ok());
@@ -989,7 +989,7 @@ mod tests {
             ],
             li: vec![CompressedRistretto::default()],
             ri: vec![CompressedRistretto::default()],
-            extension_degree: ExtensionDegree::Five,
+            extension_degree: ExtensionDegree::AddFiveBasePoints,
         };
         let proof_bytes = proof.to_bytes();
         assert!(RistrettoRangeProof::from_bytes(&proof_bytes).is_ok());
