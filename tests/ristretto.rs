@@ -26,25 +26,25 @@ fn test_non_aggregated_single_proof_multiple_bit_lengths() {
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Zero,
+        ExtensionDegree::DefaultPedersen,
         &ProofOfMinimumValueStrategy::NoOffset,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::One,
+        ExtensionDegree::AddOneBasePoint,
         &ProofOfMinimumValueStrategy::Intermediate,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Two,
+        ExtensionDegree::AddTwoBasePoints,
         &ProofOfMinimumValueStrategy::EqualToValue,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Zero,
+        ExtensionDegree::DefaultPedersen,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -56,25 +56,25 @@ fn test_aggregated_single_proof_multiple_bit_lengths() {
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Zero,
+        ExtensionDegree::DefaultPedersen,
         &ProofOfMinimumValueStrategy::NoOffset,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::One,
+        ExtensionDegree::AddOneBasePoint,
         &ProofOfMinimumValueStrategy::Intermediate,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Two,
+        ExtensionDegree::AddTwoBasePoints,
         &ProofOfMinimumValueStrategy::EqualToValue,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Zero,
+        ExtensionDegree::DefaultPedersen,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -86,25 +86,25 @@ fn test_non_aggregated_multiple_proofs_single_bit_length() {
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Zero,
+        ExtensionDegree::DefaultPedersen,
         &ProofOfMinimumValueStrategy::NoOffset,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::One,
+        ExtensionDegree::AddOneBasePoint,
         &ProofOfMinimumValueStrategy::Intermediate,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Two,
+        ExtensionDegree::AddTwoBasePoints,
         &ProofOfMinimumValueStrategy::EqualToValue,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Zero,
+        ExtensionDegree::DefaultPedersen,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -116,25 +116,25 @@ fn test_mixed_aggregation_multiple_proofs_single_bit_length() {
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Zero,
+        ExtensionDegree::DefaultPedersen,
         &ProofOfMinimumValueStrategy::NoOffset,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::One,
+        ExtensionDegree::AddOneBasePoint,
         &ProofOfMinimumValueStrategy::Intermediate,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Two,
+        ExtensionDegree::AddTwoBasePoints,
         &ProofOfMinimumValueStrategy::EqualToValue,
     );
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
-        ExtensionDegree::Zero,
+        ExtensionDegree::DefaultPedersen,
         &ProofOfMinimumValueStrategy::LargerThanValue,
     );
 }
@@ -193,10 +193,6 @@ fn prove_and_verify(
                 openings.push(CommitmentOpening::new(value, blindings.clone()));
                 if m == 0 {
                     if *aggregation_size == 1 {
-                        // let mut temp_masks: Vec<Scalar> = Vec::with_capacity(extension_degree as usize);
-                        // for item in blindings {
-                        //     temp_masks.push(item);
-                        // }
                         private_masks.push(Some(ExtendedMask::assign(extension_degree, blindings).unwrap()));
                         public_masks.push(None);
                     } else {

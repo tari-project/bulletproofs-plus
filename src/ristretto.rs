@@ -71,10 +71,10 @@ pub fn create_pedersen_gens_with_extension_degree(extension_degree: ExtensionDeg
 // on the fly compression for compressed base points otherwise
 fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<CompressedRistretto>) {
     match extension_degree {
-        ExtensionDegree::Zero => (vec![*RISTRETTO_BASEPOINT_POINT_BLINDING_1], vec![
+        ExtensionDegree::DefaultPedersen => (vec![*RISTRETTO_BASEPOINT_POINT_BLINDING_1], vec![
             *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
         ]),
-        ExtensionDegree::One => (
+        ExtensionDegree::AddOneBasePoint => (
             vec![
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
@@ -84,7 +84,7 @@ fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<Co
                 *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
             ],
         ),
-        ExtensionDegree::Two => (
+        ExtensionDegree::AddTwoBasePoints => (
             vec![
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
@@ -96,7 +96,7 @@ fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<Co
                 *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
             ],
         ),
-        ExtensionDegree::Three => (
+        ExtensionDegree::AddThreeBasePoints => (
             vec![
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
@@ -110,7 +110,7 @@ fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<Co
                 *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_4,
             ],
         ),
-        ExtensionDegree::Four => (
+        ExtensionDegree::AddFourBasePoints => (
             vec![
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
@@ -126,7 +126,7 @@ fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<Co
                 *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_5,
             ],
         ),
-        ExtensionDegree::Five => (
+        ExtensionDegree::AddFiveBasePoints => (
             vec![
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
@@ -182,12 +182,12 @@ mod tests {
     use crate::protocols::scalar_protocol::ScalarProtocol;
 
     static EXTENSION_DEGREE: [ExtensionDegree; 6] = [
-        ExtensionDegree::Zero,
-        ExtensionDegree::One,
-        ExtensionDegree::Two,
-        ExtensionDegree::Three,
-        ExtensionDegree::Four,
-        ExtensionDegree::Five,
+        ExtensionDegree::DefaultPedersen,
+        ExtensionDegree::AddOneBasePoint,
+        ExtensionDegree::AddTwoBasePoints,
+        ExtensionDegree::AddThreeBasePoints,
+        ExtensionDegree::AddFourBasePoints,
+        ExtensionDegree::AddFiveBasePoints,
     ];
 
     #[test]
@@ -227,7 +227,7 @@ mod tests {
 
         for extension_degree in EXTENSION_DEGREE {
             let pc_gens = create_pedersen_gens_with_extension_degree(extension_degree);
-            for i in 0..ExtensionDegree::Five as usize {
+            for i in 0..ExtensionDegree::AddFiveBasePoints as usize {
                 // All commitments where enough extended generators are available to enable multi-exponentiation
                 // multiplication of the blinding factor vector will be ok
                 if i > 0 && i <= extension_degree as usize {
