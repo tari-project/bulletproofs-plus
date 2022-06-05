@@ -33,7 +33,7 @@ use crate::{
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr},
     transcripts,
-    utils::generic::{bit_vector_of_scalars, nonce, read32, read8},
+    utils::generic::{bit_vector_of_scalars, nonce, read_1_byte, read_32_bytes},
 };
 
 /// Optionally extract masks when verifying the proofs
@@ -842,7 +842,7 @@ where
                 "Invalid serialized proof bytes length".to_string(),
             ));
         }
-        let extension_degree = ExtensionDegree::try_from(read8(&slice[0..])[0] as usize)?;
+        let extension_degree = ExtensionDegree::try_from(read_1_byte(&slice[0..])[0] as usize)?;
         let num_elements = (slice.len() - 1) / 32;
         if num_elements < 2 + 5 + extension_degree as usize {
             return Err(ProofError::InvalidLength(
@@ -860,24 +860,24 @@ where
         let mut li = Vec::with_capacity(n);
         let mut ri = Vec::with_capacity(n);
         for i in 0..n {
-            li.push(P::Compressed::from_fixed_bytes(read32(&slice[1 + i * 32..])));
+            li.push(P::Compressed::from_fixed_bytes(read_32_bytes(&slice[1 + i * 32..])));
         }
         for i in n..2 * n {
-            ri.push(P::Compressed::from_fixed_bytes(read32(&slice[1 + i * 32..])));
+            ri.push(P::Compressed::from_fixed_bytes(read_32_bytes(&slice[1 + i * 32..])));
         }
 
         let pos = 1 + 2 * n * 32;
-        let a = P::Compressed::from_fixed_bytes(read32(&slice[pos..]));
-        let a1 = P::Compressed::from_fixed_bytes(read32(&slice[pos + 32..]));
-        let b = P::Compressed::from_fixed_bytes(read32(&slice[pos + 64..]));
-        let r1 = Scalar::from_canonical_bytes(read32(&slice[pos + 96..]))
+        let a = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos..]));
+        let a1 = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 32..]));
+        let b = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 64..]));
+        let r1 = Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 96..]))
             .ok_or_else(|| ProofError::InvalidArgument("r1 bytes not a canonical byte representation".to_string()))?;
-        let s1 = Scalar::from_canonical_bytes(read32(&slice[pos + 128..]))
+        let s1 = Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 128..]))
             .ok_or_else(|| ProofError::InvalidArgument("s1 bytes not a canonical byte representation".to_string()))?;
         let mut d1 = Vec::with_capacity(extension_degree as usize);
         for i in 0..extension_degree as usize {
             d1.push(
-                Scalar::from_canonical_bytes(read32(&slice[pos + 160 + i * 32..])).ok_or_else(|| {
+                Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 160 + i * 32..])).ok_or_else(|| {
                     ProofError::InvalidArgument("d1 bytes not a canonical byte representation".to_string())
                 })?,
             );
@@ -903,7 +903,7 @@ where
                 "Invalid serialized proof bytes length".to_string(),
             ));
         }
-        ExtensionDegree::try_from(read8(&slice[0..])[0] as usize)
+        ExtensionDegree::try_from(read_1_byte(&slice[0..])[0] as usize)
     }
 }
 
