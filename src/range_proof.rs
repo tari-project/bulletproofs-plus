@@ -179,6 +179,11 @@ where
     P: CurvePointProtocol,
     P::Compressed: FixedBytesRepr + IsIdentity + Identity + Copy,
 {
+    /// Helper function to return the proof's extension degree
+    pub fn extension_degree(&self) -> ExtensionDegree {
+        self.extension_degree
+    }
+
     /// Create a single or aggregated range proof for a single party that knows all the secrets
     /// The prover must ensure that the commitments and witness opening data are consistent
     pub fn prove(
@@ -890,6 +895,16 @@ where
             extension_degree,
         })
     }
+
+    /// Helper function to return the serialized proof's extension degree
+    pub fn extension_degree_from_proof_bytes(slice: &[u8]) -> Result<ExtensionDegree, ProofError> {
+        if slice.is_empty() || (slice.len() - 1) % 32 != 0 {
+            return Err(ProofError::InvalidLength(
+                "Invalid serialized proof bytes length".to_string(),
+            ));
+        }
+        ExtensionDegree::try_from(read8(&slice[0..])[0] as usize)
+    }
 }
 
 impl<P> Serialize for RangeProof<P>
@@ -972,6 +987,11 @@ mod tests {
         };
         let proof_bytes = proof.to_bytes();
         assert!(RistrettoRangeProof::from_bytes(&proof_bytes).is_ok());
+        assert_eq!(proof.extension_degree(), proof.extension_degree);
+        assert_eq!(
+            RistrettoRangeProof::extension_degree_from_proof_bytes(&proof_bytes).unwrap(),
+            proof.extension_degree()
+        );
 
         let proof = RistrettoRangeProof {
             a: Default::default(),
@@ -992,6 +1012,11 @@ mod tests {
             extension_degree: ExtensionDegree::AddFiveBasePoints,
         };
         let proof_bytes = proof.to_bytes();
+        assert_eq!(proof.extension_degree(), proof.extension_degree);
+        assert_eq!(
+            RistrettoRangeProof::extension_degree_from_proof_bytes(&proof_bytes).unwrap(),
+            proof.extension_degree()
+        );
         assert!(RistrettoRangeProof::from_bytes(&proof_bytes).is_ok());
         let mut proof_bytes_meddled = proof_bytes.clone();
 
