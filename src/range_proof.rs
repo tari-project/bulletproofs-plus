@@ -33,7 +33,7 @@ use crate::{
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr},
     transcripts,
-    utils::generic::{bit_vector_of_scalars, nonce, read32, read8},
+    utils::generic::{bit_vector_of_scalars, nonce, read_1_byte, read_32_bytes},
 };
 
 /// Optionally extract masks when verifying the proofs
@@ -179,6 +179,11 @@ where
     P: CurvePointProtocol,
     P::Compressed: FixedBytesRepr + IsIdentity + Identity + Copy,
 {
+    /// Helper function to return the proof's extension degree
+    pub fn extension_degree(&self) -> ExtensionDegree {
+        self.extension_degree
+    }
+
     /// Create a single or aggregated range proof for a single party that knows all the secrets
     /// The prover must ensure that the commitments and witness opening data are consistent
     pub fn prove(
@@ -837,7 +842,7 @@ where
                 "Invalid serialized proof bytes length".to_string(),
             ));
         }
-        let extension_degree = ExtensionDegree::try_from(read8(&slice[0..])[0] as usize)?;
+        let extension_degree = ExtensionDegree::try_from(read_1_byte(&slice[0..])[0] as usize)?;
         let num_elements = (slice.len() - 1) / 32;
         if num_elements < 2 + 5 + extension_degree as usize {
             return Err(ProofError::InvalidLength(
@@ -855,24 +860,24 @@ where
         let mut li = Vec::with_capacity(n);
         let mut ri = Vec::with_capacity(n);
         for i in 0..n {
-            li.push(P::Compressed::from_fixed_bytes(read32(&slice[1 + i * 32..])));
+            li.push(P::Compressed::from_fixed_bytes(read_32_bytes(&slice[1 + i * 32..])));
         }
         for i in n..2 * n {
-            ri.push(P::Compressed::from_fixed_bytes(read32(&slice[1 + i * 32..])));
+            ri.push(P::Compressed::from_fixed_bytes(read_32_bytes(&slice[1 + i * 32..])));
         }
 
         let pos = 1 + 2 * n * 32;
-        let a = P::Compressed::from_fixed_bytes(read32(&slice[pos..]));
-        let a1 = P::Compressed::from_fixed_bytes(read32(&slice[pos + 32..]));
-        let b = P::Compressed::from_fixed_bytes(read32(&slice[pos + 64..]));
-        let r1 = Scalar::from_canonical_bytes(read32(&slice[pos + 96..]))
+        let a = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos..]));
+        let a1 = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 32..]));
+        let b = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 64..]));
+        let r1 = Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 96..]))
             .ok_or_else(|| ProofError::InvalidArgument("r1 bytes not a canonical byte representation".to_string()))?;
-        let s1 = Scalar::from_canonical_bytes(read32(&slice[pos + 128..]))
+        let s1 = Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 128..]))
             .ok_or_else(|| ProofError::InvalidArgument("s1 bytes not a canonical byte representation".to_string()))?;
         let mut d1 = Vec::with_capacity(extension_degree as usize);
         for i in 0..extension_degree as usize {
             d1.push(
-                Scalar::from_canonical_bytes(read32(&slice[pos + 160 + i * 32..])).ok_or_else(|| {
+                Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 160 + i * 32..])).ok_or_else(|| {
                     ProofError::InvalidArgument("d1 bytes not a canonical byte representation".to_string())
                 })?,
             );
@@ -889,6 +894,16 @@ where
             ri,
             extension_degree,
         })
+    }
+
+    /// Helper function to return the serialized proof's extension degree
+    pub fn extension_degree_from_proof_bytes(slice: &[u8]) -> Result<ExtensionDegree, ProofError> {
+        if slice.is_empty() || (slice.len() - 1) % 32 != 0 {
+            return Err(ProofError::InvalidLength(
+                "Invalid serialized proof bytes length".to_string(),
+            ));
+        }
+        ExtensionDegree::try_from(read_1_byte(&slice[0..])[0] as usize)
     }
 }
 
@@ -972,6 +987,11 @@ mod tests {
         };
         let proof_bytes = proof.to_bytes();
         assert!(RistrettoRangeProof::from_bytes(&proof_bytes).is_ok());
+        assert_eq!(proof.extension_degree(), proof.extension_degree);
+        assert_eq!(
+            RistrettoRangeProof::extension_degree_from_proof_bytes(&proof_bytes).unwrap(),
+            proof.extension_degree()
+        );
 
         let proof = RistrettoRangeProof {
             a: Default::default(),
@@ -992,6 +1012,11 @@ mod tests {
             extension_degree: ExtensionDegree::AddFiveBasePoints,
         };
         let proof_bytes = proof.to_bytes();
+        assert_eq!(proof.extension_degree(), proof.extension_degree);
+        assert_eq!(
+            RistrettoRangeProof::extension_degree_from_proof_bytes(&proof_bytes).unwrap(),
+            proof.extension_degree()
+        );
         assert!(RistrettoRangeProof::from_bytes(&proof_bytes).is_ok());
         let mut proof_bytes_meddled = proof_bytes.clone();
 
