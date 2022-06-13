@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.5](https://github.com/tari-project/bulletproofs-plus/compare/v0.0.4...v0.0.5) (2022-06-13)
+
+
+### Features
+
+* add methods to retrieve extension degree ([#14](https://github.com/tari-project/bulletproofs-plus/issues/14)) ([670ebdf](https://github.com/tari-project/bulletproofs-plus/commit/670ebdf70ce2141ab90fc5a22ffb8fd98fe9f148))
+
 ### [0.0.4](https://github.com/tari-project/bulletproofs-plus/compare/v0.0.3...v0.0.4) (2022-06-03)
 
 ### [0.0.3](https://github.com/tari-project/bulletproofs-plus/compare/v0.0.2...v0.0.3) (2022-05-31)
