@@ -9,7 +9,7 @@ description = "A smaller faster implementation of Bulletproofs"
 [dependencies]
 blake2 = "0.9.1"
 byteorder = { version = "1", default-features = false }
-curve25519-dalek = { package = "curve25519-dalek", version = "4.0.0-pre.2", default-features = false, features = ["serde", "alloc"] }
+curve25519-dalek = { package = "curve25519-dalek-ng", version = "4.1", default-features = false, features = ["serde", "alloc"] }
 derive_more = "0.99.17"
 derivative = "2.2.0"
 digest = { version = "0.9.0", default-features = false }
@@ -19,7 +19,7 @@ rand = "0.8"
 serde = "1.0.89"
 sha3 = { version = "0.9.1", default-features = false }
 thiserror = { version = "1" }
-zeroize = "1.0.0"
+zeroize = "1.4"
 
 [dev-dependencies]
 bincode = "1"

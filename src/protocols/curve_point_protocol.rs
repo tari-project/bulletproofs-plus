@@ -5,6 +5,7 @@
 
 use std::{
     borrow::Borrow,
+    cmp::min,
     ops::{Add, AddAssign, Mul},
 };
 
@@ -43,7 +44,13 @@ pub trait CurvePointProtocol:
     /// Generates an instance from the byte result of the SHA3_512 hasher.
     fn from_hash_sha3_512(hasher: Sha3_512) -> Self {
         let output = hasher.finalize();
-        Self::from_uniform_bytes(&output.into())
+        // If we use 'curve25519-dalek = { package = "curve25519-dalek", version = "4.0.0-pre.2"', change to
+        // 'Self::from_uniform_bytes(&output.into())'
+        // instead of below
+        let mut buffer = [0u8; 64];
+        let size = min(output.len(), 64);
+        (&mut buffer[0..size]).copy_from_slice(&output.as_slice()[0..size]);
+        Self::from_uniform_bytes(&buffer)
     }
 
     /// Helper function to multiply a point vector with a scalar vector
