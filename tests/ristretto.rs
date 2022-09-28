@@ -175,7 +175,7 @@ fn prove_and_verify(
             let mut commitments = vec![];
             let mut minimum_values = vec![];
             for m in 0..*aggregation_size {
-                let value = rng.gen_range(value_min,value_max);
+                let value = rng.gen_range(value_min, value_max);
                 let minimum_value = match promise_strategy {
                     ProofOfMinimumValueStrategy::NoOffset => None,
                     ProofOfMinimumValueStrategy::Intermediate => Some(value / 3),
