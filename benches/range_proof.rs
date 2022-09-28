@@ -67,7 +67,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let mut openings = vec![];
             let mut rng = rand::thread_rng();
             for _ in 0..aggregation_factor {
-                let value = rng.gen_range(value_min..value_max);
+                let value = rng.gen_range(value_min, value_max);
                 minimum_values.push(Some(value / 3));
                 let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
                 commitments.push(
@@ -139,7 +139,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let mut openings = vec![];
             let mut rng = rand::thread_rng();
             for _ in 0..aggregation_factor {
-                let value = rng.gen_range(value_min..value_max);
+                let value = rng.gen_range(value_min, value_max);
                 minimum_values.push(Some(value / 3));
                 let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
                 commitments.push(
@@ -212,7 +212,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
     for _ in 0..max_range_proofs {
         // 2. Create witness data
         let mut openings = vec![];
-        let value = rng.gen_range(value_min..value_max);
+        let value = rng.gen_range(value_min, value_max);
         let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
         openings.push(CommitmentOpening::new(value, blindings.clone()));
         let witness = RangeWitness::init(openings).unwrap();
