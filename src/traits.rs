@@ -1,6 +1,8 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+use curve25519_dalek::traits::VartimePrecomputedMultiscalarMul;
+
 /// Abstrations for any type that can be represented as 32 bytes
 pub trait FixedBytesRepr {
     /// Returns a reference to the 32-byte representation
@@ -32,4 +34,10 @@ pub trait Decompressable {
 
     /// Try decompress this instance. None is returned if this fails.
     fn decompress(&self) -> Option<Self::Decompressed>;
+}
+
+/// Abstraction for any type supporting multiscalar multiplication precomputation
+pub trait Precomputable {
+    /// The type representing the precomputation instantiation
+    type Precomputation: Clone + VartimePrecomputedMultiscalarMul<Point = Self>;
 }

@@ -9,8 +9,6 @@
 #[macro_use]
 extern crate criterion;
 
-use std::convert::TryInto;
-
 use criterion::{Criterion, SamplingMode};
 use curve25519_dalek::scalar::Scalar;
 use rand::{self, Rng};
@@ -197,65 +195,60 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
     #[allow(clippy::cast_possible_truncation)]
     let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
 
-    let max_range_proofs = BATCHED_SIZES
-        .to_vec()
-        .iter()
-        .fold(u32::MIN, |a, &b| a.max(b.try_into().unwrap()));
-    // 0.  Batch data
-    let mut statements = vec![];
-    let mut proofs = vec![];
-    let pc_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
-
-    // 1. Generators
-    let generators = RangeParameters::init(bit_length, 1, pc_gens).unwrap();
-
-    let mut rng = rand::thread_rng();
-    for _ in 0..max_range_proofs {
-        // 2. Create witness data
-        let mut openings = vec![];
-        let value = rng.gen_range(value_min, value_max);
-        let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
-        openings.push(CommitmentOpening::new(value, blindings.clone()));
-        let witness = RangeWitness::init(openings).unwrap();
-
-        // 3. Generate the statement
-        let seed_nonce = Some(Scalar::random_not_zero(&mut rng));
-        let statement = RangeStatement::init(
-            generators.clone(),
-            vec![generators
-                .pc_gens()
-                .commit(&Scalar::from(value), blindings.as_slice())
-                .unwrap()],
-            vec![Some(value / 3)],
-            seed_nonce,
-        )
-        .unwrap();
-        statements.push(statement.clone());
-
-        // 4. Create the proof
-        let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness).unwrap();
-        proofs.push(proof);
-    }
-
     for extract_masks in EXTRACT_MASKS {
         for number_of_range_proofs in BATCHED_SIZES {
             let label = format!(
                 "Batched {}-bit BP+ verify {} deg {:?} masks {:?}",
                 bit_length, number_of_range_proofs, extension_degree, extract_masks
             );
-            let statements = &statements[0..number_of_range_proofs];
-            let proofs = &proofs[0..number_of_range_proofs];
+
+            // Generators
+            let pc_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
+            let generators = RangeParameters::init(bit_length, 1, pc_gens).unwrap();
+
+            let mut rng = rand::thread_rng();
 
             group.bench_function(&label, move |b| {
+                // Batch data
+                let mut statements = vec![];
+                let mut proofs = vec![];
+
+                for _ in 0..number_of_range_proofs {
+                    // Witness data
+                    let mut openings = vec![];
+                    let value = rng.gen_range(value_min, value_max);
+                    let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
+                    openings.push(CommitmentOpening::new(value, blindings.clone()));
+                    let witness = RangeWitness::init(openings).unwrap();
+
+                    // Statement data
+                    let seed_nonce = Some(Scalar::random_not_zero(&mut rng));
+                    let statement = RangeStatement::init(
+                        generators.clone(),
+                        vec![generators
+                            .pc_gens()
+                            .commit(&Scalar::from(value), blindings.as_slice())
+                            .unwrap()],
+                        vec![Some(value / 3)],
+                        seed_nonce,
+                    )
+                    .unwrap();
+                    statements.push(statement.clone());
+
+                    // Proof
+                    let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness).unwrap();
+                    proofs.push(proof);
+                }
+
                 // Benchmark this code
                 b.iter(|| {
-                    // 5. Verify the entire batch of single proofs
+                    // Verify the entire batch of proofs
                     match extract_masks {
                         VerifyAction::VerifyOnly => {
                             let _masks = RangeProof::verify_batch(
                                 transcript_label,
-                                statements,
-                                proofs,
+                                &statements,
+                                &proofs,
                                 VerifyAction::VerifyOnly,
                             )
                             .unwrap();
@@ -263,8 +256,8 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                         VerifyAction::RecoverOnly => {
                             let _masks = RangeProof::verify_batch(
                                 transcript_label,
-                                statements,
-                                proofs,
+                                &statements,
+                                &proofs,
                                 VerifyAction::RecoverOnly,
                             )
                             .unwrap();

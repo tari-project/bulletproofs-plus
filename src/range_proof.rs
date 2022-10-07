@@ -13,8 +13,9 @@ use std::{
 
 use curve25519_dalek::{
     scalar::Scalar,
-    traits::{Identity, IsIdentity},
+    traits::{Identity, IsIdentity, VartimePrecomputedMultiscalarMul},
 };
+use itertools::Itertools;
 use merlin::Transcript;
 use rand::thread_rng;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
@@ -31,7 +32,7 @@ use crate::{
     },
     range_statement::RangeStatement,
     range_witness::RangeWitness,
-    traits::{Compressable, Decompressable, FixedBytesRepr},
+    traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
     transcripts,
     utils::generic::{bit_vector_of_scalars, nonce, read_1_byte, read_32_bytes},
 };
@@ -186,8 +187,8 @@ impl<P> RangeProof<P>
 where
     for<'p> &'p P: Mul<Scalar, Output = P>,
     for<'p> &'p P: Add<Output = P>,
-    P: CurvePointProtocol,
-    P::Compressed: FixedBytesRepr + IsIdentity + Identity + Copy,
+    P: CurvePointProtocol + Precomputable,
+    P::Compressed: FixedBytesRepr + IsIdentity + Identity,
 {
     /// Helper function to return the proof's extension degree
     pub fn extension_degree(&self) -> ExtensionDegree {
@@ -314,8 +315,8 @@ where
         // Calculate the inner product
         transcript.domain_separator(b"Bulletproofs+", b"Inner Product Proof");
         let mut ip_data = InnerProductRound::init(
-            statement.generators.gi_base_copied(),
-            statement.generators.hi_base_copied(),
+            statement.generators.gi_base_iter().cloned().collect(),
+            statement.generators.hi_base_iter().cloned().collect(),
             statement.generators.g_bases().to_vec(),
             statement.generators.h_base().clone(),
             a_li,
@@ -399,7 +400,7 @@ where
             statements[max_index].generators.hi_base_ref(),
         );
         for (i, statement) in statements.iter().enumerate() {
-            for value in statement.minimum_value_promises.iter().flatten() {
+            for value in Iterator::flatten(statement.minimum_value_promises.iter()) {
                 if value >> (bit_length - 1) > 1 {
                     return Err(ProofError::InvalidLength(
                         "Minimum value promise exceeds bit vector capacity".to_string(),
@@ -480,13 +481,10 @@ where
         let (max_mn, max_index) = RangeProof::verify_statements_and_generators_consistency(statements, range_proofs)?;
         let (g_base_vec, h_base) = (statements[0].generators.g_bases(), statements[0].generators.h_base());
         let bit_length = statements[0].generators.bit_length();
-        let (gi_base_ref, hi_base_ref) = (
-            statements[max_index].generators.gi_base_ref(),
-            statements[max_index].generators.hi_base_ref(),
-        );
         let extension_degree = statements[0].generators.extension_degree() as usize;
         let g_bases_compressed = statements[0].generators.g_bases_compressed();
         let h_base_compressed = statements[0].generators.h_base_compressed();
+        let precomp = statements[max_index].generators.precomp();
 
         // Compute log2(N)
         let mut log_n = 0u32;
@@ -510,13 +508,15 @@ where
         let mut hi_base_scalars = vec![Scalar::zero(); max_mn];
 
         // Final multiscalar multiplication data
-        let mut msm_len = 0;
+        // Because we use precomputation on the generator vectors, we need to separate the static data from the dynamic
+        // data. However, we can't combine precomputation data, so the Pedersen generators go with the dynamic
+        // data :(
+        let mut msm_dynamic_len = extension_degree + 1;
         for (index, item) in statements.iter().enumerate() {
-            msm_len += item.generators.aggregation_factor() + 3 + range_proofs[index].li.len() * 2;
+            msm_dynamic_len += item.generators.aggregation_factor() + 3 + range_proofs[index].li.len() * 2;
         }
-        msm_len += 2 + max_mn * 2 + (extension_degree - 1);
-        let mut scalars: Vec<Scalar> = Vec::with_capacity(msm_len);
-        let mut points: Vec<P> = Vec::with_capacity(msm_len);
+        let mut dynamic_scalars: Vec<Scalar> = Vec::with_capacity(msm_dynamic_len);
+        let mut dynamic_points: Vec<P> = Vec::with_capacity(msm_dynamic_len);
 
         // Recovered masks
         let mut masks = match extract_masks {
@@ -530,9 +530,9 @@ where
 
         // Process each proof and add it to the batch
         let rng = &mut thread_rng();
-        for (index, proof) in range_proofs.iter().enumerate() {
-            let commitments = statements[index].commitments.clone();
-            let minimum_value_promises = statements[index].minimum_value_promises.clone();
+        for (proof, statement) in range_proofs.iter().zip(statements) {
+            let commitments = statement.commitments.clone();
+            let minimum_value_promises = statement.minimum_value_promises.clone();
             let a = proof.a_decompressed()?;
             let a1 = proof.a1_decompressed()?;
             let b = proof.b_decompressed()?;
@@ -569,7 +569,7 @@ where
                 bit_length,
                 extension_degree,
                 aggregation_factor,
-                &statements[index],
+                statement,
             )?;
 
             // Reconstruct challenges
@@ -632,7 +632,7 @@ where
             match extract_masks {
                 VerifyAction::VerifyOnly => masks.push(None),
                 _ => {
-                    if let Some(seed_nonce) = statements[index].seed_nonce {
+                    if let Some(seed_nonce) = statement.seed_nonce {
                         let mut temp_masks = Vec::with_capacity(extension_degree);
                         for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
                             let mut this_mask = (*d1_val -
@@ -681,54 +681,52 @@ where
 
             // Remaining terms
             let mut z_even_powers = Scalar::one();
-            for k in 0..aggregation_factor {
+            for minimum_value_promise in minimum_value_promises {
                 z_even_powers *= z_square;
                 let weighted = weight * (-e_square * z_even_powers * y_nm_1);
-                scalars.push(weighted);
-                points.push(commitments[k].clone());
-                if let Some(minimum_value) = minimum_value_promises[k] {
+                dynamic_scalars.push(weighted);
+                if let Some(minimum_value) = minimum_value_promise {
                     h_base_scalar -= weighted * Scalar::from(minimum_value);
                 }
             }
+            dynamic_points.extend(commitments);
 
             h_base_scalar += weight * (r1 * y * s1 + e_square * (y_nm_1 * z * d_sum + (z_square - z) * y_sum));
             for k in 0..extension_degree {
                 g_base_scalars[k] += weight * d1[k];
             }
 
-            scalars.push(weight * (-e));
-            points.push(a1);
-            scalars.push(-weight);
-            points.push(b);
-            scalars.push(weight * (-e_square));
-            points.push(a);
+            dynamic_scalars.push(weight * (-e));
+            dynamic_points.push(a1);
+            dynamic_scalars.push(-weight);
+            dynamic_points.push(b);
+            dynamic_scalars.push(weight * (-e_square));
+            dynamic_points.push(a);
 
-            for j in 0..rounds {
-                scalars.push(weight * (-e_square * challenges_sq[j]));
-                points.push(li[j].clone());
-                scalars.push(weight * (-e_square * challenges_sq_inv[j]));
-                points.push(ri[j].clone());
-            }
+            dynamic_scalars.extend(challenges_sq.into_iter().map(|c| weight * -e_square * c));
+            dynamic_points.extend(li.into_iter());
+            dynamic_scalars.extend(challenges_sq_inv.into_iter().map(|c| weight * -e_square * c));
+            dynamic_points.extend(ri.into_iter());
         }
         if extract_masks == VerifyAction::RecoverOnly {
             return Ok(masks);
         }
 
-        // Common generators
+        // Pedersen generators
         for k in 0..extension_degree {
-            scalars.push(g_base_scalars[k]);
-            points.push(g_base_vec[k].clone());
+            dynamic_scalars.push(g_base_scalars[k]);
+            dynamic_points.push(g_base_vec[k].clone());
         }
-        scalars.push(h_base_scalar);
-        points.push(h_base.clone());
-        for i in 0..max_mn {
-            scalars.push(gi_base_scalars[i]);
-            points.push(gi_base_ref[i].clone());
-            scalars.push(hi_base_scalars[i]);
-            points.push(hi_base_ref[i].clone());
-        }
+        dynamic_scalars.push(h_base_scalar);
+        dynamic_points.push(h_base.clone());
 
-        if P::vartime_multiscalar_mul(scalars, points) != P::identity() {
+        // Perform the final check using precomputation
+        if precomp.vartime_mixed_multiscalar_mul(
+            gi_base_scalars.iter().interleave(hi_base_scalars.iter()),
+            dynamic_scalars.iter(),
+            dynamic_points.iter(),
+        ) != P::identity()
+        {
             return Err(ProofError::VerificationFailed(
                 "Range proof batch not valid".to_string(),
             ));

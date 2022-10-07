@@ -7,14 +7,14 @@
 
 use curve25519_dalek::{
     constants::{RISTRETTO_BASEPOINT_COMPRESSED, RISTRETTO_BASEPOINT_POINT},
-    ristretto::{CompressedRistretto, RistrettoPoint},
+    ristretto::{CompressedRistretto, RistrettoPoint, VartimeRistrettoPrecomputation},
 };
 
 use crate::{
     generators::pedersen_gens::ExtensionDegree,
     protocols::curve_point_protocol::CurvePointProtocol,
     range_proof::RangeProof,
-    traits::{Compressable, Decompressable, FixedBytesRepr, FromUniformBytes},
+    traits::{Compressable, Decompressable, FixedBytesRepr, FromUniformBytes, Precomputable},
     PedersenGens,
 };
 
@@ -53,6 +53,10 @@ impl Compressable for RistrettoPoint {
     fn compress(&self) -> Self::Compressed {
         RistrettoPoint::compress(self)
     }
+}
+
+impl Precomputable for RistrettoPoint {
+    type Precomputation = VartimeRistrettoPrecomputation;
 }
 
 /// Create extended Pedersen generators for the required extension degree using pre-calculated compressed constants

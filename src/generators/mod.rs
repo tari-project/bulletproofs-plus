@@ -61,27 +61,4 @@ mod tests {
         helper(16, 2);
         helper(16, 1);
     }
-
-    #[test]
-    fn resizing_small_gens_matches_creating_bigger_gens() {
-        let gens = BulletproofGens::new(64, 8);
-
-        let mut gen_resized = BulletproofGens::new(32, 8);
-        gen_resized.increase_capacity(64);
-
-        let helper = |n: usize, m: usize| {
-            let gens_g: Vec<RistrettoPoint> = gens.g_iter(n, m).copied().collect();
-            let gens_h: Vec<RistrettoPoint> = gens.h_iter(n, m).copied().collect();
-
-            let resized_g: Vec<RistrettoPoint> = gen_resized.g_iter(n, m).copied().collect();
-            let resized_h: Vec<RistrettoPoint> = gen_resized.h_iter(n, m).copied().collect();
-
-            assert_eq!(gens_g, resized_g);
-            assert_eq!(gens_h, resized_h);
-        };
-
-        helper(64, 8);
-        helper(32, 8);
-        helper(16, 8);
-    }
 }
