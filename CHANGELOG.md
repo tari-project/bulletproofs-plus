@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.1](https://github.com/tari-project/bulletproofs-plus/compare/v0.1.0...v0.1.1) (2022-11-24)
+
+
+### Bug Fixes
+
+* relax zeroize ([#20](https://github.com/tari-project/bulletproofs-plus/issues/20)) ([4e041dd](https://github.com/tari-project/bulletproofs-plus/commit/4e041dd6a34e87f2c197aa4f7e02c99e2806d8a6))
+
 ### [0.0.7](https://github.com/tari-project/bulletproofs-plus/compare/v0.0.6...v0.0.7) (2022-10-03)
 
 
