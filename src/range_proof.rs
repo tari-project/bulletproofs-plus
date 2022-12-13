@@ -467,8 +467,7 @@ where
         // Get chunks of both the statements and proofs
         let mut chunks = statements
             .chunks(MAX_RANGE_PROOF_BATCH_SIZE)
-            .zip(proofs.chunks(MAX_RANGE_PROOF_BATCH_SIZE))
-            .peekable();
+            .zip(proofs.chunks(MAX_RANGE_PROOF_BATCH_SIZE));
 
         // If the batch fails, propagate the error; otherwise, store the masks and keep going
         if let Some((batch_statements, batch_proofs)) = chunks.next() {
