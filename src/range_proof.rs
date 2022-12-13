@@ -448,10 +448,16 @@ where
         proofs: &[RangeProof<P>],
         action: VerifyAction,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
+        // By definition, an empty batch fails
+        if statements.is_empty() || proofs.is_empty() {
+            return Err(ProofError::InvalidArgument(
+                "Range statements or proofs length empty".to_string(),
+            ));
+        }
         // We need to check for size consistency here, even though it's also done later
         if statements.len() != proofs.len() {
             return Err(ProofError::InvalidArgument(
-                "Batch statement/proof size mismatch".to_string(),
+                "Range statements and proofs length mismatch".to_string(),
             ));
         }
 
@@ -471,7 +477,6 @@ where
             masks.append(&mut result);
         }
 
-        // Note that an empty batch succeeds
         Ok(masks)
     }
 
