@@ -64,6 +64,9 @@ pub struct RangeProof<P: Compressable> {
 /// The maximum bit length for which proofs can be generated
 pub const MAX_RANGE_PROOF_BIT_LENGTH: usize = 64;
 
+/// Maximum number of proofs in a batch
+const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
+
 /// # Example
 /// ```
 /// use curve25519_dalek::scalar::Scalar;
@@ -160,13 +163,18 @@ pub const MAX_RANGE_PROOF_BIT_LENGTH: usize = 64;
 /// }
 ///
 /// // 5. Verify the entire batch as the commitment owner, i.e. the prover self
-/// let recovered_private_masks =
-///     RangeProof::verify_and_recover_masks(transcript_label, &statements_private, &proofs).unwrap();
+/// let recovered_private_masks = RangeProof::verify_batch(
+///     transcript_label,
+///     &statements_private,
+///     &proofs,
+///     VerifyAction::RecoverAndVerify,
+/// )
+/// .unwrap();
 /// assert_eq!(private_masks, recovered_private_masks);
 ///
 /// // 6. Verify the entire batch as public entity
 /// let recovered_public_masks =
-///     RangeProof::verify_do_not_recover_masks(transcript_label, &statements_public, &proofs).unwrap();
+///     RangeProof::verify_batch(transcript_label, &statements_public, &proofs, VerifyAction::VerifyOnly).unwrap();
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
 /// # }
@@ -433,37 +441,38 @@ where
         Ok((max_mn, max_index))
     }
 
-    /// Verify a batch of single and/or aggregated range proofs as the commitment owner and recover the masks for single
-    /// range proofs by supplying the optional seed nonces
-    pub fn verify_and_recover_masks(
+    /// Wrapper function for batch verification in different modes: mask recovery, verification, or both
+    pub fn verify_batch(
         transcript_label: &'static str,
         statements: &[RangeStatement<P>],
-        range_proofs: &[RangeProof<P>],
+        proofs: &[RangeProof<P>],
+        action: VerifyAction,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
-        RangeProof::verify(
-            transcript_label,
-            statements,
-            range_proofs,
-            VerifyAction::RecoverAndVerify,
-        )
-    }
+        // We need to check for size consistency here, even though it's also done later
+        if statements.len() != proofs.len() {
+            return Err(ProofError::InvalidArgument(
+                "Batch statement/proof size mismatch".to_string(),
+            ));
+        }
 
-    /// Verify a batch of single and/or aggregated range proofs as a public entity
-    pub fn verify_do_not_recover_masks(
-        transcript_label: &'static str,
-        statements: &[RangeStatement<P>],
-        range_proofs: &[RangeProof<P>],
-    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
-        RangeProof::verify(transcript_label, statements, range_proofs, VerifyAction::VerifyOnly)
-    }
+        // Store masks from all results
+        let mut masks = Vec::<Option<ExtendedMask>>::with_capacity(proofs.len());
 
-    /// Recover the masks for single range proofs by supplying the optional seed nonces
-    pub fn recover_masks_ony(
-        transcript_label: &'static str,
-        statements: &[RangeStatement<P>],
-        range_proofs: &[RangeProof<P>],
-    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
-        RangeProof::verify(transcript_label, statements, range_proofs, VerifyAction::RecoverOnly)
+        // Get chunks of both the statements and proofs
+        let mut chunks = statements
+            .chunks(MAX_RANGE_PROOF_BATCH_SIZE)
+            .zip(proofs.chunks(MAX_RANGE_PROOF_BATCH_SIZE))
+            .peekable();
+
+        // If the batch fails, propagate the error; otherwise, store the masks and keep going
+        if let Some((batch_statements, batch_proofs)) = chunks.next() {
+            let mut result = RangeProof::verify(transcript_label, batch_statements, batch_proofs, action)?;
+
+            masks.append(&mut result);
+        }
+
+        // Note that an empty batch succeeds
+        Ok(masks)
     }
 
     // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single

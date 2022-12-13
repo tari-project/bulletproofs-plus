@@ -12,7 +12,7 @@ use tari_bulletproofs_plus::{
     generators::pedersen_gens::ExtensionDegree,
     protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
-    range_proof::RangeProof,
+    range_proof::{RangeProof, VerifyAction},
     range_statement::RangeStatement,
     range_witness::RangeWitness,
     ristretto,
@@ -244,23 +244,37 @@ fn prove_and_verify(
         if !proofs.is_empty() {
             // 5. Verify the entire batch as the commitment owner, i.e. the prover self
             // --- Only recover the masks
-            let recovered_private_masks =
-                RangeProof::recover_masks_ony(transcript_label, &statements_private.clone(), &proofs.clone()).unwrap();
+            let recovered_private_masks = RangeProof::verify_batch(
+                transcript_label,
+                &statements_private.clone(),
+                &proofs.clone(),
+                VerifyAction::RecoverOnly,
+            )
+            .unwrap();
             assert_eq!(private_masks, recovered_private_masks);
             // --- Recover the masks and verify the proofs
-            let recovered_private_masks =
-                RangeProof::verify_and_recover_masks(transcript_label, &statements_private.clone(), &proofs.clone())
-                    .unwrap();
+            let recovered_private_masks = RangeProof::verify_batch(
+                transcript_label,
+                &statements_private.clone(),
+                &proofs.clone(),
+                VerifyAction::RecoverAndVerify,
+            )
+            .unwrap();
             assert_eq!(private_masks, recovered_private_masks);
             // --- Verify the proofs but do not recover the masks
-            let recovered_private_masks =
-                RangeProof::verify_do_not_recover_masks(transcript_label, &statements_private.clone(), &proofs.clone())
-                    .unwrap();
+            let recovered_private_masks = RangeProof::verify_batch(
+                transcript_label,
+                &statements_private.clone(),
+                &proofs.clone(),
+                VerifyAction::VerifyOnly,
+            )
+            .unwrap();
             assert_eq!(public_masks, recovered_private_masks);
 
             // 6. Verify the entire batch as public entity
             let recovered_public_masks =
-                RangeProof::verify_do_not_recover_masks(transcript_label, &statements_public, &proofs).unwrap();
+                RangeProof::verify_batch(transcript_label, &statements_public, &proofs, VerifyAction::VerifyOnly)
+                    .unwrap();
             assert_eq!(public_masks, recovered_public_masks);
 
             // 7. Try to recover the masks with incorrect seed_nonce values
@@ -282,10 +296,11 @@ fn prove_and_verify(
                         seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::one()),
                     });
                 }
-                let recovered_private_masks_changed = RistrettoRangeProof::verify_and_recover_masks(
+                let recovered_private_masks_changed = RistrettoRangeProof::verify_batch(
                     transcript_label,
                     &statements_private_changed,
                     &proofs.clone(),
+                    VerifyAction::RecoverAndVerify,
                 )
                 .unwrap();
                 assert_ne!(private_masks, recovered_private_masks_changed);
@@ -312,7 +327,12 @@ fn prove_and_verify(
                     seed_nonce: statement.seed_nonce,
                 });
             }
-            match RangeProof::verify_do_not_recover_masks(transcript_label, &statements_public_changed, &proofs) {
+            match RangeProof::verify_batch(
+                transcript_label,
+                &statements_public_changed,
+                &proofs,
+                VerifyAction::VerifyOnly,
+            ) {
                 Ok(_) => {
                     panic!("Range proof should not verify")
                 },

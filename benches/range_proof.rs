@@ -169,7 +169,8 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the aggregated proof
-                let _masks = RangeProof::verify_do_not_recover_masks(transcript_label, &statements, &proofs).unwrap();
+                let _masks =
+                    RangeProof::verify_batch(transcript_label, &statements, &proofs, VerifyAction::VerifyOnly).unwrap();
             });
         });
     }
@@ -251,11 +252,22 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                     // 5. Verify the entire batch of single proofs
                     match extract_masks {
                         VerifyAction::VerifyOnly => {
-                            let _masks =
-                                RangeProof::verify_do_not_recover_masks(transcript_label, statements, proofs).unwrap();
+                            let _masks = RangeProof::verify_batch(
+                                transcript_label,
+                                statements,
+                                proofs,
+                                VerifyAction::VerifyOnly,
+                            )
+                            .unwrap();
                         },
                         VerifyAction::RecoverOnly => {
-                            let _masks = RangeProof::recover_masks_ony(transcript_label, statements, proofs).unwrap();
+                            let _masks = RangeProof::verify_batch(
+                                transcript_label,
+                                statements,
+                                proofs,
+                                VerifyAction::RecoverOnly,
+                            )
+                            .unwrap();
                         },
                         _ => {},
                     }
