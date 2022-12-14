@@ -65,6 +65,8 @@ pub struct RangeProof<P: Compressable> {
 pub const MAX_RANGE_PROOF_BIT_LENGTH: usize = 64;
 
 /// Maximum number of proofs in a batch
+/// This is only for performance reasons, where a very large batch can see diminishing returns
+/// There is no theoretical limit imposed by the algorithms!
 const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
 
 /// # Example
