@@ -1,4 +1,4 @@
-on: [push, pull_request]
+on: [pull_request]
 name: Clippy
 jobs:
   clippy_check:
@@ -8,7 +8,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           components: clippy, rustfmt
-          toolchain: nightly-2022-01-17
+          toolchain: nightly
           override: true
       - uses: actions-rs/cargo@v1
         with:

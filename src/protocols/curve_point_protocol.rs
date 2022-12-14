@@ -49,7 +49,7 @@ pub trait CurvePointProtocol:
         // instead of below
         let mut buffer = [0u8; 64];
         let size = min(output.len(), 64);
-        (&mut buffer[0..size]).copy_from_slice(&output.as_slice()[0..size]);
+        (buffer[0..size]).copy_from_slice(&output.as_slice()[0..size]);
         Self::from_uniform_bytes(&buffer)
     }
 

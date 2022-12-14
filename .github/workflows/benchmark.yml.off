@@ -1,10 +1,11 @@
+# Disabling this for now, since it always fails, and not sure it's compatible with criterion
 name: Benchmark
 on:
   pull_request:
   push:
     branches:
       - main
-      - mb-*
+      - bm-*
 
 permissions:
   contents: write

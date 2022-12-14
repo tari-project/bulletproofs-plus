@@ -154,7 +154,8 @@ where
             self.a1 = Some(a1.clone());
             self.b = Some(b.clone());
 
-            let e = transcripts::transcript_points_a1_b_challenge_e(*self.transcript, &a1.compress(), &b.compress())?;
+            let e =
+                transcripts::transcript_points_a1_b_challenge_e(&mut self.transcript, &a1.compress(), &b.compress())?;
 
             self.r1 = Some(r + self.ai[0] * e);
             self.s1 = Some(s + self.bi[0] * e);
@@ -237,7 +238,7 @@ where
         self.ri.push(P::vartime_multiscalar_mul(ri_scalars, ri_points));
 
         let e = transcripts::transcript_points_l_r_challenge_e(
-            *self.transcript,
+            &mut self.transcript,
             &self.li[self.li.len() - 1].compress(),
             &self.ri[self.ri.len() - 1].compress(),
         )?;
