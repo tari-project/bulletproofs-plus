@@ -1,3 +1,4 @@
+# Disabling this for now, since it always fails, and not sure it's compatible with criterion
 name: Benchmark
 on:
   pull_request:
