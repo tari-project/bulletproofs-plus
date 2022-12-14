@@ -10,11 +10,11 @@
 # 5. genhtml
 # $ sudo apt install lcov
 
-RUSTFLAGS="-Z instrument-coverage"
+RUSTFLAGS="-C instrument-coverage"
 LLVM_PROFILE_FILE="./cov_raw/bulletproofs-plus-%m.profraw"
 
 get_binaries() {
-  files=$( RUSTFLAGS=$RUSTFLAGS cargo test --tests --no-run --message-format=json \
+  files=$( RUSTFLAGS=$RUSTFLAGS cargo +nightly test --tests --no-run --message-format=json \
               | jq -r "select(.profile.test == true) | .filenames[]" \
               | grep -v dSYM - \
         );
@@ -26,12 +26,12 @@ get_binaries
 # Remove old coverage files
 rm cov_raw/*profraw cov_raw/bulletproofs-plus.profdata cov_raw/bulletproofs-plus.lcov cov_raw/bulletproofs-plus.txt
 
-RUSTFLAGS=$RUSTFLAGS LLVM_PROFILE_FILE=$LLVM_PROFILE_FILE cargo test --tests
+RUSTFLAGS=$RUSTFLAGS LLVM_PROFILE_FILE=$LLVM_PROFILE_FILE cargo +nightly test --tests
 
-cargo profdata -- \
+cargo +nightly profdata -- \
   merge -sparse ./cov_raw/bulletproofs-plus-*.profraw -o ./cov_raw/bulletproofs-plus.profdata
 
-cargo cov -- \
+cargo +nightly cov -- \
   export \
     --Xdemangler=rustfilt \
     --format=lcov \
@@ -44,7 +44,7 @@ cargo cov -- \
     $files \
     > cov_raw/bulletproofs-plus.lcov
 
-cargo cov -- \
+cargo +nightly cov -- \
   show \
     --Xdemangler=rustfilt \
     --show-branch-summary \
