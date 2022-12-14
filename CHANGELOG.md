@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.2.0](https://github.com/tari-project/bulletproofs-plus/compare/v0.1.1...v0.2.0) (2022-12-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* split batches for verification (#22)
+
+### Features
+
+* split batches for verification ([#22](https://github.com/tari-project/bulletproofs-plus/issues/22)) ([531bae6](https://github.com/tari-project/bulletproofs-plus/commit/531bae6cce6cae4cb78f8543d309ee71a7f14915))
+
 ### [0.1.1](https://github.com/tari-project/bulletproofs-plus/compare/v0.1.0...v0.1.1) (2022-11-24)
 
 
