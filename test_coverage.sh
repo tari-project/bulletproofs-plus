@@ -40,6 +40,7 @@ cargo +nightly cov -- \
     --show-region-summary \
     --ignore-filename-regex='/.cargo/registry' \
     --ignore-filename-regex="^/rustc" \
+    --ignore-filename-regex="curve25519-dalek" \
     --instr-profile=cov_raw/bulletproofs-plus.profdata \
     $files \
     > cov_raw/bulletproofs-plus.lcov
@@ -52,7 +53,8 @@ cargo +nightly cov -- \
     --show-region-summary \
     --ignore-filename-regex='/.cargo/registry' \
     --ignore-filename-regex="^/rustc" \
-    --instr-profile=cov_raw/bulletproofs-plus.profdata \
+    --ignore-filename-regex="curve25519-dalek" \
+  --instr-profile=cov_raw/bulletproofs-plus.profdata \
     $files \
     > cov_raw/bulletproofs-plus.txt
 
