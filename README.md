@@ -1,4 +1,8 @@
 [![Build](https://circleci.com/gh/tari-project/tari/tree/development.svg?style=svg)](https://circleci.com/gh/tari-project/tari/tree/development)
+![](https://github.com/tari-project/bulletproofs-plus/workflows/Security%20audit/badge.svg)
+![](https://github.com/tari-project/bulletproofs-plus/workflows/Clippy/badge.svg)
+[![Coverage Status](https://coveralls.io/repos/github/tari-project/bulletproofs-plus/badge.svg?branch=main)](https://coveralls.io/github/tari-project/bulletproofs-plus?branch=main)
+
 
 # Tari Bulletproofs+
 
