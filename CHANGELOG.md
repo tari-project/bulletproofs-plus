@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.1](https://github.com/tari-project/bulletproofs-plus/compare/v0.2.0...v0.2.1) (2023-01-03)
+
+
+### Features
+
+* add status badges to readme ([2f063be](https://github.com/tari-project/bulletproofs-plus/commit/2f063beba9b2d15e41a2e31b866ce04a88654f6f))
+
+
+### Bug Fixes
+
+* exclude dalek from source test coverage ([7cae60b](https://github.com/tari-project/bulletproofs-plus/commit/7cae60b8656438c1de2793ab2c68abedb35c8b13))
+* make test_coverage.sh executable ([cf1f46f](https://github.com/tari-project/bulletproofs-plus/commit/cf1f46f88ad01e6134f418dfb1ca4a2bac3ea6bb))
+* update test coverage script ([5c36bdf](https://github.com/tari-project/bulletproofs-plus/commit/5c36bdfb422295dc1ff85967d7ff75e1989f0f3e))
+
 ## [0.2.0](https://github.com/tari-project/bulletproofs-plus/compare/v0.1.1...v0.2.0) (2022-12-14)
 
 
