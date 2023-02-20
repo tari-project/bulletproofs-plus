@@ -5,9 +5,10 @@
 
 #![allow(clippy::too_many_lines)]
 
+#[cfg(feature = "serde")]
+use std::marker::PhantomData;
 use std::{
     convert::{TryFrom, TryInto},
-    marker::PhantomData,
     ops::{Add, Mul},
 };
 
@@ -17,6 +18,7 @@ use curve25519_dalek::{
 };
 use merlin::Transcript;
 use rand::thread_rng;
+#[cfg(feature = "serde")]
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
@@ -921,7 +923,7 @@ where
         ExtensionDegree::try_from(read_1_byte(&slice[0..])[0] as usize)
     }
 }
-
+#[cfg(feature = "serde")]
 impl<P> Serialize for RangeProof<P>
 where
     P: Compressable,
@@ -932,7 +934,7 @@ where
         serializer.serialize_bytes(&self.to_bytes()[..])
     }
 }
-
+#[cfg(feature = "serde")]
 impl<'de, P> Deserialize<'de> for RangeProof<P>
 where
     P: Compressable,
