@@ -220,7 +220,7 @@ fn prove_and_verify(
                 RangeStatement::init(generators.clone(), commitments, minimum_values.clone(), None).unwrap();
 
             // 4. Create the proofs
-            let proof = RangeProof::prove(transcript_label, &private_statement.clone(), &witness);
+            let proof = RangeProof::prove(transcript_label, &private_statement.clone(), &witness, &mut rng);
             match promise_strategy {
                 ProofOfMinimumValueStrategy::LargerThanValue => match proof {
                     Ok(_) => {
@@ -248,7 +248,7 @@ fn prove_and_verify(
                 transcript_label,
                 &statements_private.clone(),
                 &proofs.clone(),
-                VerifyAction::RecoverOnly,
+                VerifyAction::RecoverOnly, &mut rng
             )
             .unwrap();
             assert_eq!(private_masks, recovered_private_masks);
@@ -257,7 +257,7 @@ fn prove_and_verify(
                 transcript_label,
                 &statements_private.clone(),
                 &proofs.clone(),
-                VerifyAction::RecoverAndVerify,
+                VerifyAction::RecoverAndVerify, &mut rng
             )
             .unwrap();
             assert_eq!(private_masks, recovered_private_masks);
@@ -266,14 +266,14 @@ fn prove_and_verify(
                 transcript_label,
                 &statements_private.clone(),
                 &proofs.clone(),
-                VerifyAction::VerifyOnly,
+                VerifyAction::VerifyOnly, &mut rng
             )
             .unwrap();
             assert_eq!(public_masks, recovered_private_masks);
 
             // 6. Verify the entire batch as public entity
             let recovered_public_masks =
-                RangeProof::verify_batch(transcript_label, &statements_public, &proofs, VerifyAction::VerifyOnly)
+                RangeProof::verify_batch(transcript_label, &statements_public, &proofs, VerifyAction::VerifyOnly, &mut rng)
                     .unwrap();
             assert_eq!(public_masks, recovered_public_masks);
 
@@ -300,7 +300,7 @@ fn prove_and_verify(
                     transcript_label,
                     &statements_private_changed,
                     &proofs.clone(),
-                    VerifyAction::RecoverAndVerify,
+                    VerifyAction::RecoverAndVerify, &mut rng
                 )
                 .unwrap();
                 assert_ne!(private_masks, recovered_private_masks_changed);
@@ -331,7 +331,7 @@ fn prove_and_verify(
                 transcript_label,
                 &statements_public_changed,
                 &proofs,
-                VerifyAction::VerifyOnly,
+                VerifyAction::VerifyOnly, &mut rng
             ) {
                 Ok(_) => {
                     panic!("Range proof should not verify")
@@ -346,6 +346,7 @@ fn prove_and_verify(
         }
 
         // 9. Test serialize/deserialize
+        #[cfg(feature = "serde")]
         for proof in proofs {
             // This will test the underlying proof to bytes and from bytes
             let serialized_proof = proof.to_bytes();

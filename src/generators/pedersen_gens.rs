@@ -76,7 +76,8 @@ impl TryFrom<usize> for ExtensionDegree {
 }
 
 impl<P> PedersenGens<P>
-where P: Compressable
+where
+    P: Compressable,
 {
     /// Returns the non-public value base point
     pub fn h_base(&self) -> &P {
@@ -90,11 +91,14 @@ where P: Compressable
 }
 
 impl<P> PedersenGens<P>
-where P: Compressable + MultiscalarMul<Point = P> + Clone
+where
+    P: Compressable + MultiscalarMul<Point = P> + Clone,
 {
     /// Creates a Pedersen commitment using the value scalar and a blinding factor vector
     pub fn commit<T>(&self, value: &T, blindings: &[T]) -> Result<P, ProofError>
-    where for<'a> &'a T: Borrow<Scalar> {
+    where
+        for<'a> &'a T: Borrow<Scalar>,
+    {
         if blindings.is_empty() || blindings.len() > self.extension_degree as usize {
             Err(ProofError::InvalidLength("blinding vector".to_string()))
         } else {

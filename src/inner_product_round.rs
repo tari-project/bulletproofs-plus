@@ -9,7 +9,7 @@ use std::ops::{Add, Mul};
 
 use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
 use merlin::Transcript;
-use rand::{CryptoRng, RngCore};
+use rand_core::{CryptoRng, RngCore};
 use zeroize::Zeroize;
 
 use crate::{
@@ -143,9 +143,9 @@ where
                 }
             };
 
-            let mut a1 = &self.gi_base[0] * r +
-                &self.hi_base[0] * s +
-                &self.h_base * (r * self.y_powers[1] * self.bi[0] + s * self.y_powers[1] * self.ai[0]);
+            let mut a1 = &self.gi_base[0] * r
+                + &self.hi_base[0] * s
+                + &self.h_base * (r * self.y_powers[1] * self.bi[0] + s * self.y_powers[1] * self.ai[0]);
             let mut b = &self.h_base * (r * self.y_powers[1] * s);
             for k in 0..extension_degree {
                 a1 += &self.g_base[k] * d[k];

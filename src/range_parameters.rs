@@ -25,7 +25,8 @@ pub struct RangeParameters<P: Compressable> {
 }
 
 impl<P> RangeParameters<P>
-where P: FromUniformBytes + Compressable + Clone
+where
+    P: FromUniformBytes + Compressable + Clone,
 {
     /// Initialize a new 'RangeParameters' with sanity checks
     pub fn init(bit_length: usize, aggregation_factor: usize, pc_gens: PedersenGens<P>) -> Result<Self, ProofError> {

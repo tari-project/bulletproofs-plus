@@ -5,6 +5,8 @@
 
 #![allow(clippy::too_many_lines)]
 
+use rand_core::CryptoRng;
+use rand_core::RngCore;
 #[cfg(feature = "serde")]
 use std::marker::PhantomData;
 use std::{
@@ -17,7 +19,6 @@ use curve25519_dalek::{
     traits::{Identity, IsIdentity},
 };
 use merlin::Transcript;
-use rand::thread_rng;
 #[cfg(feature = "serde")]
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
@@ -27,8 +28,7 @@ use crate::{
     generators::pedersen_gens::ExtensionDegree,
     inner_product_round::InnerProductRound,
     protocols::{
-        curve_point_protocol::CurvePointProtocol,
-        scalar_protocol::ScalarProtocol,
+        curve_point_protocol::CurvePointProtocol, scalar_protocol::ScalarProtocol,
         transcript_protocol::TranscriptProtocol,
     },
     range_statement::RangeStatement,
@@ -162,7 +162,7 @@ const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
 ///     statements_public.push(public_statement.clone());
 ///
 ///     // 4. Create the proofs
-///     let proof = RistrettoRangeProof::prove(transcript_label, &private_statement.clone(), &witness);
+///     let proof = RistrettoRangeProof::prove(transcript_label, &private_statement.clone(), &witness, &mut rng);
 ///     proofs.push(proof.unwrap());
 /// }
 ///
@@ -171,14 +171,14 @@ const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
 ///     transcript_label,
 ///     &statements_private,
 ///     &proofs,
-///     VerifyAction::RecoverAndVerify,
+///     VerifyAction::RecoverAndVerify,&mut rng
 /// )
 /// .unwrap();
 /// assert_eq!(private_masks, recovered_private_masks);
 ///
 /// // 6. Verify the entire batch as public entity
 /// let recovered_public_masks =
-///     RangeProof::verify_batch(transcript_label, &statements_public, &proofs, VerifyAction::VerifyOnly).unwrap();
+///     RangeProof::verify_batch(transcript_label, &statements_public, &proofs, VerifyAction::VerifyOnly, &mut rng).unwrap();
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
 /// # }
@@ -195,13 +195,13 @@ where
     pub fn extension_degree(&self) -> ExtensionDegree {
         self.extension_degree
     }
-
     /// Create a single or aggregated range proof for a single party that knows all the secrets
     /// The prover must ensure that the commitments and witness opening data are consistent
-    pub fn prove(
+    pub fn prove<R: RngCore + CryptoRng>(
         transcript_label: &'static str,
         statement: &RangeStatement<P>,
         witness: &RangeWitness,
+        rng: &mut R,
     ) -> Result<Self, ProofError> {
         let aggregation_factor = statement.commitments.len();
         if witness.openings.len() != aggregation_factor {
@@ -260,7 +260,6 @@ where
         }
 
         // Compute A by multi-scalar multiplication
-        let rng = &mut thread_rng();
         let mut alpha = Vec::with_capacity(extension_degree);
         for k in 0..extension_degree {
             alpha.push(if let Some(seed_nonce) = statement.seed_nonce {
@@ -399,8 +398,8 @@ where
                     "Inconsistent bit length in batch statement".to_string(),
                 ));
             }
-            if extension_degree != statement.generators.extension_degree() ||
-                extension_degree != ExtensionDegree::try_from_size(range_proofs[i].d1.len())?
+            if extension_degree != statement.generators.extension_degree()
+                || extension_degree != ExtensionDegree::try_from_size(range_proofs[i].d1.len())?
             {
                 return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
             }
@@ -446,11 +445,11 @@ where
     }
 
     /// Wrapper function for batch verification in different modes: mask recovery, verification, or both
-    pub fn verify_batch(
+    pub fn verify_batch<R: RngCore + CryptoRng>(
         transcript_label: &'static str,
         statements: &[RangeStatement<P>],
         proofs: &[RangeProof<P>],
-        action: VerifyAction,
+        action: VerifyAction,rng: &mut R
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // By definition, an empty batch fails
         if statements.is_empty() || proofs.is_empty() {
@@ -475,7 +474,7 @@ where
 
         // If the batch fails, propagate the error; otherwise, store the masks and keep going
         if let Some((batch_statements, batch_proofs)) = chunks.next() {
-            let mut result = RangeProof::verify(transcript_label, batch_statements, batch_proofs, action)?;
+            let mut result = RangeProof::verify(transcript_label, batch_statements, batch_proofs, action,rng)?;
 
             masks.append(&mut result);
         }
@@ -485,11 +484,12 @@ where
 
     // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
     // range proofs by a party that can supply the optional seed nonces
-    fn verify(
+    fn verify<R: RngCore + CryptoRng>(
         transcript_label: &'static str,
         statements: &[RangeStatement<P>],
         range_proofs: &[RangeProof<P>],
         extract_masks: VerifyAction,
+        rng: &mut R,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // Verify generators consistency & select largest aggregation factor
         let (max_mn, max_index) = RangeProof::verify_statements_and_generators_consistency(statements, range_proofs)?;
@@ -544,7 +544,6 @@ where
         let two = Scalar::from(2u8);
 
         // Process each proof and add it to the batch
-        let rng = &mut thread_rng();
         for (index, proof) in range_proofs.iter().enumerate() {
             let commitments = statements[index].commitments.clone();
             let minimum_value_promises = statements[index].minimum_value_promises.clone();
@@ -650,10 +649,10 @@ where
                     if let Some(seed_nonce) = statements[index].seed_nonce {
                         let mut temp_masks = Vec::with_capacity(extension_degree);
                         for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
-                            let mut this_mask = (*d1_val -
-                                nonce(&seed_nonce, "eta", None, Some(k))? -
-                                e * nonce(&seed_nonce, "d", None, Some(k))?) *
-                                e_square.invert();
+                            let mut this_mask = (*d1_val
+                                - nonce(&seed_nonce, "eta", None, Some(k))?
+                                - e * nonce(&seed_nonce, "d", None, Some(k))?)
+                                * e_square.invert();
                             this_mask -= nonce(&seed_nonce, "alpha", None, Some(k))?;
                             for j in 0..rounds {
                                 this_mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
@@ -930,7 +929,9 @@ where
     P::Compressed: FixedBytesRepr,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: Serializer {
+    where
+        S: Serializer,
+    {
         serializer.serialize_bytes(&self.to_bytes()[..])
     }
 }
@@ -941,7 +942,9 @@ where
     P::Compressed: FixedBytesRepr,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where D: Deserializer<'de> {
+    where
+        D: Deserializer<'de>,
+    {
         struct RangeProofVisitor<B>(PhantomData<B>);
 
         impl<'de, T> Visitor<'de> for RangeProofVisitor<T>
@@ -956,7 +959,9 @@ where
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<RangeProof<T>, E>
-            where E: serde::de::Error {
+            where
+                E: serde::de::Error,
+            {
                 RangeProof::from_bytes(v).map_err(|_| serde::de::Error::custom("deserialization error"))
             }
         }
