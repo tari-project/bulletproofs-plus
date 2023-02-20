@@ -53,9 +53,9 @@ impl TranscriptProtocol for Transcript {
         point: &P,
     ) -> Result<(), ProofError> {
         if point.is_identity() {
-            Err(ProofError::VerificationFailed(
-                "Identity element cannot be added to the transcript".to_string(),
-            ))
+            Err(ProofError::VerificationFailed {
+                reason: "Identity element cannot be added to the transcript".to_string(),
+            })
         } else {
             self.append_message(label, point.as_fixed_bytes());
             Ok(())
@@ -67,9 +67,9 @@ impl TranscriptProtocol for Transcript {
         self.challenge_bytes(label, &mut buf);
         let value = Scalar::from_bytes_mod_order_wide(&buf);
         if value == Scalar::zero() {
-            Err(ProofError::VerificationFailed(
-                "Transcript challenge cannot be zero".to_string(),
-            ))
+            Err(ProofError::VerificationFailed {
+                reason: "Transcript challenge cannot be zero".to_string(),
+            })
         } else {
             Ok(value)
         }

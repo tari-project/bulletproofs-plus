@@ -12,7 +12,9 @@ extern crate criterion;
 use criterion::{Criterion, SamplingMode};
 use curve25519_dalek::ristretto::RistrettoPoint;
 use tari_bulletproofs_plus::{
-    generators::pedersen_gens::ExtensionDegree, ristretto::create_pedersen_gens_with_extension_degree, BulletproofGens,
+    generators::pedersen_gens::ExtensionDegree,
+    ristretto::create_pedersen_gens_with_extension_degree,
+    BulletproofGens,
 };
 
 // Reduced spectrum of tests for the sake of CI bench tests

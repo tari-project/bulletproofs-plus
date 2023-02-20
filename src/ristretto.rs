@@ -71,10 +71,9 @@ pub fn create_pedersen_gens_with_extension_degree(extension_degree: ExtensionDeg
 // on the fly compression for compressed base points otherwise
 fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<CompressedRistretto>) {
     match extension_degree {
-        ExtensionDegree::DefaultPedersen => (
-            vec![*RISTRETTO_BASEPOINT_POINT_BLINDING_1],
-            vec![*RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1],
-        ),
+        ExtensionDegree::DefaultPedersen => (vec![*RISTRETTO_BASEPOINT_POINT_BLINDING_1], vec![
+            *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
+        ]),
         ExtensionDegree::AddOneBasePoint => (
             vec![
                 *RISTRETTO_BASEPOINT_POINT_BLINDING_1,

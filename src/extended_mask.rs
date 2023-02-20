@@ -17,9 +17,9 @@ impl ExtendedMask {
     /// Construct a new extended mask
     pub fn assign(extension_degree: ExtensionDegree, blindings: Vec<Scalar>) -> Result<ExtendedMask, ProofError> {
         if blindings.is_empty() || blindings.len() != extension_degree as usize {
-            Err(ProofError::InvalidLength(
-                "Extended mask length must correspond to the extension degree".to_string(),
-            ))
+            Err(ProofError::InvalidLength {
+                reason: "Extended mask length must correspond to the extension degree".to_string(),
+            })
         } else {
             Ok(Self { blindings })
         }
@@ -28,9 +28,9 @@ impl ExtendedMask {
     /// Return the extended mask blinding factors
     pub fn blindings(&self) -> Result<Vec<Scalar>, ProofError> {
         if self.blindings.is_empty() {
-            Err(ProofError::InvalidLength(
-                "Extended mask values not assigned yet".to_string(),
-            ))
+            Err(ProofError::InvalidLength {
+                reason: "Extended mask values not assigned yet".to_string(),
+            })
         } else {
             Ok(self.blindings.clone())
         }

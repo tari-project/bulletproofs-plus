@@ -79,18 +79,20 @@ where
     ) -> Result<Self, ProofError> {
         let n = gi_base.len();
         if gi_base.is_empty() || hi_base.is_empty() || ai.is_empty() || bi.is_empty() || y_powers.is_empty() {
-            return Err(ProofError::InvalidLength(
-                "Vectors gi_base, hi_base, ai, bi and y_powers cannot be empty".to_string(),
-            ));
+            return Err(ProofError::InvalidLength {
+                reason: "Vectors gi_base, hi_base, ai, bi and y_powers cannot be empty".to_string(),
+            });
         }
         if !(hi_base.len() == n && ai.len() == n && bi.len() == n) || (y_powers.len() != (n + 2)) {
-            return Err(ProofError::InvalidArgument(
-                "Vector length for inner product round".to_string(),
-            ));
+            return Err(ProofError::InvalidLength {
+                reason: "Vector length for inner product round".to_string(),
+            });
         }
         let extension_degree = ExtensionDegree::try_from_size(g_base.len())?;
         if extension_degree as usize != alpha.len() {
-            return Err(ProofError::InvalidLength("Inconsistent extension degree".to_string()));
+            return Err(ProofError::InvalidLength {
+                reason: "Inconsistent extension degree".to_string(),
+            });
         }
         Ok(Self {
             gi_base,
@@ -143,9 +145,9 @@ where
                 }
             };
 
-            let mut a1 = &self.gi_base[0] * r
-                + &self.hi_base[0] * s
-                + &self.h_base * (r * self.y_powers[1] * self.bi[0] + s * self.y_powers[1] * self.ai[0]);
+            let mut a1 = &self.gi_base[0] * r +
+                &self.hi_base[0] * s +
+                &self.h_base * (r * self.y_powers[1] * self.bi[0] + s * self.y_powers[1] * self.ai[0]);
             let mut b = &self.h_base * (r * self.y_powers[1] * s);
             for k in 0..extension_degree {
                 a1 += &self.g_base[k] * d[k];
@@ -177,9 +179,9 @@ where
         let hi_base_lo = &self.hi_base[..n];
         let hi_base_hi = &self.hi_base[n..];
         let y_n_inverse = if self.y_powers[n] == Scalar::zero() {
-            return Err(ProofError::InvalidArgument(
-                "Cannot invert a zero valued Scalar".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Cannot invert a zero valued Scalar".to_string(),
+            });
         } else {
             self.y_powers[n].invert()
         };
@@ -280,7 +282,9 @@ where
         if let Some(ref a1) = self.a1 {
             Ok(a1.compress())
         } else {
-            Err(ProofError::InvalidArgument("Value 'A' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Value 'A' not assigned yet".to_string(),
+            })
         }
     }
 
@@ -289,7 +293,9 @@ where
         if let Some(ref b) = self.b {
             Ok(b.compress())
         } else {
-            Err(ProofError::InvalidArgument("Value 'B' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Value 'B' not assigned yet".to_string(),
+            })
         }
     }
 
@@ -298,7 +304,9 @@ where
         if let Some(r1) = self.r1 {
             Ok(r1)
         } else {
-            Err(ProofError::InvalidArgument("Value 'r1' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Value 'r1' not assigned yet".to_string(),
+            })
         }
     }
 
@@ -307,14 +315,18 @@ where
         if let Some(s1) = self.s1 {
             Ok(s1)
         } else {
-            Err(ProofError::InvalidArgument("Value 's1' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Value 's1' not assigned yet".to_string(),
+            })
         }
     }
 
     /// Returns the non-public scalar 'd1'
     pub fn d1(&self) -> Result<Vec<Scalar>, ProofError> {
         if self.d1.is_empty() {
-            Err(ProofError::InvalidArgument("Value 'd1' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Value 'd1' not assigned yet".to_string(),
+            })
         } else {
             Ok(self.d1.clone())
         }
@@ -323,7 +335,9 @@ where
     /// Compresses and returns the non-public vector of points 'li'
     pub fn li_compressed(&self) -> Result<Vec<P::Compressed>, ProofError> {
         if self.li.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Vector 'L' not assigned yet".to_string(),
+            })
         } else {
             let mut li = Vec::with_capacity(self.li.len());
             for item in self.li.clone() {
@@ -336,7 +350,9 @@ where
     /// Compresses and returns the non-public vector of points 'ri'
     pub fn ri_compressed(&self) -> Result<Vec<P::Compressed>, ProofError> {
         if self.ri.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Vector 'R' not assigned yet".to_string(),
+            })
         } else {
             let mut ri = Vec::with_capacity(self.ri.len());
             for item in self.ri.clone() {

@@ -55,13 +55,11 @@ pub trait CurvePointProtocol:
 
     /// Helper function to multiply a point vector with a scalar vector
     fn mul_point_vec_with_scalar(point_vec: &[Self], scalar: &Scalar) -> Result<Vec<Self>, ProofError>
-    where
-        for<'p> &'p Self: Mul<Scalar, Output = Self>,
-    {
+    where for<'p> &'p Self: Mul<Scalar, Output = Self> {
         if point_vec.is_empty() {
-            return Err(ProofError::InvalidLength(
-                "Cannot multiply empty point vector with scalar".to_string(),
-            ));
+            return Err(ProofError::InvalidLength {
+                reason: "Cannot multiply empty point vector with scalar".to_string(),
+            });
         }
         let mut out = vec![Self::identity(); point_vec.len()];
         for i in 0..point_vec.len() {
@@ -72,11 +70,11 @@ pub trait CurvePointProtocol:
 
     /// Helper function to add two point vectors
     fn add_point_vectors(a: &[Self], b: &[Self]) -> Result<Vec<Self>, ProofError>
-    where
-        for<'p> &'p Self: Add<Output = Self>,
-    {
+    where for<'p> &'p Self: Add<Output = Self> {
         if a.len() != b.len() || a.is_empty() {
-            return Err(ProofError::InvalidLength("Cannot add empty point vectors".to_string()));
+            return Err(ProofError::InvalidLength {
+                reason: "Cannot add empty point vectors".to_string(),
+            });
         }
         let mut out = vec![Self::identity(); a.len()];
         for i in 0..a.len() {

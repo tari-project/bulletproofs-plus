@@ -227,7 +227,7 @@ fn prove_and_verify(
                         panic!("Expected an error here")
                     },
                     Err(e) => match e {
-                        ProofError::InvalidArgument(_) => {},
+                        ProofError::InvalidArgument { .. } => {},
                         _ => {
                             panic!("Expected 'ProofError::InternalDataInconsistent'")
                         },
@@ -248,7 +248,8 @@ fn prove_and_verify(
                 transcript_label,
                 &statements_private.clone(),
                 &proofs.clone(),
-                VerifyAction::RecoverOnly, &mut rng
+                VerifyAction::RecoverOnly,
+                &mut rng,
             )
             .unwrap();
             assert_eq!(private_masks, recovered_private_masks);
@@ -257,7 +258,8 @@ fn prove_and_verify(
                 transcript_label,
                 &statements_private.clone(),
                 &proofs.clone(),
-                VerifyAction::RecoverAndVerify, &mut rng
+                VerifyAction::RecoverAndVerify,
+                &mut rng,
             )
             .unwrap();
             assert_eq!(private_masks, recovered_private_masks);
@@ -266,15 +268,21 @@ fn prove_and_verify(
                 transcript_label,
                 &statements_private.clone(),
                 &proofs.clone(),
-                VerifyAction::VerifyOnly, &mut rng
+                VerifyAction::VerifyOnly,
+                &mut rng,
             )
             .unwrap();
             assert_eq!(public_masks, recovered_private_masks);
 
             // 6. Verify the entire batch as public entity
-            let recovered_public_masks =
-                RangeProof::verify_batch(transcript_label, &statements_public, &proofs, VerifyAction::VerifyOnly, &mut rng)
-                    .unwrap();
+            let recovered_public_masks = RangeProof::verify_batch(
+                transcript_label,
+                &statements_public,
+                &proofs,
+                VerifyAction::VerifyOnly,
+                &mut rng,
+            )
+            .unwrap();
             assert_eq!(public_masks, recovered_public_masks);
 
             // 7. Try to recover the masks with incorrect seed_nonce values
@@ -300,7 +308,8 @@ fn prove_and_verify(
                     transcript_label,
                     &statements_private_changed,
                     &proofs.clone(),
-                    VerifyAction::RecoverAndVerify, &mut rng
+                    VerifyAction::RecoverAndVerify,
+                    &mut rng,
                 )
                 .unwrap();
                 assert_ne!(private_masks, recovered_private_masks_changed);
@@ -331,13 +340,14 @@ fn prove_and_verify(
                 transcript_label,
                 &statements_public_changed,
                 &proofs,
-                VerifyAction::VerifyOnly, &mut rng
+                VerifyAction::VerifyOnly,
+                &mut rng,
             ) {
                 Ok(_) => {
                     panic!("Range proof should not verify")
                 },
                 Err(e) => match e {
-                    ProofError::VerificationFailed(_) => {},
+                    ProofError::VerificationFailed { .. } => {},
                     _ => {
                         panic!("Expected 'ProofError::VerificationFailed'")
                     },

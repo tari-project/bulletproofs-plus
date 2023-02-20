@@ -45,9 +45,9 @@ impl ScalarProtocol for Scalar {
 
     fn mul_scalar_vec_with_scalar(scalar_vec: &[Scalar], scalar: &Scalar) -> Result<Vec<Scalar>, ProofError> {
         if scalar_vec.is_empty() {
-            return Err(ProofError::InvalidLength(
-                "Cannot multiply empty scalar vector with scalar".to_string(),
-            ));
+            return Err(ProofError::InvalidLength {
+                reason: "Cannot multiply empty scalar vector with scalar".to_string(),
+            });
         }
         let mut out = vec![Scalar::default(); scalar_vec.len()];
         for i in 0..scalar_vec.len() {
@@ -58,7 +58,9 @@ impl ScalarProtocol for Scalar {
 
     fn add_scalar_vectors(a: &[Scalar], b: &[Scalar]) -> Result<Vec<Scalar>, ProofError> {
         if a.len() != b.len() || a.is_empty() {
-            return Err(ProofError::InvalidLength("Cannot add empty scalar vectors".to_string()));
+            return Err(ProofError::InvalidLength {
+                reason: "Cannot add empty scalar vectors".to_string(),
+            });
         }
         let mut out = vec![Scalar::default(); a.len()];
         for i in 0..a.len() {

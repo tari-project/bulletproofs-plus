@@ -5,8 +5,6 @@
 
 #![allow(clippy::too_many_lines)]
 
-use rand_core::CryptoRng;
-use rand_core::RngCore;
 #[cfg(feature = "serde")]
 use std::marker::PhantomData;
 use std::{
@@ -19,6 +17,7 @@ use curve25519_dalek::{
     traits::{Identity, IsIdentity},
 };
 use merlin::Transcript;
+use rand_core::{CryptoRng, RngCore};
 #[cfg(feature = "serde")]
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
@@ -28,7 +27,8 @@ use crate::{
     generators::pedersen_gens::ExtensionDegree,
     inner_product_round::InnerProductRound,
     protocols::{
-        curve_point_protocol::CurvePointProtocol, scalar_protocol::ScalarProtocol,
+        curve_point_protocol::CurvePointProtocol,
+        scalar_protocol::ScalarProtocol,
         transcript_protocol::TranscriptProtocol,
     },
     range_statement::RangeStatement,
@@ -195,6 +195,7 @@ where
     pub fn extension_degree(&self) -> ExtensionDegree {
         self.extension_degree
     }
+
     /// Create a single or aggregated range proof for a single party that knows all the secrets
     /// The prover must ensure that the commitments and witness opening data are consistent
     pub fn prove<R: RngCore + CryptoRng>(
@@ -205,14 +206,14 @@ where
     ) -> Result<Self, ProofError> {
         let aggregation_factor = statement.commitments.len();
         if witness.openings.len() != aggregation_factor {
-            return Err(ProofError::InvalidLength(
-                "Witness openings statement commitments do not match!".to_string(),
-            ));
+            return Err(ProofError::InvalidLength {
+                reason: "Witness openings statement commitments do not match!".to_string(),
+            });
         }
         if witness.extension_degree != statement.generators.extension_degree() {
-            return Err(ProofError::InvalidArgument(
-                "Witness and statement extension degrees do not match!".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Witness and statement extension degrees do not match!".to_string(),
+            });
         }
         let extension_degree = statement.generators.extension_degree() as usize;
 
@@ -244,9 +245,9 @@ where
         for j in 0..aggregation_factor {
             let bit_vector = if let Some(minimum_value) = statement.minimum_value_promises[j] {
                 if minimum_value > witness.openings[j].v {
-                    return Err(ProofError::InvalidArgument(
-                        "Minimum value cannot be larger than value!".to_string(),
-                    ));
+                    return Err(ProofError::InvalidArgument {
+                        reason: "Minimum value cannot be larger than value!".to_string(),
+                    });
                 } else {
                     bit_vector_of_scalars(witness.openings[j].v - minimum_value, bit_length)?
                 }
@@ -363,14 +364,14 @@ where
         range_proofs: &[RangeProof<P>],
     ) -> Result<(usize, usize), ProofError> {
         if statements.is_empty() || range_proofs.is_empty() {
-            return Err(ProofError::InvalidArgument(
-                "Range statements or proofs length empty".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Range statements or proofs length empty".to_string(),
+            });
         }
         if statements.len() != range_proofs.len() {
-            return Err(ProofError::InvalidArgument(
-                "Range statements and proofs length mismatch".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Range statements and proofs length mismatch".to_string(),
+            });
         }
 
         let (g_base_vec, h_base) = (statements[0].generators.g_bases(), statements[0].generators.h_base());
@@ -380,28 +381,32 @@ where
         let extension_degree = statements[0].generators.extension_degree();
 
         if extension_degree != ExtensionDegree::try_from_size(range_proofs[0].d1.len())? {
-            return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
+            return Err(ProofError::InvalidArgument {
+                reason: "Inconsistent extension degree".to_string(),
+            });
         }
         for (i, statement) in statements.iter().enumerate().skip(1) {
             if g_base_vec != statement.generators.g_bases() {
-                return Err(ProofError::InvalidArgument(
-                    "Inconsistent G generator point in batch statement".to_string(),
-                ));
+                return Err(ProofError::InvalidArgument {
+                    reason: "Inconsistent G generator point in batch statement".to_string(),
+                });
             }
             if h_base != statement.generators.h_base() {
-                return Err(ProofError::InvalidArgument(
-                    "Inconsistent H generator point in batch statement".to_string(),
-                ));
+                return Err(ProofError::InvalidArgument {
+                    reason: "Inconsistent H generator point in batch statement".to_string(),
+                });
             }
             if bit_length != statement.generators.bit_length() {
-                return Err(ProofError::InvalidArgument(
-                    "Inconsistent bit length in batch statement".to_string(),
-                ));
+                return Err(ProofError::InvalidArgument {
+                    reason: "Inconsistent bit length in batch statement".to_string(),
+                });
             }
-            if extension_degree != statement.generators.extension_degree()
-                || extension_degree != ExtensionDegree::try_from_size(range_proofs[i].d1.len())?
+            if extension_degree != statement.generators.extension_degree() ||
+                extension_degree != ExtensionDegree::try_from_size(range_proofs[i].d1.len())?
             {
-                return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
+                return Err(ProofError::InvalidArgument {
+                    reason: "Inconsistent extension degree".to_string(),
+                });
             }
             if statement.commitments.len() * statement.generators.bit_length() > max_mn {
                 max_mn = statement.commitments.len() * statement.generators.bit_length();
@@ -415,9 +420,9 @@ where
         for (i, statement) in statements.iter().enumerate() {
             for value in statement.minimum_value_promises.iter().flatten() {
                 if value >> (bit_length - 1) > 1 {
-                    return Err(ProofError::InvalidLength(
-                        "Minimum value promise exceeds bit vector capacity".to_string(),
-                    ));
+                    return Err(ProofError::InvalidLength {
+                        reason: "Minimum value promise exceeds bit vector capacity".to_string(),
+                    });
                 }
             }
             if i == max_index {
@@ -426,17 +431,17 @@ where
             let statement_gi_base_ref = statement.generators.gi_base_ref();
             for (j, gi_base_ref_item) in gi_base_ref.iter().enumerate().take(statement_gi_base_ref.len()) {
                 if &statement_gi_base_ref[j] != gi_base_ref_item {
-                    return Err(ProofError::InvalidArgument(
-                        "Inconsistent Gi generator point vector in batch statement".to_string(),
-                    ));
+                    return Err(ProofError::InvalidArgument {
+                        reason: "Inconsistent Gi generator point vector in batch statement".to_string(),
+                    });
                 }
             }
             let statement_hi_base_ref = statement.generators.hi_base_ref();
             for (j, hi_base_ref_item) in hi_base_ref.iter().enumerate().take(statement_hi_base_ref.len()) {
                 if &statement_hi_base_ref[j] != hi_base_ref_item {
-                    return Err(ProofError::InvalidArgument(
-                        "Inconsistent Hi generator point vector in batch statement".to_string(),
-                    ));
+                    return Err(ProofError::InvalidArgument {
+                        reason: "Inconsistent Hi generator point vector in batch statement".to_string(),
+                    });
                 }
             }
         }
@@ -449,19 +454,20 @@ where
         transcript_label: &'static str,
         statements: &[RangeStatement<P>],
         proofs: &[RangeProof<P>],
-        action: VerifyAction,rng: &mut R
+        action: VerifyAction,
+        rng: &mut R,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // By definition, an empty batch fails
         if statements.is_empty() || proofs.is_empty() {
-            return Err(ProofError::InvalidArgument(
-                "Range statements or proofs length empty".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Range statements or proofs length empty".to_string(),
+            });
         }
         // We need to check for size consistency here, even though it's also done later
         if statements.len() != proofs.len() {
-            return Err(ProofError::InvalidArgument(
-                "Range statements and proofs length mismatch".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Range statements and proofs length mismatch".to_string(),
+            });
         }
 
         // Store masks from all results
@@ -474,7 +480,7 @@ where
 
         // If the batch fails, propagate the error; otherwise, store the masks and keep going
         if let Some((batch_statements, batch_proofs)) = chunks.next() {
-            let mut result = RangeProof::verify(transcript_label, batch_statements, batch_proofs, action,rng)?;
+            let mut result = RangeProof::verify(transcript_label, batch_statements, batch_proofs, action, rng)?;
 
             masks.append(&mut result);
         }
@@ -557,12 +563,14 @@ where
             let ri = proof.ri_decompressed()?;
 
             if li.len() != ri.len() {
-                return Err(ProofError::InvalidLength(
-                    "Vector L length not equal to vector R length".to_string(),
-                ));
+                return Err(ProofError::InvalidLength {
+                    reason: "Vector L length not equal to vector R length".to_string(),
+                });
             }
             if 1 << li.len() != commitments.len() * bit_length {
-                return Err(ProofError::InvalidLength("Vector L length not adequate".to_string()));
+                return Err(ProofError::InvalidLength {
+                    reason: "Vector L length not adequate".to_string(),
+                });
             }
 
             // Helper values
@@ -649,10 +657,10 @@ where
                     if let Some(seed_nonce) = statements[index].seed_nonce {
                         let mut temp_masks = Vec::with_capacity(extension_degree);
                         for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
-                            let mut this_mask = (*d1_val
-                                - nonce(&seed_nonce, "eta", None, Some(k))?
-                                - e * nonce(&seed_nonce, "d", None, Some(k))?)
-                                * e_square.invert();
+                            let mut this_mask = (*d1_val -
+                                nonce(&seed_nonce, "eta", None, Some(k))? -
+                                e * nonce(&seed_nonce, "d", None, Some(k))?) *
+                                e_square.invert();
                             this_mask -= nonce(&seed_nonce, "alpha", None, Some(k))?;
                             for j in 0..rounds {
                                 this_mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
@@ -743,45 +751,45 @@ where
         }
 
         if P::vartime_multiscalar_mul(scalars, points) != P::identity() {
-            return Err(ProofError::VerificationFailed(
-                "Range proof batch not valid".to_string(),
-            ));
+            return Err(ProofError::VerificationFailed {
+                reason: "Range proof batch not valid".to_string(),
+            });
         }
 
         Ok(masks)
     }
 
     fn a_decompressed(&self) -> Result<P, ProofError> {
-        self.a.decompress().ok_or_else(|| {
-            ProofError::InvalidArgument("Member 'a' was not the canonical encoding of a point".to_string())
+        self.a.decompress().ok_or_else(|| ProofError::InvalidArgument {
+            reason: "Member 'a' was not the canonical encoding of a point".to_string(),
         })
     }
 
     // Helper function to decompress A1
     fn a1_decompressed(&self) -> Result<P, ProofError> {
-        self.a1.decompress().ok_or_else(|| {
-            ProofError::InvalidArgument("Member 'a1' was not the canonical encoding of a point".to_string())
+        self.a1.decompress().ok_or_else(|| ProofError::InvalidArgument {
+            reason: "Member 'a1' was not the canonical encoding of a point".to_string(),
         })
     }
 
     // Helper function to decompress B
     fn b_decompressed(&self) -> Result<P, ProofError> {
-        self.b.decompress().ok_or_else(|| {
-            ProofError::InvalidArgument("Member 'b' was not the canonical encoding of a point".to_string())
+        self.b.decompress().ok_or_else(|| ProofError::InvalidArgument {
+            reason: "Member 'b' was not the canonical encoding of a point".to_string(),
         })
     }
 
     // Helper function to decompress Li
     fn li_decompressed(&self) -> Result<Vec<P>, ProofError> {
         if self.li.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Vector 'L' not assigned yet".to_string(),
+            })
         } else {
             let mut li = Vec::with_capacity(self.li.len());
             for item in self.li.clone() {
-                li.push(item.decompress().ok_or_else(|| {
-                    ProofError::InvalidArgument(
-                        "An item in member 'L' was not the canonical encoding of a point".to_string(),
-                    )
+                li.push(item.decompress().ok_or_else(|| ProofError::InvalidArgument {
+                    reason: "An item in member 'L' was not the canonical encoding of a point".to_string(),
                 })?)
             }
             Ok(li)
@@ -791,7 +799,9 @@ where
     // Helper function to return compressed Li
     fn li(&self) -> Result<Vec<P::Compressed>, ProofError> {
         if self.li.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Vector 'L' not assigned yet".to_string(),
+            })
         } else {
             Ok(self.li.clone())
         }
@@ -800,14 +810,14 @@ where
     // Helper function to decompress Ri
     fn ri_decompressed(&self) -> Result<Vec<P>, ProofError> {
         if self.ri.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Vector 'R' not assigned yet".to_string(),
+            })
         } else {
             let mut ri = Vec::with_capacity(self.ri.len());
             for item in self.ri.clone() {
-                ri.push(item.decompress().ok_or_else(|| {
-                    ProofError::InvalidArgument(
-                        "An item in member 'R' was not the canonical encoding of a point".to_string(),
-                    )
+                ri.push(item.decompress().ok_or_else(|| ProofError::InvalidArgument {
+                    reason: "An item in member 'R' was not the canonical encoding of a point".to_string(),
                 })?)
             }
             Ok(ri)
@@ -817,7 +827,9 @@ where
     // Helper function to return compressed Ri
     fn ri(&self) -> Result<Vec<P::Compressed>, ProofError> {
         if self.ri.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
+            Err(ProofError::InvalidArgument {
+                reason: "Vector 'R' not assigned yet".to_string(),
+            })
         } else {
             Ok(self.ri.clone())
         }
@@ -854,22 +866,22 @@ where
     /// Deserializes the proof from a byte slice
     pub fn from_bytes(slice: &[u8]) -> Result<Self, ProofError> {
         if slice.is_empty() || (slice.len() - 1) % 32 != 0 {
-            return Err(ProofError::InvalidLength(
-                "Invalid serialized proof bytes length".to_string(),
-            ));
+            return Err(ProofError::InvalidLength {
+                reason: "Invalid serialized proof bytes length".to_string(),
+            });
         }
         let extension_degree = ExtensionDegree::try_from(read_1_byte(&slice[0..])[0] as usize)?;
         let num_elements = (slice.len() - 1) / 32;
         if num_elements < 2 + 5 + extension_degree as usize {
-            return Err(ProofError::InvalidLength(
-                "Serialized proof has incorrect number of elements".to_string(),
-            ));
+            return Err(ProofError::InvalidLength {
+                reason: "Serialized proof has incorrect number of elements".to_string(),
+            });
         };
         let num_inner_prod_vec_elements = num_elements - 5 - extension_degree as usize;
         if num_inner_prod_vec_elements % 2 != 0 {
-            return Err(ProofError::InvalidLength(
-                "Serialized proof has incorrect number of elements".to_string(),
-            ));
+            return Err(ProofError::InvalidLength {
+                reason: "Serialized proof has incorrect number of elements".to_string(),
+            });
         }
         let n = num_inner_prod_vec_elements / 2;
 
@@ -886,15 +898,23 @@ where
         let a = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos..]));
         let a1 = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 32..]));
         let b = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 64..]));
-        let r1 = Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 96..]))
-            .ok_or_else(|| ProofError::InvalidArgument("r1 bytes not a canonical byte representation".to_string()))?;
-        let s1 = Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 128..]))
-            .ok_or_else(|| ProofError::InvalidArgument("s1 bytes not a canonical byte representation".to_string()))?;
+        let r1 = Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 96..])).ok_or_else(|| {
+            ProofError::InvalidArgument {
+                reason: "r1 bytes not a canonical byte representation".to_string(),
+            }
+        })?;
+        let s1 = Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 128..])).ok_or_else(|| {
+            ProofError::InvalidArgument {
+                reason: "s1 bytes not a canonical byte representation".to_string(),
+            }
+        })?;
         let mut d1 = Vec::with_capacity(extension_degree as usize);
         for i in 0..extension_degree as usize {
             d1.push(
                 Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 160 + i * 32..])).ok_or_else(|| {
-                    ProofError::InvalidArgument("d1 bytes not a canonical byte representation".to_string())
+                    ProofError::InvalidArgument {
+                        reason: "d1 bytes not a canonical byte representation".to_string(),
+                    }
                 })?,
             );
         }
@@ -915,9 +935,9 @@ where
     /// Helper function to return the serialized proof's extension degree
     pub fn extension_degree_from_proof_bytes(slice: &[u8]) -> Result<ExtensionDegree, ProofError> {
         if slice.is_empty() || (slice.len() - 1) % 32 != 0 {
-            return Err(ProofError::InvalidLength(
-                "Invalid serialized proof bytes length".to_string(),
-            ));
+            return Err(ProofError::InvalidLength {
+                reason: "Invalid serialized proof bytes length".to_string(),
+            });
         }
         ExtensionDegree::try_from(read_1_byte(&slice[0..])[0] as usize)
     }
@@ -929,9 +949,7 @@ where
     P::Compressed: FixedBytesRepr,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
+    where S: Serializer {
         serializer.serialize_bytes(&self.to_bytes()[..])
     }
 }
@@ -942,9 +960,7 @@ where
     P::Compressed: FixedBytesRepr,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
+    where D: Deserializer<'de> {
         struct RangeProofVisitor<B>(PhantomData<B>);
 
         impl<'de, T> Visitor<'de> for RangeProofVisitor<T>
@@ -959,9 +975,7 @@ where
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<RangeProof<T>, E>
-            where
-                E: serde::de::Error,
-            {
+            where E: serde::de::Error {
                 RangeProof::from_bytes(v).map_err(|_| serde::de::Error::custom("deserialization error"))
             }
         }

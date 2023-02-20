@@ -25,26 +25,24 @@ pub struct RangeParameters<P: Compressable> {
 }
 
 impl<P> RangeParameters<P>
-where
-    P: FromUniformBytes + Compressable + Clone,
+where P: FromUniformBytes + Compressable + Clone
 {
     /// Initialize a new 'RangeParameters' with sanity checks
     pub fn init(bit_length: usize, aggregation_factor: usize, pc_gens: PedersenGens<P>) -> Result<Self, ProofError> {
         if !aggregation_factor.is_power_of_two() {
-            return Err(ProofError::InvalidArgument(
-                "Aggregation factor size must be a power of two".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Aggregation factor size must be a power of two".to_string(),
+            });
         }
         if !bit_length.is_power_of_two() {
-            return Err(ProofError::InvalidArgument(
-                "Bit length must be a power of two".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Bit length must be a power of two".to_string(),
+            });
         }
         if bit_length > MAX_RANGE_PROOF_BIT_LENGTH {
-            return Err(ProofError::InvalidArgument(format!(
-                "Bit length must be <= {}",
-                MAX_RANGE_PROOF_BIT_LENGTH
-            )));
+            return Err(ProofError::InvalidArgument {
+                reason: format!("Bit length must be <= {}", MAX_RANGE_PROOF_BIT_LENGTH),
+            });
         }
 
         Ok(Self {

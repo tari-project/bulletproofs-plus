@@ -31,7 +31,9 @@ pub fn nonce(
     // See https://www.blake2.net/blake2.pdf section 2.8
     let encoded_label = label.as_bytes();
     if encoded_label.len() > 16 {
-        return Err(ProofError::InvalidLength("nonce label".to_string()));
+        return Err(ProofError::InvalidLength {
+            reason: "nonce label".to_string(),
+        });
     };
     // Notes:
     // - Fixed length encodings of 'seed_nonce', optional('j', 'index_j') and optional('k', 'index_k') are concatenated
@@ -60,14 +62,14 @@ pub fn nonce(
 /// Decompose a given value into a vector of scalars for the required bit length
 pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar>, ProofError> {
     if !bit_length.is_power_of_two() || bit_length > MAX_RANGE_PROOF_BIT_LENGTH {
-        return Err(ProofError::InvalidLength(
-            "Bit size not valid, must be a power of 2 and <= 64".to_string(),
-        ));
+        return Err(ProofError::InvalidLength {
+            reason: "Bit size not valid, must be a power of 2 and <= 64".to_string(),
+        });
     }
     if value >> (bit_length - 1) > 1 {
-        return Err(ProofError::InvalidLength(
-            "Value too large, bit vector capacity will be exceeded".to_string(),
-        ));
+        return Err(ProofError::InvalidLength {
+            reason: "Value too large, bit vector capacity will be exceeded".to_string(),
+        });
     }
     let mut result = Vec::with_capacity(bit_length);
     for i in 0..bit_length {
@@ -196,9 +198,9 @@ mod tests {
 
     fn bit_vector_to_value(bit_vector: &[Scalar]) -> Result<u64, ProofError> {
         if !bit_vector.len().is_power_of_two() || bit_vector.len() > MAX_RANGE_PROOF_BIT_LENGTH {
-            return Err(ProofError::InvalidLength(
-                "Bit vector must be a power of 2 with length <= 64".to_string(),
-            ));
+            return Err(ProofError::InvalidLength {
+                reason: "Bit vector must be a power of 2 with length <= 64".to_string(),
+            });
         }
         let mut result = 0u128;
         for i in 0..bit_vector.len() as u128 {

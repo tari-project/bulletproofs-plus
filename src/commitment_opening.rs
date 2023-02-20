@@ -26,9 +26,9 @@ impl CommitmentOpening {
     /// Size of the blinding factor vector
     pub fn r_len(&self) -> Result<usize, ProofError> {
         if self.r.is_empty() {
-            Err(ProofError::InvalidLength(
-                "Extended blinding factors cannot be empty".to_string(),
-            ))
+            Err(ProofError::InvalidLength {
+                reason: "Extended blinding factors cannot be empty".to_string(),
+            })
         } else {
             Ok(self.r.len())
         }

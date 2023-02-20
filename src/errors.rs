@@ -3,18 +3,18 @@
 
 //! Bulletproofs+ error definitions
 
-use thiserror::Error;
+use snafu::prelude::*;
 
 /// Represents an error in proof creation, verification, or parsing.
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum ProofError {
     /// A proof component failed to verify
-    #[error("A proof component failed to verify: `{0}")]
-    VerificationFailed(String),
+    #[snafu(display("A proof component failed to verify: `{reason}"))]
+    VerificationFailed { reason: String },
     /// Internal data sizes are inconsistent
-    #[error("Internal data is invalid: `{0}`")]
-    InvalidArgument(String),
+    #[snafu(display("Internal data is invalid: `{reason}`"))]
+    InvalidArgument { reason: String },
     /// Invalid array/vector length error
-    #[error("Invalid array/vector length error: `{0}`")]
-    InvalidLength(String),
+    #[snafu(display("Invalid array/vector length error: `{reason}`"))]
+    InvalidLength { reason: String },
 }

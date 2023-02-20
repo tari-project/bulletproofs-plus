@@ -38,24 +38,24 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
         seed_nonce: Option<Scalar>,
     ) -> Result<Self, ProofError> {
         if !commitments.len().is_power_of_two() {
-            return Err(ProofError::InvalidArgument(
-                "Number of commitments must be a power of two".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Number of commitments must be a power of two".to_string(),
+            });
         }
         if !minimum_value_promises.len() == commitments.len() {
-            return Err(ProofError::InvalidArgument(
-                "Incorrect number of minimum value promises".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Incorrect number of minimum value promises".to_string(),
+            });
         }
         if generators.aggregation_factor() < commitments.len() {
-            return Err(ProofError::InvalidArgument(
-                "Not enough generators for this statement".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Not enough generators for this statement".to_string(),
+            });
         }
         if seed_nonce.is_some() && commitments.len() > 1 {
-            return Err(ProofError::InvalidArgument(
-                "Mask recovery is not supported with an aggregated statement".to_string(),
-            ));
+            return Err(ProofError::InvalidArgument {
+                reason: "Mask recovery is not supported with an aggregated statement".to_string(),
+            });
         }
         let mut commitments_compressed = Vec::with_capacity(commitments.len());
         for item in commitments.clone() {
