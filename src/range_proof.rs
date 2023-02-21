@@ -6,8 +6,8 @@
 #![allow(clippy::too_many_lines)]
 
 #[cfg(feature = "serde")]
-use std::marker::PhantomData;
-use std::{
+use core::marker::PhantomData;
+use core::{
     convert::{TryFrom, TryInto},
     ops::{Add, Mul},
 };
@@ -986,7 +986,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
+    use core::convert::TryFrom;
 
     use curve25519_dalek::{ristretto::CompressedRistretto, scalar::Scalar};
 

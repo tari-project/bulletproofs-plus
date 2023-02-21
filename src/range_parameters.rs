@@ -3,7 +3,7 @@
 
 //! Bulletproofs+ range parameters (generators and base points) needed for a batch of range proofs
 
-use std::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Formatter};
 
 use crate::{
     errors::ProofError,

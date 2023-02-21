@@ -3,7 +3,7 @@
 
 //! Bulletproofs+ add 'Debug' functionality to other struct members that do not implement 'Debug'
 
-use std::fmt;
+use core::fmt;
 
 use derive_more::{AsMut, AsRef, Deref, DerefMut, From};
 

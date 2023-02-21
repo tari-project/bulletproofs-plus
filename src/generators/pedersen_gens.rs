@@ -4,7 +4,7 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
-use std::{borrow::Borrow, convert::TryFrom, iter::once};
+use core::{borrow::Borrow, convert::TryFrom, iter::once};
 
 use curve25519_dalek::{scalar::Scalar, traits::MultiscalarMul};
 

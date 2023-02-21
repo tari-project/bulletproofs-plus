@@ -3,7 +3,7 @@
 
 //! Bulletproofs+ commitment openings for the aggregated case
 
-use std::convert::TryInto;
+use core::convert::TryInto;
 
 use zeroize::Zeroize;
 

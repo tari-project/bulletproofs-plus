@@ -5,7 +5,7 @@
 
 #![allow(clippy::too_many_lines)]
 
-use std::ops::{Add, Mul};
+use core::ops::{Add, Mul};
 
 use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
 use merlin::Transcript;
