@@ -41,7 +41,8 @@ where P: FromUniformBytes + Compressable + Clone
         }
         if bit_length > MAX_RANGE_PROOF_BIT_LENGTH {
             return Err(ProofError::InvalidArgument {
-                reason: format!("Bit length must be <= {}", MAX_RANGE_PROOF_BIT_LENGTH),
+                //reason: format!("Bit length must be <= {}", MAX_RANGE_PROOF_BIT_LENGTH),
+                reason: "Bit length too long".to_string(),
             });
         }
 
