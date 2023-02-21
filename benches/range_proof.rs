@@ -9,7 +9,7 @@
 #[macro_use]
 extern crate criterion;
 
-use std::convert::TryInto;
+use core::convert::TryInto;
 
 use criterion::{Criterion, SamplingMode};
 use curve25519_dalek::scalar::Scalar;
