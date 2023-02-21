@@ -10,7 +10,7 @@ description = "A smaller faster implementation of Bulletproofs"
 blake2 = {version="0.9.1", default-features = false}
 byteorder = { version = "1", default-features = false }
 curve25519-dalek = {git = "https://github.com/tari-project/curve25519-dalek", tag = "v4.0.1", default-features = false, features = ["serde", "alloc"] }
-derive_more = "0.99.17"
+derive_more = {version = "0.99.17", default-features = false, features = ["from", "deref", "deref_mut"]}
 digest = { version = "0.9.0", default-features = false }
 lazy_static = {git = "https://github.com/rust-lang-nursery/lazy-static.rs.git", rev= "e83d664", default-features = false}
 merlin = { version = "3", default-features = false }
