@@ -4,12 +4,14 @@
 //! Bulletproofs+ commitment opening struct
 
 use curve25519_dalek::scalar::Scalar;
+#[cfg(feature = "zeroize")]
 use zeroize::Zeroize;
 
 use crate::errors::ProofError;
 
 /// Commitment openings to be used for Pedersen commitments
-#[derive(Clone, Zeroize)]
+#[cfg_attr(feature = "zeroize", derive(Zeroize))]
+#[derive(Clone)]
 pub struct CommitmentOpening {
     /// Value
     pub(crate) v: u64,
@@ -38,7 +40,10 @@ impl CommitmentOpening {
 /// Overwrite secrets with null bytes when they go out of scope.
 impl Drop for CommitmentOpening {
     fn drop(&mut self) {
-        self.v.zeroize();
-        self.r.zeroize();
+        #[cfg(feature = "zeroize")]
+        {
+            self.v.zeroize();
+            self.r.zeroize();
+        }
     }
 }

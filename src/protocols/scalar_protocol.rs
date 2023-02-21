@@ -13,7 +13,7 @@ use crate::errors::ProofError;
 /// Defines a `ScalarProtocol` trait for using a Scalar
 pub trait ScalarProtocol {
     /// Returns a non-zero random Scalar
-    fn random_not_zero<R: RngCore + CryptoRng + rand_core::RngCore>(rng: &mut R) -> Scalar;
+    fn random_not_zero<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar;
 
     /// Construct a scalar from an existing Blake2b instance (helper function to implement 'Scalar::from_hash<Blake2b>')
     fn from_hasher_blake2b(hasher: Blake2b) -> Scalar;

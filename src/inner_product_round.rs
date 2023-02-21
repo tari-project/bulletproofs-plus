@@ -10,6 +10,7 @@ use core::ops::{Add, Mul};
 use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
 use merlin::Transcript;
 use rand_core::{CryptoRng, RngCore};
+#[cfg(feature = "zeroize")]
 use zeroize::Zeroize;
 
 use crate::{
@@ -366,13 +367,16 @@ where
 /// Overwrite secrets with null bytes when they go out of scope.
 impl<'a, P> Drop for InnerProductRound<'a, P> {
     fn drop(&mut self) {
-        for mut item in self.ai.clone() {
-            item.zeroize();
+        #[cfg(feature = "zeroize")]
+        {
+            for mut item in self.ai.clone() {
+                item.zeroize();
+            }
+            for mut item in self.bi.clone() {
+                item.zeroize();
+            }
+            self.alpha.zeroize();
+            self.seed_nonce.zeroize();
         }
-        for mut item in self.bi.clone() {
-            item.zeroize();
-        }
-        self.alpha.zeroize();
-        self.seed_nonce.zeroize();
     }
 }

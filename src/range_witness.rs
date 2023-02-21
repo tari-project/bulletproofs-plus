@@ -5,6 +5,7 @@
 
 use core::convert::TryInto;
 
+#[cfg(feature = "zeroize")]
 use zeroize::Zeroize;
 
 use crate::{commitment_opening::CommitmentOpening, errors::ProofError, generators::pedersen_gens::ExtensionDegree};
@@ -45,6 +46,7 @@ impl RangeWitness {
 impl Drop for RangeWitness {
     fn drop(&mut self) {
         for item in &mut self.openings {
+            #[cfg(feature = "zeroize")]
             item.zeroize();
         }
     }
