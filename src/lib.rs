@@ -4,7 +4,7 @@
 //! Bulletproofs+
 
 #![recursion_limit = "1024"]
-//#![feature(restricted_std)]
+#![feature(restricted_std)]
 
 #[macro_use]
 extern crate lazy_static;
