@@ -16,6 +16,6 @@ pub struct NonDebug<T> {
 /// Custom implementation for 'Debug'
 impl<T> fmt::Debug for NonDebug<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Hidden<{}>", std::any::type_name::<T>())
+        write!(f, "Hidden<{}>", core::any::type_name::<T>())
     }
 }

@@ -132,7 +132,7 @@ where
     P: Compressable + Debug,
     P::Compressed: Debug,
 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("RangeParameters")
             .field("pc_gens", &self.pc_gens)
             .field("bp_gens", &self.bp_gens)
