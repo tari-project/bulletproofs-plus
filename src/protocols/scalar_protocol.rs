@@ -31,7 +31,7 @@ impl ScalarProtocol for Scalar {
     fn random_not_zero<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
         loop {
             let value = Scalar::random(rng);
-            if value != Scalar::zero() {
+            if value != Scalar::ZERO {
                 return value;
             }
         }

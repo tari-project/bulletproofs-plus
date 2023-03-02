@@ -66,7 +66,7 @@ impl TranscriptProtocol for Transcript {
         let mut buf = [0u8; 64];
         self.challenge_bytes(label, &mut buf);
         let value = Scalar::from_bytes_mod_order_wide(&buf);
-        if value == Scalar::zero() {
+        if value == Scalar::ZERO {
             Err(ProofError::VerificationFailed {
                 reason: "Transcript challenge cannot be zero".to_string(),
             })

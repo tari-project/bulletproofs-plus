@@ -301,7 +301,7 @@ fn prove_and_verify(
                         commitments: statement.commitments.clone(),
                         commitments_compressed: statement.commitments_compressed.clone(),
                         minimum_value_promises: statement.minimum_value_promises.clone(),
-                        seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::one()),
+                        seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::ONE),
                     });
                 }
                 let recovered_private_masks_changed = RistrettoRangeProof::verify_batch(

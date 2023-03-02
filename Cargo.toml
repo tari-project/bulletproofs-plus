@@ -9,7 +9,7 @@ description = "A smaller faster implementation of Bulletproofs"
 [dependencies]
 blake2 = {version="0.9.1", default-features = false}
 byteorder = { version = "1", default-features = false }
-curve25519-dalek = {git = "https://github.com/tari-project/curve25519-dalek", tag = "v4.0.1", default-features = false, features = ["serde", "alloc"] }
+curve25519-dalek = {git = "https://github.com/dalek-cryptography/curve25519-dalek", rev = "b2d0f0ecd7808f194e67a2fcd4c47dd5be8a0697", default-features = false, features = ["serde", "alloc", "zeroize", "rand_core"] }
 derive_more = {version = "0.99.17", default-features = false, features = ["from", "deref", "deref_mut"]}
 digest = { version = "0.9.0", default-features = false }
 lazy_static = {git = "https://github.com/rust-lang-nursery/lazy-static.rs.git", rev= "e83d664", default-features = false}
@@ -18,7 +18,7 @@ merlin = { version = "3", default-features = false }
 serde = { version = "1.0.150", default-features = false, optional = true}
 sha3 = { version = "0.9.1", default-features = false }
 zeroize = { version = "1", default-features = false, optional = true}
-rand_core = { version = "0.5"}
+rand_core = { version = "0.6"}
 snafu = {version="0.7.4", default-features =false}
 
 [dev-dependencies]
@@ -27,11 +27,9 @@ criterion = "0.3"
 rand = "0.7"
 
 [features]
-default = ["u64_backend", "serde","zeroize"]
-u64_backend = ["curve25519-dalek/u64_backend"]
-u32_backend = ["curve25519-dalek/u32_backend"]
-simd_backend = ["curve25519-dalek/simd_backend"]
+default = [ "serde","zero"]
 no_std = ["lazy_static/spin_no_std"]
+zero = [ "zeroize"]
 
 [[bench]]
 name = "range_proof"
