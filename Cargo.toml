@@ -9,7 +9,7 @@ description = "A smaller faster implementation of Bulletproofs"
 [dependencies]
 blake2 = {version="0.9.1", default-features = false}
 byteorder = { version = "1", default-features = false }
-curve25519-dalek = {git = "https://github.com/dalek-cryptography/curve25519-dalek", rev = "b2d0f0ecd7808f194e67a2fcd4c47dd5be8a0697", default-features = false, features = ["serde", "alloc", "zeroize", "rand_core"] }
+curve25519-dalek = {git = "https://github.com/swvheerden/curve25519-dalek", rev = "c8120bbb67c0c93da45710edae36db98e8036cbf", default-features = false, features = ["serde", "alloc", "zeroize", "rand_core"] }
 derive_more = {version = "0.99.17", default-features = false, features = ["from", "deref", "deref_mut"]}
 digest = { version = "0.9.0", default-features = false }
 lazy_static = {git = "https://github.com/rust-lang-nursery/lazy-static.rs.git", rev= "e83d664", default-features = false}
