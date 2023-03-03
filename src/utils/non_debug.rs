@@ -5,7 +5,7 @@
 
 use core::fmt;
 
-use derive_more::{ Deref, DerefMut, From};
+use derive_more::{Deref, DerefMut, From};
 
 /// A struct to add 'Debug' functionality to other struct members that do not implement 'Debug'
 #[derive(Copy, Clone, From, Deref, DerefMut)]

@@ -898,23 +898,22 @@ where
         let a = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos..]));
         let a1 = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 32..]));
         let b = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 64..]));
-        let r1 = Into::<Option<Scalar>>::into(Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 96..]))).ok_or_else(|| {
-            ProofError::InvalidArgument {
+        let r1 = Into::<Option<Scalar>>::into(Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 96..])))
+            .ok_or_else(|| ProofError::InvalidArgument {
                 reason: "r1 bytes not a canonical byte representation".to_string(),
-            }
-        })?;
-        let s1 =  Into::<Option<Scalar>>::into(Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 128..]))).ok_or_else(|| {
-            ProofError::InvalidArgument {
+            })?;
+        let s1 = Into::<Option<Scalar>>::into(Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 128..])))
+            .ok_or_else(|| ProofError::InvalidArgument {
                 reason: "s1 bytes not a canonical byte representation".to_string(),
-            }
-        })?;
+            })?;
         let mut d1 = Vec::with_capacity(extension_degree as usize);
         for i in 0..extension_degree as usize {
             d1.push(
-                Into::<Option<Scalar>>::into(Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 160 + i * 32..]))).ok_or_else(|| {
-                    ProofError::InvalidArgument {
-                        reason: "d1 bytes not a canonical byte representation".to_string(),
-                    }
+                Into::<Option<Scalar>>::into(Scalar::from_canonical_bytes(read_32_bytes(
+                    &slice[pos + 160 + i * 32..],
+                )))
+                .ok_or_else(|| ProofError::InvalidArgument {
+                    reason: "d1 bytes not a canonical byte representation".to_string(),
                 })?,
             );
         }

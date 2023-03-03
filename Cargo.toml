@@ -7,16 +7,16 @@ license = "BSD-3-Clause"
 description = "A smaller faster implementation of Bulletproofs"
 
 [dependencies]
-blake2 = {version="0.9.1", default-features = false}
+blake2 = {version="0.10.6", default-features = false}
 byteorder = { version = "1", default-features = false }
 curve25519-dalek = {git = "https://github.com/swvheerden/curve25519-dalek", rev = "c8120bbb67c0c93da45710edae36db98e8036cbf", default-features = false, features = ["serde", "alloc", "zeroize", "rand_core"] }
 derive_more = {version = "0.99.17", default-features = false, features = ["from", "deref", "deref_mut"]}
-digest = { version = "0.9.0", default-features = false }
+digest = { version = "0.10", default-features = false }
 lazy_static = {git = "https://github.com/rust-lang-nursery/lazy-static.rs.git", rev= "e83d664", default-features = false}
 merlin = { version = "3", default-features = false }
 # Note: toolchain must be at v1.60+ to support serde v1.0.150+
 serde = { version = "1.0.150", default-features = false, optional = true}
-sha3 = { version = "0.9.1", default-features = false }
+sha3 = { version = "0.10.6", default-features = false }
 zeroize = { version = "1", default-features = false, optional = true}
 rand_core = { version = "0.6"}
 snafu = {version="0.7.4", default-features =false}
@@ -24,7 +24,7 @@ snafu = {version="0.7.4", default-features =false}
 [dev-dependencies]
 bincode = "1"
 criterion = "0.3"
-rand = "0.7"
+rand = "0.8"
 
 [features]
 default = [ "serde","zero"]

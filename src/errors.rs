@@ -17,4 +17,6 @@ pub enum ProofError {
     /// Invalid array/vector length error
     #[snafu(display("Invalid array/vector length error: `{reason}`"))]
     InvalidLength { reason: String },
+    #[snafu(display("Invalid Blake2b"))]
+    InvalidBlake2b {},
 }
