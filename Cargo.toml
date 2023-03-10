@@ -9,7 +9,7 @@ description = "A smaller faster implementation of Bulletproofs"
 [dependencies]
 blake2 = {version="0.10.6", default-features = false}
 byteorder = { version = "1", default-features = false }
-curve25519-dalek = {git = "https://github.com/swvheerden/curve25519-dalek", rev = "c8120bbb67c0c93da45710edae36db98e8036cbf", default-features = false, features = [ "alloc", "zeroize", "rand_core"] }
+curve25519-dalek = {git = "https://github.com/swvheerden/curve25519-dalek", rev = "c8120bbb67c0c93da45710edae36db98e8036cbf", default-features = false, features = [  "alloc","rand_core"] }
 derive_more = {version = "0.99.17", default-features = false, features = ["from", "deref", "deref_mut"]}
 digest = { version = "0.10", default-features = false }
 lazy_static = {git = "https://github.com/rust-lang-nursery/lazy-static.rs.git", rev= "e83d664", default-features = false}
@@ -29,7 +29,7 @@ rand = "0.8"
 [features]
 default = [ "serialize","zero"]
 no_std = ["lazy_static/spin_no_std"]
-zero = [ "zeroize"]
+zero = [ "zeroize", "curve25519-dalek/zeroize"]
 serialize = ["serde", "curve25519-dalek/serde"]
 
 [[bench]]
