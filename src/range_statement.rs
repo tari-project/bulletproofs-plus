@@ -5,7 +5,7 @@
 //! values and a vector of optional seed nonces for mask recovery
 
 use curve25519_dalek::scalar::Scalar;
-#[cfg(feature = "zeroize")]
+#[cfg(feature = "zero")]
 use zeroize::Zeroize;
 
 use crate::{
@@ -75,7 +75,7 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
 /// Overwrite secrets with null bytes when they go out of scope.
 impl<P: Compressable> Drop for RangeStatement<P> {
     fn drop(&mut self) {
-        #[cfg(feature = "zeroize")]
+        #[cfg(feature = "zero")]
         self.seed_nonce.zeroize();
     }
 }
