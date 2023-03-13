@@ -6,7 +6,8 @@
 use curve25519_dalek::scalar::Scalar;
 #[cfg(feature = "zero")]
 use zeroize::Zeroize;
-
+use crate::alloc::string::ToString;
+use alloc::vec::Vec;
 use crate::errors::ProofError;
 
 /// Commitment openings to be used for Pedersen commitments

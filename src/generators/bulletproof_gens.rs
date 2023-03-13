@@ -5,7 +5,7 @@
 //     SPDX-License-Identifier: MIT
 
 use crate::{generators::aggregated_gens_iter::AggregatedGensIter, traits::FromUniformBytes};
-
+use alloc::vec::Vec;
 /// The `BulletproofGens` struct contains all the generators needed for aggregating up to `m` range proofs of up to `n`
 /// bits each.
 ///

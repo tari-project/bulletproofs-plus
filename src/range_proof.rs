@@ -16,11 +16,12 @@ use curve25519_dalek::{
     scalar::Scalar,
     traits::{Identity, IsIdentity},
 };
+use crate::alloc::string::ToString;
 use merlin::Transcript;
 use rand_core::{CryptoRng, RngCore};
 #[cfg(feature = "serde")]
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
-
+use alloc::vec::Vec;
 use crate::{
     errors::ProofError,
     extended_mask::ExtendedMask,

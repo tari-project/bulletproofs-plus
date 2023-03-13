@@ -13,10 +13,10 @@ use core::{
         Result::{Err, Ok},
     },
 };
-
+use alloc::vec::Vec;
 use blake2::Blake2bMac512;
 use curve25519_dalek::scalar::Scalar;
-
+use alloc::string::ToString;
 use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::MAX_RANGE_PROOF_BIT_LENGTH};
 
 /// Create a Blake2B deterministic nonce given a seed, label and two indexes
@@ -101,13 +101,13 @@ pub fn read_1_byte(data: &[u8]) -> [u8; 1] {
 mod tests {
     use curve25519_dalek::scalar::Scalar;
     use rand::{distributions::Alphanumeric, thread_rng, Rng};
-
+    use alloc::string::ToString;
     use crate::{
         errors::ProofError,
         protocols::scalar_protocol::ScalarProtocol,
         range_proof::MAX_RANGE_PROOF_BIT_LENGTH,
         utils::generic::{bit_vector_of_scalars, nonce},
-    };
+    };use alloc::string::String;
 
     #[test]
     fn test_nonce() {

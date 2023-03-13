@@ -7,9 +7,9 @@
 use core::{borrow::Borrow, convert::TryFrom, iter::once};
 
 use curve25519_dalek::{scalar::Scalar, traits::MultiscalarMul};
-
+use alloc::vec::Vec;
 use crate::{errors::ProofError, traits::Compressable};
-
+use crate::alloc::string::ToString;
 /// Represents a pair of base points for Pedersen commitments
 ///
 /// The Bulletproofs implementation and API is designed to support pluggable bases for Pedersen commitments, so that

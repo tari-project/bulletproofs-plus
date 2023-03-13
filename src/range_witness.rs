@@ -7,8 +7,9 @@ use core::convert::TryInto;
 
 #[cfg(feature = "zero")]
 use zeroize::Zeroize;
-
+use alloc::vec::Vec;
 use crate::{commitment_opening::CommitmentOpening, errors::ProofError, generators::pedersen_gens::ExtensionDegree};
+use crate::alloc::string::ToString;
 
 /// A convenience struct for holding commitment openings for the aggregated case
 #[derive(Clone)]

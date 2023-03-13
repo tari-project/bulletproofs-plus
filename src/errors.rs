@@ -4,7 +4,7 @@
 //! Bulletproofs+ error definitions
 
 use snafu::prelude::*;
-
+use alloc::string::String;
 /// Represents an error in proof creation, verification, or parsing.
 #[derive(Debug, Snafu)]
 pub enum ProofError {

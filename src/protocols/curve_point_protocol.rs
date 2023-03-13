@@ -13,9 +13,10 @@ use curve25519_dalek::{
     scalar::Scalar,
     traits::{Identity, VartimeMultiscalarMul},
 };
+use alloc::vec::Vec;
 use digest::Digest;
 use sha3::Sha3_512;
-
+use crate::alloc::string::ToString;
 use crate::{
     errors::ProofError,
     traits::{Compressable, FromUniformBytes},

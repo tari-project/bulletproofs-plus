@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 //! Bulletproofs+
-
+#![no_std]
 #![recursion_limit = "1024"]
 
 #[macro_use]
 extern crate lazy_static;
-
+#[macro_use]
+extern crate alloc;
 /// Bulletproofs+ commitment opening
 pub mod commitment_opening;
 /// Bulletproofs+ error definitions
