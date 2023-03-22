@@ -3,10 +3,11 @@
 
 //! Bulletproofs+ embedded extended mask
 
-use curve25519_dalek::scalar::Scalar;
 use alloc::vec::Vec;
-use crate::{errors::ProofError, generators::pedersen_gens::ExtensionDegree};
-use crate::alloc::string::ToString;
+
+use curve25519_dalek::scalar::Scalar;
+
+use crate::{alloc::string::ToString, errors::ProofError, generators::pedersen_gens::ExtensionDegree};
 /// Contains the embedded extended mask for non-aggregated proofs
 #[derive(Debug, PartialEq)]
 pub struct ExtendedMask {

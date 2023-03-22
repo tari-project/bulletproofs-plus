@@ -4,16 +4,18 @@
 //! Bulletproofs+ generators, vector of commitments, vector of optional minimum promised
 //! values and a vector of optional seed nonces for mask recovery
 
+use alloc::vec::Vec;
+
 use curve25519_dalek::scalar::Scalar;
 #[cfg(feature = "zero")]
 use zeroize::Zeroize;
-use alloc::vec::Vec;
+
 use crate::{
+    alloc::string::ToString,
     errors::ProofError,
     range_parameters::RangeParameters,
     traits::{Compressable, FromUniformBytes},
 };
-use crate::alloc::string::ToString;
 
 /// The range proof statement contains the generators, vector of commitments, vector of optional minimum promised
 /// values and a vector of optional seed nonces for mask recovery

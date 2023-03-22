@@ -3,9 +3,11 @@
 
 //! Bulletproofs+ range parameters (generators and base points) needed for a batch of range proofs
 
+use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
 
 use crate::{
+    alloc::string::ToString,
     errors::ProofError,
     generators::{
         bulletproof_gens::BulletproofGens,
@@ -13,8 +15,7 @@ use crate::{
     },
     range_proof::MAX_RANGE_PROOF_BIT_LENGTH,
     traits::{Compressable, FromUniformBytes},
-};use alloc::vec::Vec;
-use crate::alloc::string::ToString;
+};
 
 /// Contains all the generators and base points needed for a batch of range proofs
 #[derive(Clone)]

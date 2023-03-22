@@ -5,15 +5,17 @@
 
 #![allow(clippy::too_many_lines)]
 
+use alloc::vec::Vec;
 use core::ops::{Add, Mul};
-use crate::alloc::string::ToString;
+
 use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
 use merlin::Transcript;
 use rand_core::{CryptoRng, RngCore};
 #[cfg(feature = "zero")]
 use zeroize::Zeroize;
-use alloc::vec::Vec;
+
 use crate::{
+    alloc::string::ToString,
     errors::ProofError,
     generators::pedersen_gens::ExtensionDegree,
     protocols::{curve_point_protocol::CurvePointProtocol, scalar_protocol::ScalarProtocol},

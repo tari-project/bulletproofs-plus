@@ -3,13 +3,14 @@
 
 //! Bulletproofs+ `ScalarProtocol` trait for using a Scalar
 
+use alloc::vec::Vec;
+
 use blake2::Blake2bMac512;
 use curve25519_dalek::scalar::Scalar;
 use digest::FixedOutput;
 use rand_core::{CryptoRng, RngCore};
-use alloc::vec::Vec;
-use crate::errors::ProofError;
-use crate::alloc::string::ToString;
+
+use crate::{alloc::string::ToString, errors::ProofError};
 /// Defines a `ScalarProtocol` trait for using a Scalar
 pub trait ScalarProtocol {
     /// Returns a non-zero random Scalar

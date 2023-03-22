@@ -3,12 +3,13 @@
 
 //! Bulletproofs+ commitment opening struct
 
+use alloc::vec::Vec;
+
 use curve25519_dalek::scalar::Scalar;
 #[cfg(feature = "zero")]
 use zeroize::Zeroize;
-use crate::alloc::string::ToString;
-use alloc::vec::Vec;
-use crate::errors::ProofError;
+
+use crate::{alloc::string::ToString, errors::ProofError};
 
 /// Commitment openings to be used for Pedersen commitments
 #[cfg_attr(feature = "zero", derive(Zeroize))]

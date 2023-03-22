@@ -5,6 +5,7 @@
 
 #![allow(clippy::too_many_lines)]
 
+use alloc::vec::Vec;
 #[cfg(feature = "serde")]
 use core::marker::PhantomData;
 use core::{
@@ -16,13 +17,13 @@ use curve25519_dalek::{
     scalar::Scalar,
     traits::{Identity, IsIdentity},
 };
-use crate::alloc::string::ToString;
 use merlin::Transcript;
 use rand_core::{CryptoRng, RngCore};
 #[cfg(feature = "serde")]
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
-use alloc::vec::Vec;
+
 use crate::{
+    alloc::string::ToString,
     errors::ProofError,
     extended_mask::ExtendedMask,
     generators::pedersen_gens::ExtensionDegree,
@@ -981,6 +982,219 @@ where
         }
 
         deserializer.deserialize_bytes(RangeProofVisitor(PhantomData))
+    }
+}
+
+pub struct MemLimitedRangeProof<P: Compressable> {
+    aggregation_factor: usize,
+    extension_degree: usize,
+    pub y_pow_const: Scalar,
+    alpha: Vec<Scalar>,
+    transcript: Transcript,
+    z_square: Scalar,
+    gi_base: Vec<P>,
+    hi_base: Vec<P>,
+    a_li: Vec<Scalar>,
+    a_ri: Vec<Scalar>,
+    y_powers: Vec<Scalar>,
+    a: P,
+}
+
+impl<P> MemLimitedRangeProof<P>
+where
+    for<'p> &'p P: Mul<Scalar, Output = P>,
+    for<'p> &'p P: Add<Output = P>,
+    P: CurvePointProtocol,
+    P::Compressed: FixedBytesRepr + IsIdentity + Identity + Copy,
+{
+    /// Initialises a single or aggregated memory limited range proof for a single party that knows all the secrets
+    /// The prover must ensure that the commitments and witness opening data are consistent
+    pub fn init<R: RngCore + CryptoRng>(
+        transcript_label: &'static str,
+        statement: &RangeStatement<P>,
+        values: &[u64],
+        rng: &mut R,
+    ) -> Result<Self, ProofError> {
+        let aggregation_factor = statement.commitments.len();
+        if values.len() != aggregation_factor {
+            return Err(ProofError::InvalidLength {
+                reason: "Values provided and aggregation factor dont match!".to_string(),
+            });
+        }
+        let extension_degree = statement.generators.extension_degree() as usize;
+
+        let bit_length = statement.generators.bit_length();
+
+        // Global generators
+        let g_base_vec = statement.generators.g_bases();
+        let h_base_compressed = statement.generators.h_base_compressed();
+        let g_bases_compressed = statement.generators.g_bases_compressed();
+        let hi_base = statement.generators.hi_base_copied();
+        let gi_base = statement.generators.gi_base_copied();
+
+        // Start the transcript
+        let mut transcript = Transcript::new(transcript_label.as_bytes());
+        transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
+        transcripts::transcript_initialize::<P>(
+            &mut transcript,
+            &h_base_compressed,
+            g_bases_compressed,
+            bit_length,
+            extension_degree,
+            aggregation_factor,
+            statement,
+        )?;
+
+        // Set bit arrays
+        let mut a_li = Vec::with_capacity(bit_length * aggregation_factor);
+        let mut a_ri = Vec::with_capacity(bit_length * aggregation_factor);
+        for j in 0..aggregation_factor {
+            let bit_vector = if let Some(minimum_value) = statement.minimum_value_promises[j] {
+                if minimum_value > values[j] {
+                    return Err(ProofError::InvalidArgument {
+                        reason: "Minimum value cannot be larger than value!".to_string(),
+                    });
+                } else {
+                    bit_vector_of_scalars(values[j] - minimum_value, bit_length)?
+                }
+            } else {
+                bit_vector_of_scalars(values[j], bit_length)?
+            };
+            for bit_field in bit_vector.clone() {
+                a_li.push(bit_field);
+                a_ri.push(bit_field - Scalar::ONE);
+            }
+        }
+
+        // Compute A by multi-scalar multiplication
+        let mut alpha = Vec::with_capacity(extension_degree);
+        for k in 0..extension_degree {
+            alpha.push(if let Some(seed_nonce) = statement.seed_nonce {
+                nonce(&seed_nonce, "alpha", None, Some(k))?
+            } else {
+                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+                Scalar::random_not_zero(rng)
+            });
+        }
+        let mut ai_scalars = Vec::with_capacity(bit_length * aggregation_factor + extension_degree);
+        let mut ai_points = Vec::with_capacity(bit_length * aggregation_factor + extension_degree);
+        for k in 0..extension_degree {
+            ai_scalars.push(alpha[k]);
+            ai_points.push(g_base_vec[k].clone());
+        }
+        for i in 0..(bit_length * aggregation_factor) {
+            ai_scalars.push(a_li[i]);
+            ai_points.push(gi_base[i].clone());
+            ai_scalars.push(a_ri[i]);
+            ai_points.push(hi_base[i].clone());
+        }
+        let a = P::vartime_multiscalar_mul(ai_scalars, ai_points);
+
+        // Get challenges
+        let (y, z) = transcripts::transcript_point_a_challenges_y_z(&mut transcript, &a.compress())?;
+        let z_square = z * z;
+
+        // Compute powers of the challenge
+        let mut y_powers = Vec::with_capacity(aggregation_factor * bit_length + 2);
+        y_powers.push(Scalar::ONE);
+        for _ in 1..(aggregation_factor * bit_length + 2) {
+            y_powers.push(y_powers[y_powers.len() - 1] * y);
+        }
+
+        // Compute d efficiently
+        let mut d = Vec::with_capacity(bit_length + bit_length * aggregation_factor);
+        d.push(z_square);
+        let two = Scalar::from(2u8);
+        for i in 1..bit_length {
+            d.push(two * d[i - 1]);
+        }
+        for j in 1..aggregation_factor {
+            for i in 0..bit_length {
+                d.push(d[(j - 1) * bit_length + i] * z_square);
+            }
+        }
+
+        // Prepare for inner product
+        let mut a_li_1 = Vec::with_capacity(a_li.len());
+        for item in a_li {
+            a_li_1.push(item - z);
+        }
+        let mut a_ri_1 = Vec::with_capacity(a_ri.len());
+        for i in 0..a_ri.len() {
+            a_ri_1.push(a_ri[i] + d[i] * y_powers[bit_length * aggregation_factor - i] + z);
+        }
+        let pre_range_proof = MemLimitedRangeProof {
+            y_pow_const: y_powers[bit_length * aggregation_factor + 1],
+            alpha,
+            aggregation_factor,
+            transcript,
+            z_square,
+            extension_degree,
+            gi_base,
+            hi_base,
+            a_li: a_li_1,
+            a_ri: a_ri_1,
+            y_powers,
+            a,
+        };
+        Ok(pre_range_proof)
+    }
+
+    /// Create a single or aggregated range proof for a single party that knows all the secrets
+    /// The prover must ensure that the commitments and witness opening data are consistent
+    pub fn prove<R: RngCore + CryptoRng>(
+        mut self,
+        blinded_blinding_factors: Vec<Vec<Scalar>>,
+        statement: &RangeStatement<P>,
+        rng: &mut R,
+    ) -> Result<RangeProof<P>, ProofError> {
+        if blinded_blinding_factors.len() != self.aggregation_factor {
+            return Err(ProofError::InvalidLength {
+                reason: "blinded_blinding_factors provided and aggregation factor dont match!".to_string(),
+            });
+        };
+
+        let mut alpha1 = self.alpha; // random scalar
+        let mut z_even_powers = Scalar::ONE;
+        for j in 0..self.aggregation_factor {
+            z_even_powers *= self.z_square; // need this from BP
+            for (k, alpha1_val) in alpha1.iter_mut().enumerate().take(self.extension_degree) {
+                *alpha1_val += z_even_powers * blinded_blinding_factors[j][k];
+            }
+        }
+        let (h_base, g_base_vec) = (statement.generators.h_base(), statement.generators.g_bases());
+        // Calculate the inner product
+        self.transcript
+            .domain_separator(b"Bulletproofs+", b"Inner Product Proof");
+        let mut ip_data = InnerProductRound::init(
+            self.gi_base,
+            self.hi_base,
+            g_base_vec.to_vec(),
+            h_base.clone(),
+            self.a_li,
+            self.a_ri,
+            alpha1,
+            self.y_powers,
+            &mut self.transcript,
+            statement.seed_nonce,
+            self.aggregation_factor,
+        )?;
+        loop {
+            let _result = ip_data.inner_product(rng);
+            if ip_data.is_done() {
+                return Ok(RangeProof {
+                    a: self.a.compress(),
+                    a1: ip_data.a1_compressed()?,
+                    b: ip_data.b_compressed()?,
+                    r1: ip_data.r1()?,
+                    s1: ip_data.s1()?,
+                    d1: ip_data.d1()?,
+                    li: ip_data.li_compressed()?,
+                    ri: ip_data.ri_compressed()?,
+                    extension_degree: statement.generators.extension_degree(),
+                });
+            }
+        }
     }
 }
 

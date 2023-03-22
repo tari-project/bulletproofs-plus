@@ -8,8 +8,8 @@
 
 use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
 use merlin::Transcript;
-use crate::alloc::string::ToString;
-use crate::{errors::ProofError, traits::FixedBytesRepr};
+
+use crate::{alloc::string::ToString, errors::ProofError, traits::FixedBytesRepr};
 
 /// Defines a `TranscriptProtocol` trait for using a Merlin transcript.
 pub trait TranscriptProtocol {

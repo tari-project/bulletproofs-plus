@@ -5,13 +5,15 @@
 //!
 //! Implementation of BulletProofs for the Ristretto group for Curve25519.
 
+use alloc::vec::Vec;
+
 use curve25519_dalek::{
     constants::{RISTRETTO_BASEPOINT_COMPRESSED, RISTRETTO_BASEPOINT_POINT},
     ristretto::{CompressedRistretto, RistrettoPoint},
 };
-use crate::alloc::borrow::ToOwned;
-use alloc::vec::Vec;
+
 use crate::{
+    alloc::borrow::ToOwned,
     generators::pedersen_gens::ExtensionDegree,
     protocols::curve_point_protocol::CurvePointProtocol,
     range_proof::RangeProof,

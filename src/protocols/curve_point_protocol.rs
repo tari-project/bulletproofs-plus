@@ -3,6 +3,7 @@
 
 //! Bulletproofs+ `CurvePointProtocol` trait provides the required interface for curves using BP+.
 
+use alloc::vec::Vec;
 use core::{
     borrow::Borrow,
     cmp::min,
@@ -13,11 +14,11 @@ use curve25519_dalek::{
     scalar::Scalar,
     traits::{Identity, VartimeMultiscalarMul},
 };
-use alloc::vec::Vec;
 use digest::Digest;
 use sha3::Sha3_512;
-use crate::alloc::string::ToString;
+
 use crate::{
+    alloc::string::ToString,
     errors::ProofError,
     traits::{Compressable, FromUniformBytes},
 };
