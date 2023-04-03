@@ -1,6 +1,6 @@
 [package]
 name = "tari_bulletproofs_plus"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["The Tari Development Community"]
 edition = "2018"
 license = "BSD-3-Clause"
@@ -9,7 +9,7 @@ description = "A smaller faster implementation of Bulletproofs"
 [dependencies]
 blake2 = "0.9.1"
 byteorder = { version = "1", default-features = false }
-curve25519-dalek = {git = "https://github.com/tari-project/curve25519-dalek", tag = "v4.0.1", default-features = false, features = ["serde", "alloc"] }
+curve25519-dalek = { package="tari-curve25519-dalek", version = "4.0.2", default-features = false, features = ["serde", "alloc"] }
 derive_more = "0.99.17"
 derivative = "2.2.0"
 digest = { version = "0.9.0", default-features = false }
