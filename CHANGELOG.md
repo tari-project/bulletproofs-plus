@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.2](https://github.com/tari-project/bulletproofs-plus/compare/v0.2.1...v0.2.2) (2023-04-03)
+
+
+### Bug Fixes
+
+* fix rand_core inequality ([#26](https://github.com/tari-project/bulletproofs-plus/issues/26)) ([213f788](https://github.com/tari-project/bulletproofs-plus/commit/213f788cf6aba765dd49caefd40affe9aaddcc6e))
+
 ### [0.2.1](https://github.com/tari-project/bulletproofs-plus/compare/v0.2.0...v0.2.1) (2023-01-03)
 
 
