@@ -13,7 +13,7 @@ use tari_bulletproofs_plus::{
     protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
     range_proof::{RangeProof, VerifyAction},
-    range_statement::RangeStatement,
+    range_statement::{RangeSeedNonce, RangeStatement},
     range_witness::RangeWitness,
     ristretto,
     ristretto::RistrettoRangeProof,
@@ -159,8 +159,8 @@ fn prove_and_verify(
         // 0.  Batch data
         let mut private_masks: Vec<Option<ExtendedMask>> = vec![];
         let mut public_masks = vec![];
-        let mut statements_private = vec![];
-        let mut statements_public = vec![];
+        let mut statements = vec![];
+        let mut seed_nonce_pairs = vec![];
         let mut proofs = vec![];
 
         #[allow(clippy::cast_possible_truncation)]
@@ -204,23 +204,19 @@ fn prove_and_verify(
             let witness = RangeWitness::init(openings).unwrap();
 
             // 3. Generate the statement
-            let seed_nonce = if *aggregation_size == 1 {
-                Some(Scalar::random_not_zero(&mut rng))
+            let seed_nonce_pair = if *aggregation_size == 1 {
+                Some(RangeSeedNonce {
+                    seed_nonce: Scalar::random(&mut rng),
+                    seed_nonce_alpha: Scalar::random(&mut rng),
+                })
             } else {
                 None
             };
-            let private_statement = RangeStatement::init(
-                generators.clone(),
-                commitments.clone(),
-                minimum_values.clone(),
-                seed_nonce,
-            )
-            .unwrap();
-            let public_statement =
-                RangeStatement::init(generators.clone(), commitments, minimum_values.clone(), None).unwrap();
+            let statement =
+                RangeStatement::init(generators.clone(), commitments.clone(), minimum_values.clone()).unwrap();
 
             // 4. Create the proofs
-            let proof = RangeProof::prove(transcript_label, &private_statement.clone(), &witness);
+            let proof = RangeProof::prove(transcript_label, &statement, &witness, &seed_nonce_pair);
             match promise_strategy {
                 ProofOfMinimumValueStrategy::LargerThanValue => match proof {
                     Ok(_) => {
@@ -234,8 +230,8 @@ fn prove_and_verify(
                     },
                 },
                 _ => {
-                    statements_private.push(private_statement);
-                    statements_public.push(public_statement);
+                    statements.push(statement);
+                    seed_nonce_pairs.push(seed_nonce_pair);
                     proofs.push(proof.unwrap());
                 },
             };
@@ -246,8 +242,9 @@ fn prove_and_verify(
             // --- Only recover the masks
             let recovered_private_masks = RangeProof::verify_batch(
                 transcript_label,
-                &statements_private.clone(),
-                &proofs.clone(),
+                &statements,
+                &seed_nonce_pairs,
+                &proofs,
                 VerifyAction::RecoverOnly,
             )
             .unwrap();
@@ -255,8 +252,9 @@ fn prove_and_verify(
             // --- Recover the masks and verify the proofs
             let recovered_private_masks = RangeProof::verify_batch(
                 transcript_label,
-                &statements_private.clone(),
-                &proofs.clone(),
+                &statements,
+                &seed_nonce_pairs,
+                &proofs,
                 VerifyAction::RecoverAndVerify,
             )
             .unwrap();
@@ -264,41 +262,50 @@ fn prove_and_verify(
             // --- Verify the proofs but do not recover the masks
             let recovered_private_masks = RangeProof::verify_batch(
                 transcript_label,
-                &statements_private.clone(),
-                &proofs.clone(),
+                &statements,
+                &seed_nonce_pairs,
+                &proofs,
                 VerifyAction::VerifyOnly,
             )
             .unwrap();
             assert_eq!(public_masks, recovered_private_masks);
 
             // 6. Verify the entire batch as public entity
-            let recovered_public_masks =
-                RangeProof::verify_batch(transcript_label, &statements_public, &proofs, VerifyAction::VerifyOnly)
-                    .unwrap();
+            let recovered_public_masks = RangeProof::verify_batch(
+                transcript_label,
+                &statements,
+                &seed_nonce_pairs,
+                &proofs,
+                VerifyAction::VerifyOnly,
+            )
+            .unwrap();
             assert_eq!(public_masks, recovered_public_masks);
 
             // 7. Try to recover the masks with incorrect seed_nonce values
             let mut compare = false;
-            for statement in statements_private.clone() {
-                if statement.seed_nonce.is_some() {
+            for seed_nonce_pair in &seed_nonce_pairs {
+                if seed_nonce_pair.is_some() {
                     compare = true;
                     break;
                 }
             }
             if compare {
-                let mut statements_private_changed = vec![];
-                for statement in statements_private.clone() {
-                    statements_private_changed.push(RangeStatement {
-                        generators: statement.generators.clone(),
-                        commitments: statement.commitments.clone(),
-                        commitments_compressed: statement.commitments_compressed.clone(),
-                        minimum_value_promises: statement.minimum_value_promises.clone(),
-                        seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::one()),
-                    });
+                let mut seed_nonce_pairs_changed = vec![];
+                for seed_nonce_pair in &seed_nonce_pairs {
+                    match seed_nonce_pair {
+                        Some(seed_nonce_pair) => {
+                            seed_nonce_pairs_changed.push(Some(RangeSeedNonce {
+                                seed_nonce: seed_nonce_pair.seed_nonce + Scalar::one(),
+                                seed_nonce_alpha: seed_nonce_pair.seed_nonce_alpha + Scalar::one(),
+                            }));
+                        },
+                        None => seed_nonce_pairs_changed.push(None),
+                    };
                 }
                 let recovered_private_masks_changed = RistrettoRangeProof::verify_batch(
                     transcript_label,
-                    &statements_private_changed,
+                    &statements,
+                    &seed_nonce_pairs_changed,
                     &proofs.clone(),
                     VerifyAction::RecoverAndVerify,
                 )
@@ -307,9 +314,9 @@ fn prove_and_verify(
             }
 
             // 8. Meddle with the minimum value promises
-            let mut statements_public_changed = Vec::with_capacity(statements_public.len());
-            for statement in statements_public {
-                statements_public_changed.push(RangeStatement {
+            let mut statements_changed = Vec::with_capacity(statements.len());
+            for statement in statements {
+                statements_changed.push(RangeStatement {
                     generators: statement.generators.clone(),
                     commitments: statement.commitments.clone(),
                     commitments_compressed: statement.commitments_compressed.clone(),
@@ -324,12 +331,12 @@ fn prove_and_verify(
                             }
                         })
                         .collect(),
-                    seed_nonce: statement.seed_nonce,
                 });
             }
             match RangeProof::verify_batch(
                 transcript_label,
-                &statements_public_changed,
+                &statements_changed,
+                &seed_nonce_pairs,
                 &proofs,
                 VerifyAction::VerifyOnly,
             ) {

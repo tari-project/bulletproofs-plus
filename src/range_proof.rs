@@ -20,6 +20,7 @@ use rand::thread_rng;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
+    commitment_opening::CommitmentOpening,
     errors::ProofError,
     extended_mask::ExtendedMask,
     generators::pedersen_gens::ExtensionDegree,
@@ -29,7 +30,7 @@ use crate::{
         scalar_protocol::ScalarProtocol,
         transcript_protocol::TranscriptProtocol,
     },
-    range_statement::RangeStatement,
+    range_statement::{RangeSeedNonce, RangeStatement},
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr},
     transcripts,
@@ -45,6 +46,61 @@ pub enum VerifyAction {
     RecoverAndVerify,
     /// Only recover masks but do not verify the proofs (e.g. as the commitment owner)
     RecoverOnly,
+}
+
+// State and message data for proof offloading
+// This is still used for standard proving, but is intended for modularity
+//
+
+// The data used by the signer to boostrap the proof
+struct SignerBootstrapData<P: Compressable> {
+    transcript_label: &'static str,
+    h_base: P::Compressed,
+    g_bases: Vec<P>,
+    bit_length: usize,
+    extension_degree: usize,
+    aggregation_factor: usize,
+    commitments: Vec<P::Compressed>,
+    minimum_value_promises: Vec<Option<u64>>,
+    masks: Vec<CommitmentOpening>,
+    seed_nonce_alpha: Option<Scalar>,
+}
+
+/// The message and state data after the signer commits to ephemeral masks
+struct SignerEphemeralMaskCommitmentMessage<P: Compressable> {
+    alpha_g: P,
+}
+
+struct SignerEphemeralMaskCommitmentState<P: Compressable> {
+    transcript_label: &'static str,
+    h_base: P::Compressed,
+    g_bases: Vec<P::Compressed>,
+    bit_length: usize,
+    extension_degree: usize,
+    aggregation_factor: usize,
+    commitments: Vec<P::Compressed>,
+    minimum_value_promises: Vec<Option<u64>>,
+    masks: Vec<CommitmentOpening>,
+    alpha: Vec<Scalar>,
+}
+
+/// The message and state data after the helper commits to bits
+struct HelperBitCommitmentMessage<P: Compressable> {
+    a: P::Compressed,
+}
+
+struct HelperBitCommitmentState<P: Compressable> {
+    transcript: Transcript,
+    statement: RangeStatement<P>,
+    seed_nonce: Option<Scalar>,
+    a_li: Vec<Scalar>,
+    a_ri: Vec<Scalar>,
+    a: P,
+}
+
+/// The message data after the signer masks its masks
+struct SignerMaskedMaskMessage {
+    alpha1: Vec<Scalar>,
 }
 
 /// Contains the public range proof parameters intended for a verifier
@@ -83,7 +139,7 @@ const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
 ///     protocols::scalar_protocol::ScalarProtocol,
 ///     range_parameters::RangeParameters,
 ///     range_proof::{RangeProof, VerifyAction},
-///     range_statement::RangeStatement,
+///     range_statement::{RangeStatement, RangeSeedNonce},
 ///     range_witness::RangeWitness,
 ///     ristretto,
 ///     ristretto::RistrettoRangeProof,
@@ -96,8 +152,8 @@ const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
 /// let proof_batch = vec![1, 2, 1, 4];
 /// let mut private_masks: Vec<Option<ExtendedMask>> = vec![];
 /// let mut public_masks = vec![];
-/// let mut statements_private = vec![];
-/// let mut statements_public = vec![];
+/// let mut statements = vec![];
+/// let mut seed_nonce_pairs = vec![];
 /// let mut proofs = vec![];
 ///
 /// for aggregation_size in proof_batch {
@@ -140,34 +196,36 @@ const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
 ///     let mut witness = RangeWitness::init(openings).unwrap();
 ///
 ///     // 3. Generate the statement
-///     let seed_nonce = if aggregation_size == 1 {
+///     let seed_nonce_pair = if aggregation_size == 1 {
 ///         // A secret seed nonce will be needed to recover the secret scalar for proofs with aggregation size = 1
-///         Some(Scalar::random_not_zero(&mut rng))
+///         Some(RangeSeedNonce {
+///             seed_nonce: Scalar::random(&mut rng),
+///             seed_nonce_alpha: Scalar::random(&mut rng),
+///         })
 ///     } else {
 ///         None
 ///     };
-///     let private_statement = RangeStatement::init(
-///         generators.clone(),
-///         commitments.clone(),
-///         minimum_values.clone(),
-///         // Only the owner will know the secret seed_nonce
-///         seed_nonce,
+///     let statement = RangeStatement::init(
+///         generators,
+///         commitments,
+///         minimum_values,
 ///     )
 ///     .unwrap();
-///     statements_private.push(private_statement.clone());
-///     let public_statement =
-///         RangeStatement::init(generators.clone(), commitments, minimum_values.clone(), None).unwrap();
-///     statements_public.push(public_statement.clone());
 ///
 ///     // 4. Create the proofs
-///     let proof = RistrettoRangeProof::prove(transcript_label, &private_statement.clone(), &witness);
-///     proofs.push(proof.unwrap());
+///     let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness, &seed_nonce_pair).unwrap();
+///
+///     // Add to the batch
+///     statements.push(statement);
+///     seed_nonce_pairs.push(seed_nonce_pair);
+///     proofs.push(proof);
 /// }
 ///
 /// // 5. Verify the entire batch as the commitment owner, i.e. the prover self
 /// let recovered_private_masks = RangeProof::verify_batch(
 ///     transcript_label,
-///     &statements_private,
+///     &statements,
+///     &seed_nonce_pairs,
 ///     &proofs,
 ///     VerifyAction::RecoverAndVerify,
 /// )
@@ -176,7 +234,7 @@ const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
 ///
 /// // 6. Verify the entire batch as public entity
 /// let recovered_public_masks =
-///     RangeProof::verify_batch(transcript_label, &statements_public, &proofs, VerifyAction::VerifyOnly).unwrap();
+///     RangeProof::verify_batch(transcript_label, &statements, &seed_nonce_pairs, &proofs, VerifyAction::VerifyOnly).unwrap();
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
 /// # }
@@ -194,62 +252,100 @@ where
         self.extension_degree
     }
 
-    /// Create a single or aggregated range proof for a single party that knows all the secrets
-    /// The prover must ensure that the commitments and witness opening data are consistent
-    pub fn prove(
-        transcript_label: &'static str,
-        statement: &RangeStatement<P>,
-        witness: &RangeWitness,
-    ) -> Result<Self, ProofError> {
-        let aggregation_factor = statement.commitments.len();
-        if witness.openings.len() != aggregation_factor {
-            return Err(ProofError::InvalidLength(
-                "Witness openings statement commitments do not match!".to_string(),
-            ));
-        }
-        if witness.extension_degree != statement.generators.extension_degree() {
+    // These functions represent an informal proving state machine
+    // We assume interaction between a signer and a helper
+    //
+
+    /// The signer receives bootstrap data and commits to ephemeral masks
+    fn signer_ephemeral_mask_commitment(
+        data: SignerBootstrapData<P>,
+    ) -> Result<
+        (
+            SignerEphemeralMaskCommitmentMessage<P>,
+            SignerEphemeralMaskCommitmentState<P>,
+        ),
+        ProofError,
+    > {
+        // Sanity check input data
+        if data.seed_nonce_alpha.is_some() && data.aggregation_factor > 1 {
             return Err(ProofError::InvalidArgument(
-                "Witness and statement extension degrees do not match!".to_string(),
+                "Mask recovery requires a non-aggregated proof".to_string(),
             ));
         }
+
+        if data.g_bases.len() != data.extension_degree {
+            return Err(ProofError::InvalidLength(
+                "Extension degree does not match generator vector size".to_string(),
+            ));
+        }
+
+        // Compute ephemeral masks, either randomly or using the seed nonce
+        let rng = &mut thread_rng();
+        let mut alpha = Vec::with_capacity(data.extension_degree);
+        for k in 0..data.extension_degree {
+            alpha.push(if let Some(seed_nonce_alpha) = data.seed_nonce_alpha {
+                nonce(&seed_nonce_alpha, "alpha", None, Some(k))?
+            } else {
+                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+                Scalar::random_not_zero(rng)
+            });
+        }
+
+        // Commit to the masks
+        let alpha_g = P::vartime_multiscalar_mul(&alpha, &data.g_bases);
+
+        // Return the message and state
+        Ok((
+            SignerEphemeralMaskCommitmentMessage { alpha_g },
+            SignerEphemeralMaskCommitmentState {
+                transcript_label: data.transcript_label,
+                h_base: data.h_base,
+                g_bases: data.g_bases.iter().map(|p| p.compress()).collect(),
+                bit_length: data.bit_length,
+                extension_degree: data.extension_degree,
+                aggregation_factor: data.aggregation_factor,
+                commitments: data.commitments,
+                minimum_value_promises: data.minimum_value_promises,
+                masks: data.masks,
+                alpha,
+            },
+        ))
+    }
+
+    /// The helper receives the ephemeral mask commitment message from the signer and produces bit commitments
+    fn helper_bit_commitments(
+        transcript_label: &'static str,
+        statement: RangeStatement<P>,
+        seed_nonce: Option<Scalar>,
+        values: &[u64],
+        signer_message: SignerEphemeralMaskCommitmentMessage<P>,
+    ) -> Result<(HelperBitCommitmentMessage<P>, HelperBitCommitmentState<P>), ProofError> {
+        // Useful values
+        let bit_length = statement.generators.bit_length();
+        let aggregation_factor = statement.generators.aggregation_factor();
         let extension_degree = statement.generators.extension_degree() as usize;
 
-        let bit_length = statement.generators.bit_length();
-
-        // Global generators
-        let (h_base, g_base_vec) = (statement.generators.h_base(), statement.generators.g_bases());
-        let h_base_compressed = statement.generators.h_base_compressed();
-        let g_bases_compressed = statement.generators.g_bases_compressed();
-        let hi_base = statement.generators.hi_base_copied();
-        let gi_base = statement.generators.gi_base_copied();
-
-        // Start the transcript
-        let mut transcript = Transcript::new(transcript_label.as_bytes());
-        transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
-        transcripts::transcript_initialize::<P>(
-            &mut transcript,
-            &h_base_compressed,
-            g_bases_compressed,
-            bit_length,
-            extension_degree,
-            aggregation_factor,
-            statement,
-        )?;
+        // Sanity check on input data
+        if values.len() != aggregation_factor {
+            return Err(ProofError::InvalidLength(
+                "Unexpected number of values provided!".to_string(),
+            ));
+        }
 
         // Set bit arrays
         let mut a_li = Vec::with_capacity(bit_length * aggregation_factor);
         let mut a_ri = Vec::with_capacity(bit_length * aggregation_factor);
-        for j in 0..aggregation_factor {
+        for (j, value) in values.iter().enumerate() {
             let bit_vector = if let Some(minimum_value) = statement.minimum_value_promises[j] {
-                if minimum_value > witness.openings[j].v {
+                if minimum_value > *value {
                     return Err(ProofError::InvalidArgument(
                         "Minimum value cannot be larger than value!".to_string(),
                     ));
                 } else {
-                    bit_vector_of_scalars(witness.openings[j].v - minimum_value, bit_length)?
+                    bit_vector_of_scalars(value - minimum_value, bit_length)?
                 }
             } else {
-                bit_vector_of_scalars(witness.openings[j].v, bit_length)?
+                bit_vector_of_scalars(values[j], bit_length)?
             };
             for bit_field in bit_vector.clone() {
                 a_li.push(bit_field);
@@ -257,30 +353,102 @@ where
             }
         }
 
-        // Compute A by multi-scalar multiplication
-        let rng = &mut thread_rng();
-        let mut alpha = Vec::with_capacity(extension_degree);
-        for k in 0..extension_degree {
-            alpha.push(if let Some(seed_nonce) = statement.seed_nonce {
-                nonce(&seed_nonce, "alpha", None, Some(k))?
-            } else {
-                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-                Scalar::random_not_zero(rng)
-            });
+        // Compute A by multi-scalar multiplication using the signer message
+        let a = P::vartime_multiscalar_mul(
+            a_li.iter().chain(a_ri.iter()),
+            statement
+                .generators
+                .gi_base_iter()
+                .chain(statement.generators.hi_base_iter()),
+        ) + signer_message.alpha_g;
+
+        // Start the transcript
+        let mut transcript = Transcript::new(transcript_label.as_bytes());
+        transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
+        transcripts::transcript_initialize::<P>(
+            &mut transcript,
+            &statement.generators.h_base().compress(),
+            statement.generators.g_bases_compressed(),
+            bit_length,
+            extension_degree,
+            aggregation_factor,
+            &statement.commitments_compressed,
+            &statement.minimum_value_promises,
+        )?;
+
+        // Return the message and state
+        Ok((
+            HelperBitCommitmentMessage { a: a.compress() },
+            HelperBitCommitmentState {
+                transcript,
+                statement,
+                seed_nonce,
+                a_li,
+                a_ri,
+                a,
+            },
+        ))
+    }
+
+    /// The signer receives the bit commitment message from the helper and produces the masked masks (yes, you read that
+    /// correctly)
+    #[allow(clippy::needless_pass_by_value)] // this ensures we consume the helper message
+    fn signer_mask_masks(
+        helper_message: HelperBitCommitmentMessage<P>,
+        state: SignerEphemeralMaskCommitmentState<P>,
+    ) -> Result<SignerMaskedMaskMessage, ProofError> {
+        // Start the transcript
+        let mut transcript = Transcript::new(state.transcript_label.as_bytes());
+        transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
+        transcripts::transcript_initialize::<P>(
+            &mut transcript,
+            &state.h_base,
+            &state.g_bases,
+            state.bit_length,
+            state.extension_degree,
+            state.aggregation_factor,
+            &state.commitments,
+            &state.minimum_value_promises,
+        )?;
+
+        // Get challenges
+        let (y, z) = transcripts::transcript_point_a_challenges_y_z(&mut transcript, &helper_message.a)?;
+
+        // Compute useful challenge values
+        // TODO: make this more efficient
+        let z_square = z * z;
+        let mut y_nm_1 = Scalar::one();
+        for _ in 0..=(state.aggregation_factor * state.bit_length) {
+            y_nm_1 *= y;
         }
-        let mut ai_scalars = Vec::with_capacity(bit_length * aggregation_factor + extension_degree);
-        let mut ai_points = Vec::with_capacity(bit_length * aggregation_factor + extension_degree);
-        for k in 0..extension_degree {
-            ai_scalars.push(alpha[k]);
-            ai_points.push(g_base_vec[k].clone());
+
+        // Mask the masks
+        let mut alpha1 = state.alpha;
+        let mut z_even_powers = Scalar::one();
+        for j in 0..state.aggregation_factor {
+            z_even_powers *= z_square;
+            for (k, alpha1_val) in alpha1.iter_mut().enumerate().take(state.extension_degree) {
+                *alpha1_val += z_even_powers * state.masks[j].r[k] * y_nm_1;
+            }
         }
-        for i in 0..(bit_length * aggregation_factor) {
-            ai_scalars.push(a_li[i]);
-            ai_points.push(gi_base[i].clone());
-            ai_scalars.push(a_ri[i]);
-            ai_points.push(hi_base[i].clone());
-        }
-        let a = P::vartime_multiscalar_mul(ai_scalars, ai_points);
+
+        Ok(SignerMaskedMaskMessage { alpha1 })
+    }
+
+    /// The helper finishes the range proof using the masked mask message from the signer
+    fn helper_finish_proof(
+        signer_message: SignerMaskedMaskMessage,
+        state: HelperBitCommitmentState<P>,
+    ) -> Result<Self, ProofError> {
+        // Pull out some values for convenience
+        let mut transcript = state.transcript;
+        let aggregation_factor = state.statement.commitments.len();
+        let bit_length = state.statement.generators.bit_length();
+        let extension_degree = state.statement.generators.extension_degree();
+        let a_li = state.a_li;
+        let a_ri = state.a_ri;
+        let a = state.a;
+        let alpha1 = signer_message.alpha1;
 
         // Get challenges
         let (y, z) = transcripts::transcript_point_a_challenges_y_z(&mut transcript, &a.compress())?;
@@ -315,30 +483,30 @@ where
         for i in 0..a_ri.len() {
             a_ri_1.push(a_ri[i] + d[i] * y_powers[bit_length * aggregation_factor - i] + z);
         }
-        let mut alpha1 = alpha;
-        let mut z_even_powers = Scalar::one();
-        for j in 0..aggregation_factor {
-            z_even_powers *= z_square;
-            for (k, alpha1_val) in alpha1.iter_mut().enumerate().take(extension_degree) {
-                *alpha1_val += z_even_powers * witness.openings[j].r[k] * y_powers[bit_length * aggregation_factor + 1];
-            }
+
+        // Sanity check input data
+        if state.seed_nonce.is_some() && state.statement.generators.aggregation_factor() > 1 {
+            return Err(ProofError::InvalidArgument(
+                "Mask recovery requires a non-aggregated proof".to_string(),
+            ));
         }
 
         // Calculate the inner product
         transcript.domain_separator(b"Bulletproofs+", b"Inner Product Proof");
         let mut ip_data = InnerProductRound::init(
-            gi_base,
-            hi_base,
-            g_base_vec.to_vec(),
-            h_base.clone(),
+            state.statement.generators.gi_base_copied(),
+            state.statement.generators.hi_base_copied(),
+            state.statement.generators.g_bases().to_vec(),
+            state.statement.generators.h_base().clone(),
             a_li_1,
             a_ri_1,
             alpha1,
             y_powers,
             &mut transcript,
-            statement.seed_nonce,
+            state.seed_nonce,
             aggregation_factor,
         )?;
+        let rng = &mut thread_rng();
         loop {
             let _result = ip_data.inner_product(rng);
             if ip_data.is_done() {
@@ -351,15 +519,59 @@ where
                     d1: ip_data.d1()?,
                     li: ip_data.li_compressed()?,
                     ri: ip_data.ri_compressed()?,
-                    extension_degree: statement.generators.extension_degree(),
+                    extension_degree,
                 });
             }
         }
     }
 
+    /// Create a single or aggregated range proof for a single party that knows all the secrets
+    /// The prover must ensure that the commitments and witness opening data are consistent
+    pub fn prove(
+        transcript_label: &'static str,
+        statement: &RangeStatement<P>,
+        witness: &RangeWitness,
+        seed_nonce_pair: &Option<RangeSeedNonce>,
+    ) -> Result<Self, ProofError> {
+        // Extract the seed nonces for separation
+        let seed_nonce = seed_nonce_pair.as_ref().map(|p| p.seed_nonce);
+        let seed_nonce_alpha = seed_nonce_pair.as_ref().map(|p| p.seed_nonce_alpha);
+
+        // Extract values from the witness for use by the helper
+        let values = witness.openings.iter().map(|o| o.v).collect::<Vec<u64>>();
+
+        // Prepare the signer bootstrap data
+        let signer_bootstrap = SignerBootstrapData {
+            transcript_label,
+            h_base: statement.generators.h_base_compressed(),
+            g_bases: statement.generators.g_bases().to_vec(),
+            bit_length: statement.generators.bit_length(),
+            extension_degree: statement.generators.extension_degree() as usize,
+            aggregation_factor: statement.commitments.len(),
+            commitments: statement.commitments.iter().map(|p| p.compress()).collect(),
+            minimum_value_promises: statement.minimum_value_promises.clone(),
+            masks: witness.openings.clone(),
+            seed_nonce_alpha,
+        };
+
+        // The signer commits to its ephemeral mask
+        let (signer_message, signer_state) = Self::signer_ephemeral_mask_commitment(signer_bootstrap)?;
+
+        // The helper produces its bit commitments
+        let (helper_message, helper_state) =
+            Self::helper_bit_commitments(transcript_label, statement.clone(), seed_nonce, &values, signer_message)?;
+
+        // The signer masks its masks
+        let signer_message = Self::signer_mask_masks(helper_message, signer_state)?;
+
+        // The helper finishes the proof
+        Self::helper_finish_proof(signer_message, helper_state)
+    }
+
     fn verify_statements_and_generators_consistency(
         statements: &[RangeStatement<P>],
         range_proofs: &[RangeProof<P>],
+        seed_nonce_pairs: &[Option<RangeSeedNonce>],
     ) -> Result<(usize, usize), ProofError> {
         if statements.is_empty() || range_proofs.is_empty() {
             return Err(ProofError::InvalidArgument(
@@ -369,6 +581,11 @@ where
         if statements.len() != range_proofs.len() {
             return Err(ProofError::InvalidArgument(
                 "Range statements and proofs length mismatch".to_string(),
+            ));
+        }
+        if statements.len() != seed_nonce_pairs.len() {
+            return Err(ProofError::InvalidArgument(
+                "Range statements and seed nonce length mismatch".to_string(),
             ));
         }
 
@@ -405,6 +622,11 @@ where
             if statement.commitments.len() * statement.generators.bit_length() > max_mn {
                 max_mn = statement.commitments.len() * statement.generators.bit_length();
                 max_index = i;
+            }
+            if seed_nonce_pairs[i].is_some() && statement.generators.aggregation_factor() > 1 {
+                return Err(ProofError::InvalidArgument(
+                    "Mask recovery requires a non-aggregated proof".to_string(),
+                ));
             }
         }
         let (gi_base_ref, hi_base_ref) = (
@@ -447,6 +669,7 @@ where
     pub fn verify_batch(
         transcript_label: &'static str,
         statements: &[RangeStatement<P>],
+        seed_nonce_pairs: &[Option<RangeSeedNonce>],
         proofs: &[RangeProof<P>],
         action: VerifyAction,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
@@ -473,7 +696,13 @@ where
 
         // If the batch fails, propagate the error; otherwise, store the masks and keep going
         if let Some((batch_statements, batch_proofs)) = chunks.next() {
-            let mut result = RangeProof::verify(transcript_label, batch_statements, batch_proofs, action)?;
+            let mut result = RangeProof::verify(
+                transcript_label,
+                batch_statements,
+                seed_nonce_pairs,
+                batch_proofs,
+                action,
+            )?;
 
             masks.append(&mut result);
         }
@@ -486,11 +715,13 @@ where
     fn verify(
         transcript_label: &'static str,
         statements: &[RangeStatement<P>],
+        seed_nonce_pairs: &[Option<RangeSeedNonce>],
         range_proofs: &[RangeProof<P>],
         extract_masks: VerifyAction,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // Verify generators consistency & select largest aggregation factor
-        let (max_mn, max_index) = RangeProof::verify_statements_and_generators_consistency(statements, range_proofs)?;
+        let (max_mn, max_index) =
+            RangeProof::verify_statements_and_generators_consistency(statements, range_proofs, seed_nonce_pairs)?;
         let (g_base_vec, h_base) = (statements[0].generators.g_bases(), statements[0].generators.h_base());
         let bit_length = statements[0].generators.bit_length();
         let (gi_base_ref, hi_base_ref) = (
@@ -575,14 +806,15 @@ where
             // Start the transcript
             let mut transcript = Transcript::new(transcript_label.as_bytes());
             transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
-            transcripts::transcript_initialize(
+            transcripts::transcript_initialize::<P>(
                 &mut transcript,
                 &h_base_compressed,
                 g_bases_compressed,
                 bit_length,
                 extension_degree,
                 aggregation_factor,
-                &statements[index],
+                &statements[index].commitments_compressed,
+                &statements[index].minimum_value_promises,
             )?;
 
             // Reconstruct challenges
@@ -645,17 +877,19 @@ where
             match extract_masks {
                 VerifyAction::VerifyOnly => masks.push(None),
                 _ => {
-                    if let Some(seed_nonce) = statements[index].seed_nonce {
+                    if let Some(seed_nonce_pair) = &seed_nonce_pairs[index] {
                         let mut temp_masks = Vec::with_capacity(extension_degree);
                         for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
                             let mut this_mask = (*d1_val -
-                                nonce(&seed_nonce, "eta", None, Some(k))? -
-                                e * nonce(&seed_nonce, "d", None, Some(k))?) *
+                                nonce(&seed_nonce_pair.seed_nonce, "eta", None, Some(k))? -
+                                e * nonce(&seed_nonce_pair.seed_nonce, "d", None, Some(k))?) *
                                 e_square.invert();
-                            this_mask -= nonce(&seed_nonce, "alpha", None, Some(k))?;
+                            this_mask -= nonce(&seed_nonce_pair.seed_nonce_alpha, "alpha", None, Some(k))?;
                             for j in 0..rounds {
-                                this_mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
-                                this_mask -= challenges_sq_inv[j] * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
+                                this_mask -=
+                                    challenges_sq[j] * nonce(&seed_nonce_pair.seed_nonce, "dL", Some(j), Some(k))?;
+                                this_mask -=
+                                    challenges_sq_inv[j] * nonce(&seed_nonce_pair.seed_nonce, "dR", Some(j), Some(k))?;
                             }
                             this_mask *= (z_square * y_nm_1).invert();
                             temp_masks.push(this_mask);

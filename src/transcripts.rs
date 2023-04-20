@@ -7,11 +7,11 @@ use merlin::Transcript;
 use crate::{
     errors::ProofError,
     protocols::transcript_protocol::TranscriptProtocol,
-    range_statement::RangeStatement,
     traits::{Compressable, FixedBytesRepr},
 };
 
 // Helper function to construct the initial transcript
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn transcript_initialize<P>(
     transcript: &mut Transcript,
     h_base_compressed: &P::Compressed,
@@ -19,7 +19,8 @@ pub(crate) fn transcript_initialize<P>(
     bit_length: usize,
     extension_degree: usize,
     aggregation_factor: usize,
-    statement: &RangeStatement<P>,
+    commitments: &Vec<P::Compressed>,
+    minimum_value_promises: &Vec<Option<u64>>,
 ) -> Result<(), ProofError>
 where
     P: Compressable,
@@ -32,10 +33,10 @@ where
     transcript.append_u64(b"N", bit_length as u64);
     transcript.append_u64(b"T", extension_degree as u64);
     transcript.append_u64(b"M", aggregation_factor as u64);
-    for item in &statement.commitments_compressed {
+    for item in commitments {
         transcript.append_point(b"Ci", item);
     }
-    for item in &statement.minimum_value_promises {
+    for item in minimum_value_promises {
         if let Some(minimum_value) = item {
             transcript.append_u64(b"vi - minimum_value", *minimum_value);
         } else {

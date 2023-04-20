@@ -25,8 +25,6 @@ pub struct RangeStatement<P: Compressable> {
     pub commitments_compressed: Vec<P::Compressed>,
     /// Optional minimum promised values
     pub minimum_value_promises: Vec<Option<u64>>,
-    /// Optional seed nonce for mask recovery
-    pub seed_nonce: Option<Scalar>,
 }
 
 impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
@@ -35,7 +33,6 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
         generators: RangeParameters<P>,
         commitments: Vec<P>,
         minimum_value_promises: Vec<Option<u64>>,
-        seed_nonce: Option<Scalar>,
     ) -> Result<Self, ProofError> {
         if !commitments.len().is_power_of_two() {
             return Err(ProofError::InvalidArgument(
@@ -52,11 +49,6 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
                 "Not enough generators for this statement".to_string(),
             ));
         }
-        if seed_nonce.is_some() && commitments.len() > 1 {
-            return Err(ProofError::InvalidArgument(
-                "Mask recovery is not supported with an aggregated statement".to_string(),
-            ));
-        }
         let mut commitments_compressed = Vec::with_capacity(commitments.len());
         for item in commitments.clone() {
             commitments_compressed.push(item.compress());
@@ -66,14 +58,23 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
             commitments,
             commitments_compressed,
             minimum_value_promises,
-            seed_nonce,
         })
     }
 }
 
-/// Overwrite secrets with null bytes when they go out of scope.
-impl<P: Compressable> Drop for RangeStatement<P> {
+/// Range statements may come equipped with seed nonce pairs used for mask extraction by a designated verifier
+/// They are kept separate from the statement to simplify proving operations
+pub struct RangeSeedNonce {
+    /// The seed nonce used for the helper's values
+    pub seed_nonce: Scalar,
+    /// The seed nonce used for the signer's value
+    pub seed_nonce_alpha: Scalar,
+}
+
+/// Treat nonce seeds as secret data
+impl Drop for RangeSeedNonce {
     fn drop(&mut self) {
         self.seed_nonce.zeroize();
+        self.seed_nonce_alpha.zeroize();
     }
 }

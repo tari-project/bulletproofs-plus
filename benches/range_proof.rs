@@ -20,7 +20,7 @@ use tari_bulletproofs_plus::{
     protocols::scalar_protocol::ScalarProtocol,
     range_parameters::RangeParameters,
     range_proof::{RangeProof, VerifyAction},
-    range_statement::RangeStatement,
+    range_statement::{RangeSeedNonce, RangeStatement},
     range_witness::RangeWitness,
     ristretto,
     ristretto::RistrettoRangeProof,
@@ -81,18 +81,20 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let witness = RangeWitness::init(openings).unwrap();
 
             // 3. Generate the statement
-            let seed_nonce = if aggregation_factor == 1 {
-                Some(Scalar::random_not_zero(&mut rng))
+            let seed_nonce_pair = if aggregation_factor == 1 {
+                Some(RangeSeedNonce {
+                    seed_nonce: Scalar::random(&mut rng),
+                    seed_nonce_alpha: Scalar::random(&mut rng),
+                })
             } else {
                 None
             };
-            let statement =
-                RangeStatement::init(generators, commitments.clone(), minimum_values.clone(), seed_nonce).unwrap();
+            let statement = RangeStatement::init(generators, commitments, minimum_values).unwrap();
 
             // Benchmark this code
             b.iter(|| {
                 // 4. Create the aggregated proof
-                let _proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness);
+                let _proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness, &seed_nonce_pair);
             })
         });
     }
@@ -126,10 +128,6 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             bit_length, aggregation_factor, extension_degree
         );
         group.bench_function(&label, move |b| {
-            // 0.  Batch data
-            let mut statements = vec![];
-            let mut proofs = vec![];
-
             // 1. Generators
             let generators = RangeParameters::init(bit_length, aggregation_factor, pederson_gens.clone()).unwrap();
 
@@ -153,24 +151,38 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let witness = RangeWitness::init(openings).unwrap();
 
             // 3. Generate the statement
-            let seed_nonce = if aggregation_factor == 1 {
-                Some(Scalar::random_not_zero(&mut rng))
+            let seed_nonce_pair = if aggregation_factor == 1 {
+                Some(RangeSeedNonce {
+                    seed_nonce: Scalar::random(&mut rng),
+                    seed_nonce_alpha: Scalar::random(&mut rng),
+                })
             } else {
                 None
             };
-            let statement =
-                RangeStatement::init(generators, commitments.clone(), minimum_values.clone(), seed_nonce).unwrap();
-            statements.push(statement.clone());
+            let statement = RangeStatement::init(generators, commitments, minimum_values).unwrap();
 
             // 4. Create the proof
-            let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness).unwrap();
+            let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness, &seed_nonce_pair).unwrap();
+
+            // Prepare verification data
+            let mut statements = vec![];
+            let mut seed_nonce_pairs = vec![];
+            let mut proofs = vec![];
+            statements.push(statement);
+            seed_nonce_pairs.push(seed_nonce_pair);
             proofs.push(proof);
 
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the aggregated proof
-                let _masks =
-                    RangeProof::verify_batch(transcript_label, &statements, &proofs, VerifyAction::VerifyOnly).unwrap();
+                let _masks = RangeProof::verify_batch(
+                    transcript_label,
+                    &statements,
+                    &seed_nonce_pairs,
+                    &proofs,
+                    VerifyAction::VerifyOnly,
+                )
+                .unwrap();
             });
         });
     }
@@ -203,6 +215,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
         .fold(u32::MIN, |a, &b| a.max(b.try_into().unwrap()));
     // 0.  Batch data
     let mut statements = vec![];
+    let mut seed_nonce_pairs = vec![];
     let mut proofs = vec![];
     let pc_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
 
@@ -219,7 +232,10 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
         let witness = RangeWitness::init(openings).unwrap();
 
         // 3. Generate the statement
-        let seed_nonce = Some(Scalar::random_not_zero(&mut rng));
+        let seed_nonce_pair = Some(RangeSeedNonce {
+            seed_nonce: Scalar::random(&mut rng),
+            seed_nonce_alpha: Scalar::random(&mut rng),
+        });
         let statement = RangeStatement::init(
             generators.clone(),
             vec![generators
@@ -227,13 +243,15 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                 .commit(&Scalar::from(value), blindings.as_slice())
                 .unwrap()],
             vec![Some(value / 3)],
-            seed_nonce,
         )
         .unwrap();
-        statements.push(statement.clone());
 
         // 4. Create the proof
-        let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness).unwrap();
+        let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness, &seed_nonce_pair).unwrap();
+
+        // 5. Store batch data
+        statements.push(statement);
+        seed_nonce_pairs.push(seed_nonce_pair);
         proofs.push(proof);
     }
 
@@ -244,6 +262,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                 bit_length, number_of_range_proofs, extension_degree, extract_masks
             );
             let statements = &statements[0..number_of_range_proofs];
+            let seed_nonce_pairs = &seed_nonce_pairs[0..number_of_range_proofs];
             let proofs = &proofs[0..number_of_range_proofs];
 
             group.bench_function(&label, move |b| {
@@ -255,6 +274,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                             let _masks = RangeProof::verify_batch(
                                 transcript_label,
                                 statements,
+                                seed_nonce_pairs,
                                 proofs,
                                 VerifyAction::VerifyOnly,
                             )
@@ -264,6 +284,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                             let _masks = RangeProof::verify_batch(
                                 transcript_label,
                                 statements,
+                                seed_nonce_pairs,
                                 proofs,
                                 VerifyAction::RecoverOnly,
                             )
