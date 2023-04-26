@@ -64,6 +64,7 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
 
 /// Range statements may come equipped with seed nonce pairs used for mask extraction by a designated verifier
 /// They are kept separate from the statement to simplify proving operations
+#[derive(Clone)]
 pub struct RangeSeedNonce {
     /// The seed nonce used for the helper's values
     pub seed_nonce: Scalar,
