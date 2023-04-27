@@ -63,7 +63,7 @@ struct SignerBootstrapData<P: Compressable> {
     commitments: Vec<P::Compressed>,
     minimum_value_promises: Vec<Option<u64>>,
     masks: Vec<CommitmentOpening>,
-    seed_nonce_alpha: Option<Scalar>,
+    seed_nonce_signer: Option<Vec<u8>>,
 }
 
 /// The message and state data after the signer commits to ephemeral masks
@@ -92,7 +92,7 @@ struct HelperBitCommitmentMessage<P: Compressable> {
 struct HelperBitCommitmentState<P: Compressable> {
     transcript: Transcript,
     statement: RangeStatement<P>,
-    seed_nonce: Option<Scalar>,
+    seed_nonce_helper: Option<Vec<u8>>,
     a_li: Vec<Scalar>,
     a_ri: Vec<Scalar>,
     a: P,
@@ -199,8 +199,8 @@ const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
 ///     let seed_nonce_pair = if aggregation_size == 1 {
 ///         // A secret seed nonce will be needed to recover the secret scalar for proofs with aggregation size = 1
 ///         Some(RangeSeedNonce {
-///             seed_nonce: Scalar::random(&mut rng),
-///             seed_nonce_alpha: Scalar::random(&mut rng),
+///             seed_nonce_helper: rng.gen::<[u8; 32]>().to_vec(),
+///             seed_nonce_signer: rng.gen::<[u8; 32]>().to_vec(),
 ///         })
 ///     } else {
 ///         None
@@ -267,7 +267,7 @@ where
         ProofError,
     > {
         // Sanity check input data
-        if data.seed_nonce_alpha.is_some() && data.aggregation_factor > 1 {
+        if data.seed_nonce_signer.is_some() && data.aggregation_factor > 1 {
             return Err(ProofError::InvalidArgument(
                 "Mask recovery requires a non-aggregated proof".to_string(),
             ));
@@ -283,8 +283,8 @@ where
         let rng = &mut thread_rng();
         let mut alpha = Vec::with_capacity(data.extension_degree);
         for k in 0..data.extension_degree {
-            alpha.push(if let Some(seed_nonce_alpha) = data.seed_nonce_alpha {
-                nonce(&seed_nonce_alpha, "alpha", None, Some(k))?
+            alpha.push(if let Some(seed_nonce_signer) = &data.seed_nonce_signer {
+                nonce(seed_nonce_signer, "alpha", None, Some(k))?
             } else {
                 // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
                 Scalar::random_not_zero(rng)
@@ -316,7 +316,7 @@ where
     fn helper_bit_commitments(
         transcript_label: &'static str,
         statement: RangeStatement<P>,
-        seed_nonce: Option<Scalar>,
+        seed_nonce_helper: Option<Vec<u8>>,
         values: &[u64],
         signer_message: SignerEphemeralMaskCommitmentMessage<P>,
     ) -> Result<(HelperBitCommitmentMessage<P>, HelperBitCommitmentState<P>), ProofError> {
@@ -382,7 +382,7 @@ where
             HelperBitCommitmentState {
                 transcript,
                 statement,
-                seed_nonce,
+                seed_nonce_helper,
                 a_li,
                 a_ri,
                 a,
@@ -485,7 +485,7 @@ where
         }
 
         // Sanity check input data
-        if state.seed_nonce.is_some() && state.statement.generators.aggregation_factor() > 1 {
+        if state.seed_nonce_helper.is_some() && state.statement.generators.aggregation_factor() > 1 {
             return Err(ProofError::InvalidArgument(
                 "Mask recovery requires a non-aggregated proof".to_string(),
             ));
@@ -503,7 +503,7 @@ where
             alpha1,
             y_powers,
             &mut transcript,
-            state.seed_nonce,
+            state.seed_nonce_helper,
             aggregation_factor,
         )?;
         let rng = &mut thread_rng();
@@ -534,8 +534,8 @@ where
         seed_nonce_pair: &Option<RangeSeedNonce>,
     ) -> Result<Self, ProofError> {
         // Extract the seed nonces for separation
-        let seed_nonce = seed_nonce_pair.as_ref().map(|p| p.seed_nonce);
-        let seed_nonce_alpha = seed_nonce_pair.as_ref().map(|p| p.seed_nonce_alpha);
+        let seed_nonce_helper = seed_nonce_pair.as_ref().map(|p| p.seed_nonce_helper.clone());
+        let seed_nonce_signer = seed_nonce_pair.as_ref().map(|p| p.seed_nonce_signer.clone());
 
         // Extract values from the witness for use by the helper
         let values = witness.openings.iter().map(|o| o.v).collect::<Vec<u64>>();
@@ -551,15 +551,20 @@ where
             commitments: statement.commitments.iter().map(|p| p.compress()).collect(),
             minimum_value_promises: statement.minimum_value_promises.clone(),
             masks: witness.openings.clone(),
-            seed_nonce_alpha,
+            seed_nonce_signer,
         };
 
         // The signer commits to its ephemeral mask
         let (signer_message, signer_state) = Self::signer_ephemeral_mask_commitment(signer_bootstrap)?;
 
         // The helper produces its bit commitments
-        let (helper_message, helper_state) =
-            Self::helper_bit_commitments(transcript_label, statement.clone(), seed_nonce, &values, signer_message)?;
+        let (helper_message, helper_state) = Self::helper_bit_commitments(
+            transcript_label,
+            statement.clone(),
+            seed_nonce_helper,
+            &values,
+            signer_message,
+        )?;
 
         // The signer masks its masks
         let signer_message = Self::signer_mask_masks(helper_message, signer_state)?;
@@ -881,15 +886,15 @@ where
                         let mut temp_masks = Vec::with_capacity(extension_degree);
                         for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
                             let mut this_mask = (*d1_val -
-                                nonce(&seed_nonce_pair.seed_nonce, "eta", None, Some(k))? -
-                                e * nonce(&seed_nonce_pair.seed_nonce, "d", None, Some(k))?) *
+                                nonce(&seed_nonce_pair.seed_nonce_helper, "eta", None, Some(k))? -
+                                e * nonce(&seed_nonce_pair.seed_nonce_helper, "d", None, Some(k))?) *
                                 e_square.invert();
-                            this_mask -= nonce(&seed_nonce_pair.seed_nonce_alpha, "alpha", None, Some(k))?;
+                            this_mask -= nonce(&seed_nonce_pair.seed_nonce_signer, "alpha", None, Some(k))?;
                             for j in 0..rounds {
-                                this_mask -=
-                                    challenges_sq[j] * nonce(&seed_nonce_pair.seed_nonce, "dL", Some(j), Some(k))?;
-                                this_mask -=
-                                    challenges_sq_inv[j] * nonce(&seed_nonce_pair.seed_nonce, "dR", Some(j), Some(k))?;
+                                this_mask -= challenges_sq[j] *
+                                    nonce(&seed_nonce_pair.seed_nonce_helper, "dL", Some(j), Some(k))?;
+                                this_mask -= challenges_sq_inv[j] *
+                                    nonce(&seed_nonce_pair.seed_nonce_helper, "dR", Some(j), Some(k))?;
                             }
                             this_mask *= (z_square * y_nm_1).invert();
                             temp_masks.push(this_mask);

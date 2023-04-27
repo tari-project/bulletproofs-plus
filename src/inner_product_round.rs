@@ -52,7 +52,7 @@ pub struct InnerProductRound<'a, P> {
 
     // Seed for mask recovery
     round: usize,
-    seed_nonce: Option<Scalar>,
+    seed_nonce_helper: Option<Vec<u8>>,
 }
 
 impl<'a, P: 'a> InnerProductRound<'a, P>
@@ -74,7 +74,7 @@ where
         alpha: Vec<Scalar>,
         y_powers: Vec<Scalar>,
         transcript: &'a mut Transcript,
-        seed_nonce: Option<Scalar>,
+        seed_nonce_helper: Option<Vec<u8>>,
         aggregation_factor: usize,
     ) -> Result<Self, ProofError> {
         let n = gi_base.len();
@@ -112,7 +112,7 @@ where
             ri: Vec::with_capacity(n * aggregation_factor + 2),
             transcript: transcript.into(),
             round: 0,
-            seed_nonce,
+            seed_nonce_helper,
         })
     }
 
@@ -130,10 +130,10 @@ where
                 Vec::with_capacity(extension_degree),
                 Vec::with_capacity(extension_degree),
             );
-            if let Some(seed_nonce) = self.seed_nonce {
+            if let Some(seed_nonce_helper) = &self.seed_nonce_helper {
                 for k in 0..extension_degree {
-                    d.push((nonce(&seed_nonce, "d", None, Some(k)))?);
-                    eta.push((nonce(&seed_nonce, "eta", None, Some(k)))?);
+                    d.push((nonce(seed_nonce_helper, "d", None, Some(k)))?);
+                    eta.push((nonce(seed_nonce_helper, "eta", None, Some(k)))?);
                 }
             } else {
                 for _k in 0..extension_degree {
@@ -188,10 +188,10 @@ where
             Vec::with_capacity(extension_degree),
             Vec::with_capacity(extension_degree),
         );
-        if let Some(seed_nonce) = self.seed_nonce {
+        if let Some(seed_nonce_helper) = &self.seed_nonce_helper {
             for k in 0..extension_degree {
-                d_l.push((nonce(&seed_nonce, "dL", Some(self.round), Some(k)))?);
-                d_r.push((nonce(&seed_nonce, "dR", Some(self.round), Some(k)))?);
+                d_l.push((nonce(seed_nonce_helper, "dL", Some(self.round), Some(k)))?);
+                d_r.push((nonce(seed_nonce_helper, "dR", Some(self.round), Some(k)))?);
             }
         } else {
             for _k in 0..extension_degree {
@@ -357,6 +357,6 @@ impl<'a, P> Drop for InnerProductRound<'a, P> {
             item.zeroize();
         }
         self.alpha.zeroize();
-        self.seed_nonce.zeroize();
+        self.seed_nonce_helper.zeroize();
     }
 }

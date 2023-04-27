@@ -13,15 +13,23 @@ use core::{
         Result::{Err, Ok},
     },
 };
+use std::convert::TryFrom;
 
 use blake2::Blake2b;
 use curve25519_dalek::scalar::Scalar;
 
 use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::MAX_RANGE_PROOF_BIT_LENGTH};
 
+/// Encode a `usize` as 32 bits, or return an appropriate error
+fn encode_usize(size: usize) -> Result<Vec<u8>, ProofError> {
+    u32::try_from(size)
+        .map_err(|_| ProofError::InvalidLength("Bad size encoding".to_string()))
+        .map(|s| s.to_le_bytes().to_vec())
+}
+
 /// Create a Blake2B deterministic nonce given a seed, label and two indexes
 pub fn nonce(
-    seed_nonce: &Scalar,
+    seed_nonce: &Vec<u8>,
     label: &str,
     index_j: Option<usize>,
     index_k: Option<usize>,
@@ -33,24 +41,25 @@ pub fn nonce(
     if encoded_label.len() > 16 {
         return Err(ProofError::InvalidLength("nonce label".to_string()));
     };
-    // Notes:
-    // - Fixed length encodings of 'seed_nonce', optional('j', 'index_j') and optional('k', 'index_k') are concatenated
-    //   to form the Blake2B key input
-    // - Domain separation labels 'j' an 'k' ensure that collisions for any combination of inputs to this function is
-    //   not possible
-    // - Enough memory is allocated to hold the two optional elements as well in lieu of performing calculations based
-    //   on optional logic to determine the exact length
-    // - 'append' performance is O(log n)
-    let mut key = Vec::with_capacity(51); // 1 + 32 + optional(1 + 8)  + optional(1 + 8)
+
+    // Allocate enough memory
+    let mut key = Vec::with_capacity(1 + seed_nonce.len() + 1 + 8 + 1 + 8);
     key.push(0u8); // Initialize the vector to enable 'append' (1 byte)
-    key.append(&mut seed_nonce.to_bytes().to_vec()); // Fixed length encoding of 'seed_nonce' (32 bytes)
+
+    // Write the seed nonce with prepended length
+    key.append(&mut encode_usize(seed_nonce.len())?);
+    key.append(&mut seed_nonce.clone());
+
+    // If defined, write the j-index with prepended length
     if let Some(index) = index_j {
-        key.append(&mut b"j".to_vec()); // Domain separated index label (1 byte)
-        key.append(&mut index.to_le_bytes().to_vec()); // Fixed length encoding of 'index_j' (8 bytes)
+        key.append(&mut b"j".to_vec());
+        key.append(&mut encode_usize(index)?);
     }
+
+    // If defined, write the k-index with prepended length
     if let Some(index) = index_k {
-        key.append(&mut b"k".to_vec()); // Domain separated index label (1 byte)
-        key.append(&mut index.to_le_bytes().to_vec()); // Fixed length encoding of 'index_k' (8 bytes)
+        key.append(&mut b"k".to_vec());
+        key.append(&mut encode_usize(index)?);
     }
     let hasher = Blake2b::with_params(&key, &[], encoded_label);
 
@@ -101,15 +110,13 @@ mod tests {
 
     use crate::{
         errors::ProofError,
-        protocols::scalar_protocol::ScalarProtocol,
         range_proof::MAX_RANGE_PROOF_BIT_LENGTH,
         utils::generic::{bit_vector_of_scalars, nonce},
     };
 
     #[test]
     fn test_nonce() {
-        let mut rng = thread_rng();
-        let seed_nonce = Scalar::random_not_zero(&mut rng);
+        let seed_nonce = thread_rng().gen::<[u8; 32]>().to_vec();
 
         // Create personalized nonces
         let ref_nonce_eta = nonce(&seed_nonce, "eta", None, None).unwrap();
@@ -173,12 +180,16 @@ mod tests {
 
         // Verify no unhandled exceptions occur with varying label parameter lengths
         for i in 0..32 {
-            let label: String = (&mut rng).sample_iter(Alphanumeric).take(i).map(char::from).collect();
+            let label: String = (&mut thread_rng())
+                .sample_iter(Alphanumeric)
+                .take(i)
+                .map(char::from)
+                .collect();
             match nonce(
-                &Scalar::random(&mut rng),
+                &seed_nonce,
                 label.as_str(),
-                Some(usize::MAX),
-                Some(usize::MAX),
+                Some(u32::MAX as usize),
+                Some(u32::MAX as usize),
             ) {
                 Ok(_) => {
                     if i > 16 {

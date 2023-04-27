@@ -4,7 +4,6 @@
 //! Bulletproofs+ generators, vector of commitments, vector of optional minimum promised
 //! values and a vector of optional seed nonces for mask recovery
 
-use curve25519_dalek::scalar::Scalar;
 use zeroize::Zeroize;
 
 use crate::{
@@ -67,15 +66,15 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
 #[derive(Clone)]
 pub struct RangeSeedNonce {
     /// The seed nonce used for the helper's values
-    pub seed_nonce: Scalar,
+    pub seed_nonce_helper: Vec<u8>,
     /// The seed nonce used for the signer's value
-    pub seed_nonce_alpha: Scalar,
+    pub seed_nonce_signer: Vec<u8>,
 }
 
 /// Treat nonce seeds as secret data
 impl Drop for RangeSeedNonce {
     fn drop(&mut self) {
-        self.seed_nonce.zeroize();
-        self.seed_nonce_alpha.zeroize();
+        self.seed_nonce_helper.zeroize();
+        self.seed_nonce_signer.zeroize();
     }
 }

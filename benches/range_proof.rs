@@ -83,8 +83,8 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             // 3. Generate the statement
             let seed_nonce_pair = if aggregation_factor == 1 {
                 Some(RangeSeedNonce {
-                    seed_nonce: Scalar::random(&mut rng),
-                    seed_nonce_alpha: Scalar::random(&mut rng),
+                    seed_nonce_helper: rng.gen::<[u8; 32]>().to_vec(),
+                    seed_nonce_signer: rng.gen::<[u8; 32]>().to_vec(),
                 })
             } else {
                 None
@@ -153,8 +153,8 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             // 3. Generate the statement
             let seed_nonce_pair = if aggregation_factor == 1 {
                 Some(RangeSeedNonce {
-                    seed_nonce: Scalar::random(&mut rng),
-                    seed_nonce_alpha: Scalar::random(&mut rng),
+                    seed_nonce_helper: rng.gen::<[u8; 32]>().to_vec(),
+                    seed_nonce_signer: rng.gen::<[u8; 32]>().to_vec(),
                 })
             } else {
                 None
@@ -233,8 +233,8 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
 
         // 3. Generate the statement
         let seed_nonce_pair = Some(RangeSeedNonce {
-            seed_nonce: Scalar::random(&mut rng),
-            seed_nonce_alpha: Scalar::random(&mut rng),
+            seed_nonce_helper: rng.gen::<[u8; 32]>().to_vec(),
+            seed_nonce_signer: rng.gen::<[u8; 32]>().to_vec(),
         });
         let statement = RangeStatement::init(
             generators.clone(),

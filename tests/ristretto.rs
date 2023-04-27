@@ -206,8 +206,8 @@ fn prove_and_verify(
             // 3. Generate the statement
             let seed_nonce_pair = if *aggregation_size == 1 {
                 Some(RangeSeedNonce {
-                    seed_nonce: Scalar::random(&mut rng),
-                    seed_nonce_alpha: Scalar::random(&mut rng),
+                    seed_nonce_helper: rng.gen::<[u8; 32]>().to_vec(),
+                    seed_nonce_signer: rng.gen::<[u8; 32]>().to_vec(),
                 })
             } else {
                 None
@@ -293,10 +293,10 @@ fn prove_and_verify(
                 let mut seed_nonce_pairs_changed = vec![];
                 for seed_nonce_pair in &seed_nonce_pairs {
                     match seed_nonce_pair {
-                        Some(seed_nonce_pair) => {
+                        Some(_) => {
                             seed_nonce_pairs_changed.push(Some(RangeSeedNonce {
-                                seed_nonce: seed_nonce_pair.seed_nonce + Scalar::one(),
-                                seed_nonce_alpha: seed_nonce_pair.seed_nonce_alpha + Scalar::one(),
+                                seed_nonce_helper: rng.gen::<[u8; 32]>().to_vec(),
+                                seed_nonce_signer: rng.gen::<[u8; 32]>().to_vec(),
                             }));
                         },
                         None => seed_nonce_pairs_changed.push(None),
