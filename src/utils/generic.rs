@@ -13,44 +13,50 @@ use core::{
         Result::{Err, Ok},
     },
 };
+use std::convert::TryFrom;
 
 use blake2::Blake2b;
 use curve25519_dalek::scalar::Scalar;
 
 use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::MAX_RANGE_PROOF_BIT_LENGTH};
 
-/// Create a Blake2B deterministic nonce given a seed, label and two indexes
+/// The maximum number of bytes that `Blake2b` can accommodate in its `persona` field
+/// This is defined in https://www.blake2.net/blake2.pdf section 2.8
+const BLAKE2B_PERSONA_LIMIT: usize = 16;
+
+/// Encode a `usize` as 32 bits, or return an error if this would truncate
+fn encode_usize(size: usize) -> Result<Vec<u8>, ProofError> {
+    u32::try_from(size)
+        .map_err(|_| ProofError::InvalidLength("Bad size encoding".to_string()))
+        .map(|s| s.to_le_bytes().to_vec())
+}
+
+/// Create a deterministic scalar nonce given a seed, label and two (optional) indexes
 pub fn nonce(
     seed_nonce: &Scalar,
     label: &str,
     index_j: Option<usize>,
     index_k: Option<usize>,
 ) -> Result<Scalar, ProofError> {
-    // Using `Blake2b::with_params(key: &[u8], salt: &[u8], persona: &[u8])`, if the `persona` or `salt` parameters
-    // exceed 16 bytes, unhandled exceptions occur, so we have to do the length check ourselves.
-    // See https://www.blake2.net/blake2.pdf section 2.8
+    // The label is embedded into the `Blake2b` hash using its `persona` field
+    // To avoid scary exceptions, we manually check for a valid length
     let encoded_label = label.as_bytes();
-    if encoded_label.len() > 16 {
-        return Err(ProofError::InvalidLength("nonce label".to_string()));
+    if encoded_label.len() > BLAKE2B_PERSONA_LIMIT {
+        return Err(ProofError::InvalidLength("Bad nonce label encoding".to_string()));
     };
-    // Notes:
-    // - Fixed length encodings of 'seed_nonce', optional('j', 'index_j') and optional('k', 'index_k') are concatenated
-    //   to form the Blake2B key input
-    // - Domain separation labels 'j' an 'k' ensure that collisions for any combination of inputs to this function is
-    //   not possible
-    // - Enough memory is allocated to hold the two optional elements as well in lieu of performing calculations based
-    //   on optional logic to determine the exact length
-    // - 'append' performance is O(log n)
-    let mut key = Vec::with_capacity(51); // 1 + 32 + optional(1 + 8)  + optional(1 + 8)
+
+    // We use fixed-length encodings of the seed and (optional) indexes
+    // Further, we use domain separation for the indexes to avoid collisions
+    let mut key = Vec::with_capacity(43); // 1 + 32 + optional(1 + 4)  + optional(1 + 4)
     key.push(0u8); // Initialize the vector to enable 'append' (1 byte)
     key.append(&mut seed_nonce.to_bytes().to_vec()); // Fixed length encoding of 'seed_nonce' (32 bytes)
     if let Some(index) = index_j {
         key.append(&mut b"j".to_vec()); // Domain separated index label (1 byte)
-        key.append(&mut index.to_le_bytes().to_vec()); // Fixed length encoding of 'index_j' (8 bytes)
+        key.append(&mut encode_usize(index)?); // Fixed length encoding of 'index_j' (4 bytes)
     }
     if let Some(index) = index_k {
         key.append(&mut b"k".to_vec()); // Domain separated index label (1 byte)
-        key.append(&mut index.to_le_bytes().to_vec()); // Fixed length encoding of 'index_k' (8 bytes)
+        key.append(&mut encode_usize(index)?); // Fixed length encoding of 'index_k' (4 bytes)
     }
     let hasher = Blake2b::with_params(&key, &[], encoded_label);
 
@@ -103,7 +109,7 @@ mod tests {
         errors::ProofError,
         protocols::scalar_protocol::ScalarProtocol,
         range_proof::MAX_RANGE_PROOF_BIT_LENGTH,
-        utils::generic::{bit_vector_of_scalars, nonce},
+        utils::generic::{bit_vector_of_scalars, nonce, BLAKE2B_PERSONA_LIMIT},
     };
 
     #[test]
@@ -177,21 +183,27 @@ mod tests {
             match nonce(
                 &Scalar::random(&mut rng),
                 label.as_str(),
-                Some(usize::MAX),
-                Some(usize::MAX),
+                Some(u32::MAX as usize),
+                Some(u32::MAX as usize),
             ) {
                 Ok(_) => {
-                    if i > 16 {
-                        panic!("Should err on label size >16")
-                    }
+                    assert!(i <= BLAKE2B_PERSONA_LIMIT);
                 },
                 Err(_) => {
-                    if i <= 16 {
-                        panic!("Should not err on label size <=16")
-                    }
+                    assert!(i > BLAKE2B_PERSONA_LIMIT);
                 },
             }
         }
+
+        // Verify that indexes are valid if within a `u32` limit
+        for index in [0, 1, 2, u32::MAX as usize] {
+            assert!(nonce(&seed_nonce, "", Some(index), None).is_ok());
+            assert!(nonce(&seed_nonce, "", None, Some(index)).is_ok());
+        }
+
+        // Verify that indexes are invalid if exceeding a `u32` limit
+        assert!(nonce(&seed_nonce, "", Some(u32::MAX as usize + 1), None).is_err());
+        assert!(nonce(&seed_nonce, "", None, Some(u32::MAX as usize + 1)).is_err());
     }
 
     fn bit_vector_to_value(bit_vector: &[Scalar]) -> Result<u64, ProofError> {
