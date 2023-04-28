@@ -533,6 +533,13 @@ where
         witness: &RangeWitness,
         seed_nonce_pair: &Option<RangeSeedNonce>,
     ) -> Result<Self, ProofError> {
+        // Sanity check input data
+        if witness.extension_degree != statement.generators.extension_degree() {
+            return Err(ProofError::InvalidArgument(
+                "Witness and statement extension degrees do not match!".to_string(),
+            ));
+        }
+
         // Extract the seed nonces for separation
         let seed_nonce_helper = seed_nonce_pair.as_ref().map(|p| p.seed_nonce_helper.clone());
         let seed_nonce_signer = seed_nonce_pair.as_ref().map(|p| p.seed_nonce_signer.clone());
