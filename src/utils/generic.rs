@@ -29,7 +29,7 @@ fn encode_usize(size: usize) -> Result<Vec<u8>, ProofError> {
 
 /// Create a Blake2B deterministic nonce given a seed, label and two indexes
 pub fn nonce(
-    seed_nonce: &Vec<u8>,
+    seed_nonce: &[u8],
     label: &str,
     index_j: Option<usize>,
     index_k: Option<usize>,
@@ -48,7 +48,7 @@ pub fn nonce(
 
     // Write the seed nonce with prepended length
     key.append(&mut encode_usize(seed_nonce.len())?);
-    key.append(&mut seed_nonce.clone());
+    key.append(&mut seed_nonce.to_vec());
 
     // If defined, write the j-index with prepended length
     if let Some(index) = index_j {

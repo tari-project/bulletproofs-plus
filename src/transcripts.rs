@@ -19,8 +19,8 @@ pub(crate) fn transcript_initialize<P>(
     bit_length: usize,
     extension_degree: usize,
     aggregation_factor: usize,
-    commitments: &Vec<P::Compressed>,
-    minimum_value_promises: &Vec<Option<u64>>,
+    commitments: &[P::Compressed],
+    minimum_value_promises: &[Option<u64>],
 ) -> Result<(), ProofError>
 where
     P: Compressable,
