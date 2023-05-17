@@ -216,20 +216,13 @@ where
 
         let bit_length = statement.generators.bit_length();
 
-        // Global generators
-        let (h_base, g_base_vec) = (statement.generators.h_base(), statement.generators.g_bases());
-        let h_base_compressed = statement.generators.h_base_compressed();
-        let g_bases_compressed = statement.generators.g_bases_compressed();
-        let hi_base = statement.generators.hi_base_copied();
-        let gi_base = statement.generators.gi_base_copied();
-
         // Start the transcript
         let mut transcript = Transcript::new(transcript_label.as_bytes());
         transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
         transcripts::transcript_initialize::<P>(
             &mut transcript,
-            &h_base_compressed,
-            g_bases_compressed,
+            &statement.generators.h_base().compress(),
+            statement.generators.g_bases_compressed(),
             bit_length,
             extension_degree,
             aggregation_factor,
@@ -239,17 +232,17 @@ where
         // Set bit arrays
         let mut a_li = Vec::with_capacity(bit_length * aggregation_factor);
         let mut a_ri = Vec::with_capacity(bit_length * aggregation_factor);
-        for j in 0..aggregation_factor {
+        for (j, value) in witness.openings.iter().map(|o| o.v).enumerate() {
             let bit_vector = if let Some(minimum_value) = statement.minimum_value_promises[j] {
-                if minimum_value > witness.openings[j].v {
+                if minimum_value > value {
                     return Err(ProofError::InvalidArgument(
                         "Minimum value cannot be larger than value!".to_string(),
                     ));
                 } else {
-                    bit_vector_of_scalars(witness.openings[j].v - minimum_value, bit_length)?
+                    bit_vector_of_scalars(value - minimum_value, bit_length)?
                 }
             } else {
-                bit_vector_of_scalars(witness.openings[j].v, bit_length)?
+                bit_vector_of_scalars(value, bit_length)?
             };
             for bit_field in bit_vector.clone() {
                 a_li.push(bit_field);
@@ -268,19 +261,15 @@ where
                 Scalar::random_not_zero(rng)
             });
         }
-        let mut ai_scalars = Vec::with_capacity(bit_length * aggregation_factor + extension_degree);
-        let mut ai_points = Vec::with_capacity(bit_length * aggregation_factor + extension_degree);
-        for k in 0..extension_degree {
-            ai_scalars.push(alpha[k]);
-            ai_points.push(g_base_vec[k].clone());
-        }
-        for i in 0..(bit_length * aggregation_factor) {
-            ai_scalars.push(a_li[i]);
-            ai_points.push(gi_base[i].clone());
-            ai_scalars.push(a_ri[i]);
-            ai_points.push(hi_base[i].clone());
-        }
-        let a = P::vartime_multiscalar_mul(ai_scalars, ai_points);
+        let a = P::vartime_multiscalar_mul(
+            alpha.iter().chain(a_li.iter()).chain(a_ri.iter()),
+            statement
+                .generators
+                .g_bases()
+                .iter()
+                .chain(statement.generators.gi_base_iter())
+                .chain(statement.generators.hi_base_iter()),
+        );
 
         // Get challenges
         let (y, z) = transcripts::transcript_point_a_challenges_y_z(&mut transcript, &a.compress())?;
@@ -307,13 +296,11 @@ where
         }
 
         // Prepare for inner product
-        let mut a_li_1 = Vec::with_capacity(a_li.len());
-        for item in a_li {
-            a_li_1.push(item - z);
+        for item in &mut a_li {
+            *item -= z;
         }
-        let mut a_ri_1 = Vec::with_capacity(a_ri.len());
-        for i in 0..a_ri.len() {
-            a_ri_1.push(a_ri[i] + d[i] * y_powers[bit_length * aggregation_factor - i] + z);
+        for (i, item) in a_ri.iter_mut().enumerate() {
+            *item += d[i] * y_powers[bit_length * aggregation_factor - i] + z;
         }
         let mut alpha1 = alpha;
         let mut z_even_powers = Scalar::one();
@@ -327,12 +314,12 @@ where
         // Calculate the inner product
         transcript.domain_separator(b"Bulletproofs+", b"Inner Product Proof");
         let mut ip_data = InnerProductRound::init(
-            gi_base,
-            hi_base,
-            g_base_vec.to_vec(),
-            h_base.clone(),
-            a_li_1,
-            a_ri_1,
+            statement.generators.gi_base_copied(),
+            statement.generators.hi_base_copied(),
+            statement.generators.g_bases().to_vec(),
+            statement.generators.h_base().clone(),
+            a_li,
+            a_ri,
             alpha1,
             y_powers,
             &mut transcript,
