@@ -262,14 +262,10 @@ where
                 Scalar::random_not_zero(rng)
             });
         }
-        let a = P::vartime_multiscalar_mul(
-            alpha.iter().chain(a_li.iter()).chain(a_ri.iter()),
-            statement
-                .generators
-                .g_bases()
-                .iter()
-                .chain(statement.generators.gi_base_iter())
-                .chain(statement.generators.hi_base_iter()),
+        let a = statement.generators.precomp().vartime_mixed_multiscalar_mul(
+            a_li.iter().interleave(a_ri.iter()),
+            alpha.iter(),
+            statement.generators.g_bases().iter(),
         );
 
         // Get challenges
