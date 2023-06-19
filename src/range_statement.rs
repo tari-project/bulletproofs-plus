@@ -10,13 +10,13 @@ use zeroize::Zeroize;
 use crate::{
     errors::ProofError,
     range_parameters::RangeParameters,
-    traits::{Compressable, FromUniformBytes},
+    traits::{Compressable, FromUniformBytes, Precomputable},
 };
 
 /// The range proof statement contains the generators, vector of commitments, vector of optional minimum promised
 /// values and a vector of optional seed nonces for mask recovery
 #[derive(Clone)]
-pub struct RangeStatement<P: Compressable> {
+pub struct RangeStatement<P: Compressable + Precomputable> {
     /// The generators and base points needed for aggregating range proofs
     pub generators: RangeParameters<P>,
     /// The aggregated commitments
@@ -29,7 +29,7 @@ pub struct RangeStatement<P: Compressable> {
     pub seed_nonce: Option<Scalar>,
 }
 
-impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
+impl<P: Compressable + FromUniformBytes + Clone + Precomputable> RangeStatement<P> {
     /// Initialize a new 'RangeStatement' with sanity checks
     pub fn init(
         generators: RangeParameters<P>,
@@ -72,7 +72,7 @@ impl<P: Compressable + FromUniformBytes + Clone> RangeStatement<P> {
 }
 
 /// Overwrite secrets with null bytes when they go out of scope.
-impl<P: Compressable> Drop for RangeStatement<P> {
+impl<P: Compressable + Precomputable> Drop for RangeStatement<P> {
     fn drop(&mut self) {
         self.seed_nonce.zeroize();
     }

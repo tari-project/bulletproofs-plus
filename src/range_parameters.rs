@@ -3,7 +3,10 @@
 
 //! Bulletproofs+ range parameters (generators and base points) needed for a batch of range proofs
 
-use std::fmt::{Debug, Formatter};
+use std::{
+    fmt::{Debug, Formatter},
+    sync::Arc,
+};
 
 use crate::{
     errors::ProofError,
@@ -12,12 +15,12 @@ use crate::{
         pedersen_gens::{ExtensionDegree, PedersenGens},
     },
     range_proof::MAX_RANGE_PROOF_BIT_LENGTH,
-    traits::{Compressable, FromUniformBytes},
+    traits::{Compressable, FromUniformBytes, Precomputable},
 };
 
 /// Contains all the generators and base points needed for a batch of range proofs
 #[derive(Clone)]
-pub struct RangeParameters<P: Compressable> {
+pub struct RangeParameters<P: Compressable + Precomputable> {
     /// Generators needed for aggregating up to `m` range proofs of up to `n` bits each.
     bp_gens: BulletproofGens<P>,
     /// The pair of base points for Pedersen commitments.
@@ -25,7 +28,7 @@ pub struct RangeParameters<P: Compressable> {
 }
 
 impl<P> RangeParameters<P>
-where P: FromUniformBytes + Compressable + Clone
+where P: FromUniformBytes + Compressable + Clone + Precomputable
 {
     /// Initialize a new 'RangeParameters' with sanity checks
     pub fn init(bit_length: usize, aggregation_factor: usize, pc_gens: PedersenGens<P>) -> Result<Self, ProofError> {
@@ -107,11 +110,6 @@ where P: FromUniformBytes + Compressable + Clone
         self.hi_base_iter().collect()
     }
 
-    /// Return the non-public value bulletproof generator references
-    pub fn hi_base_copied(&self) -> Vec<P> {
-        self.hi_base_iter().cloned().collect()
-    }
-
     /// Return the non-public mask iterator to the bulletproof generators
     pub fn gi_base_iter(&self) -> impl Iterator<Item = &P> {
         self.bp_gens.g_iter(self.bit_length(), self.aggregation_factor())
@@ -122,15 +120,17 @@ where P: FromUniformBytes + Compressable + Clone
         self.gi_base_iter().collect()
     }
 
-    /// Return the non-public mask bulletproof generators
-    pub fn gi_base_copied(&self) -> Vec<P> {
-        self.gi_base_iter().cloned().collect()
+    /// Return the interleaved precomputation tables
+    pub fn precomp(&self) -> Arc<P::Precomputation> {
+        // We use shared ownership since precomputation evaluation is an instance method and we don't want to actually
+        // clone
+        Arc::clone(&self.bp_gens.precomp)
     }
 }
 
 impl<P> Debug for RangeParameters<P>
 where
-    P: Compressable + Debug,
+    P: Compressable + Debug + Precomputable,
     P::Compressed: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

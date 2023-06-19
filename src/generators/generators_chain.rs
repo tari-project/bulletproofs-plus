@@ -30,15 +30,6 @@ impl<P> GeneratorsChain<P> {
             _phantom: PhantomData,
         }
     }
-
-    /// Advances the reader n times, squeezing and discarding the result
-    pub(crate) fn fast_forward(mut self, n: usize) -> Self {
-        let mut buf = [0u8; 64];
-        for _ in 0..n {
-            self.reader.read(&mut buf);
-        }
-        self
-    }
 }
 
 impl<P> Default for GeneratorsChain<P> {

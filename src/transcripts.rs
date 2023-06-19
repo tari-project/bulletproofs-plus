@@ -8,7 +8,7 @@ use crate::{
     errors::ProofError,
     protocols::transcript_protocol::TranscriptProtocol,
     range_statement::RangeStatement,
-    traits::{Compressable, FixedBytesRepr},
+    traits::{Compressable, FixedBytesRepr, Precomputable},
 };
 
 // Helper function to construct the initial transcript
@@ -22,7 +22,7 @@ pub(crate) fn transcript_initialize<P>(
     statement: &RangeStatement<P>,
 ) -> Result<(), ProofError>
 where
-    P: Compressable,
+    P: Compressable + Precomputable,
     P::Compressed: FixedBytesRepr + IsIdentity,
 {
     transcript.validate_and_append_point(b"H", h_base_compressed)?;
