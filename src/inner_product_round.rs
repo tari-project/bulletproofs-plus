@@ -183,6 +183,8 @@ where
         } else {
             self.y_powers[n].invert()
         };
+        let a1_offset = a1.iter().map(|s| s * y_n_inverse).collect::<Vec<Scalar>>();
+        let a2_offset = a2.iter().map(|s| s * self.y_powers[n]).collect::<Vec<Scalar>>();
 
         let (mut d_l, mut d_r) = (
             Vec::with_capacity(extension_degree),
@@ -210,32 +212,26 @@ where
         }
 
         // Compute L and R by multi-scalar multiplication
-        let mut li_scalars = Vec::with_capacity(2 * n + 1 + extension_degree);
-        li_scalars.push(c_l);
-        let mut li_points = Vec::with_capacity(2 * n + 1 + extension_degree);
-        li_points.push(self.h_base.clone());
-        let mut ri_scalars = Vec::with_capacity(2 * n + 1 + extension_degree);
-        ri_scalars.push(c_r);
-        let mut ri_points = Vec::with_capacity(2 * n + 1 + extension_degree);
-        ri_points.push(self.h_base.clone());
-        for k in 0..extension_degree {
-            li_scalars.push(d_l[k]);
-            li_points.push(self.g_base[k].clone());
-            ri_scalars.push(d_r[k]);
-            ri_points.push(self.g_base[k].clone());
-        }
-        for i in 0..n {
-            li_scalars.push(a1[i] * y_n_inverse);
-            li_points.push(gi_base_hi[i].clone());
-            li_scalars.push(b2[i]);
-            li_points.push(hi_base_lo[i].clone());
-            ri_scalars.push(a2[i] * self.y_powers[n]);
-            ri_points.push(gi_base_lo[i].clone());
-            ri_scalars.push(b1[i]);
-            ri_points.push(hi_base_hi[i].clone());
-        }
-        self.li.push(P::vartime_multiscalar_mul(li_scalars, li_points));
-        self.ri.push(P::vartime_multiscalar_mul(ri_scalars, ri_points));
+        self.li.push(P::vartime_multiscalar_mul(
+            std::iter::once(&c_l)
+                .chain(d_l.iter())
+                .chain(a1_offset.iter())
+                .chain(b2.iter()),
+            std::iter::once(&self.h_base)
+                .chain(self.g_base.iter())
+                .chain(gi_base_hi)
+                .chain(hi_base_lo),
+        ));
+        self.ri.push(P::vartime_multiscalar_mul(
+            std::iter::once(&c_r)
+                .chain(d_r.iter())
+                .chain(a2_offset.iter())
+                .chain(b1.iter()),
+            std::iter::once(&self.h_base)
+                .chain(self.g_base.iter())
+                .chain(gi_base_lo)
+                .chain(hi_base_hi),
+        ));
 
         let e = transcripts::transcript_points_l_r_challenge_e(
             &mut self.transcript,
@@ -255,7 +251,7 @@ where
 
         self.ai = Scalar::add_scalar_vectors(
             Scalar::mul_scalar_vec_with_scalar(a1, &e)?.as_slice(),
-            Scalar::mul_scalar_vec_with_scalar(a2, &(self.y_powers[n] * e_inverse))?.as_slice(),
+            Scalar::mul_scalar_vec_with_scalar(&a2_offset, &e_inverse)?.as_slice(),
         )?;
         self.bi = Scalar::add_scalar_vectors(
             Scalar::mul_scalar_vec_with_scalar(b1, &e_inverse)?.as_slice(),
