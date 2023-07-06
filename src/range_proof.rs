@@ -700,9 +700,9 @@ where
             dynamic_points.push(a);
 
             dynamic_scalars.extend(challenges_sq.into_iter().map(|c| weight * -e_square * c));
-            dynamic_points.extend(li.into_iter());
+            dynamic_points.extend(li);
             dynamic_scalars.extend(challenges_sq_inv.into_iter().map(|c| weight * -e_square * c));
-            dynamic_points.extend(ri.into_iter());
+            dynamic_points.extend(ri);
         }
         if extract_masks == VerifyAction::RecoverOnly {
             return Ok(masks);

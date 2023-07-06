@@ -6,7 +6,7 @@
 
 use std::{
     fmt::{Debug, Formatter},
-    sync::Arc,
+    rc::Rc,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -48,7 +48,7 @@ pub struct BulletproofGens<P: Precomputable> {
     /// Precomputed \\(\mathbf H\\) generators for each party.
     pub(crate) h_vec: Vec<Vec<P>>,
     /// Interleaved precomputed generators
-    pub(crate) precomp: Arc<P::Precomputation>,
+    pub(crate) precomp: Rc<P::Precomputation>,
 }
 
 impl<P: FromUniformBytes + Precomputable> BulletproofGens<P> {
@@ -82,7 +82,7 @@ impl<P: FromUniformBytes + Precomputable> BulletproofGens<P> {
         let iter_g_vec = g_vec.iter().flat_map(move |g_j| g_j.iter());
         let iter_h_vec = h_vec.iter().flat_map(move |h_j| h_j.iter());
         let iter_interleaved = iter_g_vec.interleave(iter_h_vec);
-        let precomp = Arc::new(P::Precomputation::new(iter_interleaved));
+        let precomp = Rc::new(P::Precomputation::new(iter_interleaved));
 
         BulletproofGens {
             gens_capacity,
