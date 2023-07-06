@@ -176,7 +176,7 @@ where
         let gi_base_hi = &self.gi_base[n..];
         let hi_base_lo = &self.hi_base[..n];
         let hi_base_hi = &self.hi_base[n..];
-        let y_n_inverse = if self.y_powers[n] == Scalar::zero() {
+        let y_n_inverse = if self.y_powers[n] == Scalar::ZERO {
             return Err(ProofError::InvalidArgument(
                 "Cannot invert a zero valued Scalar".to_string(),
             ));
@@ -204,8 +204,8 @@ where
         };
         self.round += 1;
 
-        let mut c_l = Scalar::zero();
-        let mut c_r = Scalar::zero();
+        let mut c_l = Scalar::ZERO;
+        let mut c_r = Scalar::ZERO;
         for i in 0..n {
             c_l += a1[i] * self.y_powers[i + 1] * b2[i];
             c_r += a2[i] * self.y_powers[n + i + 1] * b1[i];

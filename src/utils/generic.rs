@@ -78,9 +78,9 @@ pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar
     let mut result = Vec::with_capacity(bit_length);
     for i in 0..bit_length {
         if (value >> i) & 1 == 0 {
-            result.push(Scalar::zero());
+            result.push(Scalar::ZERO);
         } else {
-            result.push(Scalar::one());
+            result.push(Scalar::ONE);
         }
     }
     Ok(result)
@@ -214,7 +214,7 @@ mod tests {
         }
         let mut result = 0u128;
         for i in 0..bit_vector.len() as u128 {
-            if bit_vector[i as usize] == Scalar::one() {
+            if bit_vector[i as usize] == Scalar::ONE {
                 result += 1 << i;
             }
         }

@@ -156,7 +156,7 @@ fn prove_and_verify(
     let transcript_label: &'static str = "BatchedRangeProofTest";
 
     for bit_length in bit_lengths {
-        // 0.  Batch data
+        // 0. Batch data
         let mut private_masks: Vec<Option<ExtendedMask>> = vec![];
         let mut public_masks = vec![];
         let mut statements_private = vec![];
@@ -175,7 +175,7 @@ fn prove_and_verify(
             let mut commitments = vec![];
             let mut minimum_values = vec![];
             for m in 0..*aggregation_size {
-                let value = rng.gen_range(value_min, value_max);
+                let value = rng.gen_range(value_min..=value_max);
                 let minimum_value = match promise_strategy {
                     ProofOfMinimumValueStrategy::NoOffset => None,
                     ProofOfMinimumValueStrategy::Intermediate => Some(value / 3),
@@ -293,7 +293,7 @@ fn prove_and_verify(
                         commitments: statement.commitments.clone(),
                         commitments_compressed: statement.commitments_compressed.clone(),
                         minimum_value_promises: statement.minimum_value_promises.clone(),
-                        seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::one()),
+                        seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::ONE),
                     });
                 }
                 let recovered_private_masks_changed = RistrettoRangeProof::verify_batch(
