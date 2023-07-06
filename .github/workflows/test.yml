@@ -45,7 +45,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --features u64_backend
+          args: --all-features
       - name: bench
         uses: actions-rs/cargo@v1
         with:
