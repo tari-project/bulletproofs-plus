@@ -17,6 +17,7 @@ pub enum ProofError {
     /// Invalid array/vector length error
     #[error("Invalid array/vector length error: `{0}`")]
     InvalidLength(String),
+    /// Invalid `Blake2b` hash operation
     #[error("Invalid Blake2b")]
     InvalidBlake2b,
 }
