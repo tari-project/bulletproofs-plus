@@ -15,7 +15,7 @@ use core::{
 };
 use std::convert::TryFrom;
 
-use blake2::Blake2b;
+use blake2::Blake2bMac512;
 use curve25519_dalek::scalar::Scalar;
 
 use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::MAX_RANGE_PROOF_BIT_LENGTH};
@@ -58,7 +58,8 @@ pub fn nonce(
         key.append(&mut b"k".to_vec()); // Domain separated index label (1 byte)
         key.append(&mut encode_usize(index)?); // Fixed length encoding of 'index_k' (4 bytes)
     }
-    let hasher = Blake2b::with_params(&key, &[], encoded_label);
+    let hasher =
+        Blake2bMac512::new_with_salt_and_personal(&key, &[], encoded_label).map_err(|_| ProofError::InvalidBlake2b)?;
 
     Ok(Scalar::from_hasher_blake2b(hasher))
 }

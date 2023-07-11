@@ -7,26 +7,26 @@ license = "BSD-3-Clause"
 description = "A smaller faster implementation of Bulletproofs"
 
 [dependencies]
-blake2 = "0.9.1"
+blake2 = "0.10"
 byteorder = { version = "1", default-features = false }
 curve25519-dalek = { git = "https://github.com/AaronFeickert/curve25519-dalek.git", branch = "upstream-partial-precomp", features = ["serde", "rand_core"] } # TODO: change when updated upstream
-derive_more = "0.99.17"
-derivative = "2.2.0"
-digest = { version = "0.9.0", default-features = false }
-itertools = "0.6.0"
-lazy_static = "1.4.0"
-merlin = { version = "2", default-features = false }
+derive_more = "0.99"
+derivative = "2.2"
+digest = { version = "0.10", default-features = false }
+itertools = "0.6"
+lazy_static = "1.4"
+merlin = { version = "3", default-features = false }
 rand = "0.8"
 # Note: toolchain must be at v1.60+ to support serde v1.0.150+
-serde = "1.0.150"
-sha3 = { version = "0.9.1", default-features = false }
+serde = "1.0"
+sha3 = { version = "0.10", default-features = false }
 thiserror = { version = "1" }
 zeroize = "1"
 rand_core = "0.6"
 
 [dev-dependencies]
 bincode = "1"
-criterion = "0.3"
+criterion = "0.5"
 
 [[bench]]
 name = "range_proof"

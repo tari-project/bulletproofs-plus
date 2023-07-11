@@ -3,9 +3,9 @@
 
 //! Bulletproofs+ `ScalarProtocol` trait for using a Scalar
 
-use blake2::Blake2b;
+use blake2::Blake2bMac512;
 use curve25519_dalek::scalar::Scalar;
-use digest::Digest;
+use digest::FixedOutput;
 use rand::{CryptoRng, RngCore};
 
 use crate::errors::ProofError;
@@ -16,7 +16,7 @@ pub trait ScalarProtocol {
     fn random_not_zero<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar;
 
     /// Construct a scalar from an existing Blake2b instance (helper function to implement 'Scalar::from_hash<Blake2b>')
-    fn from_hasher_blake2b(hasher: Blake2b) -> Scalar;
+    fn from_hasher_blake2b(hasher: Blake2bMac512) -> Scalar;
 
     /// Helper function to multiply one scalar vector with another scalar vector
     fn mul_scalar_vec_with_scalar(scalar_vec: &[Scalar], scalar: &Scalar) -> Result<Vec<Scalar>, ProofError>;
@@ -37,9 +37,9 @@ impl ScalarProtocol for Scalar {
         }
     }
 
-    fn from_hasher_blake2b(hasher: Blake2b) -> Scalar {
+    fn from_hasher_blake2b(hasher: Blake2bMac512) -> Scalar {
         let mut output = [0u8; 64];
-        output.copy_from_slice(hasher.finalize().as_slice());
+        output.copy_from_slice(hasher.finalize_fixed().as_slice());
         Scalar::from_bytes_mod_order_wide(&output)
     }
 
