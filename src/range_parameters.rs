@@ -5,7 +5,7 @@
 
 use std::{
     fmt::{Debug, Formatter},
-    sync::Arc,
+    rc::Rc,
 };
 
 use crate::{
@@ -121,10 +121,10 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
     }
 
     /// Return the interleaved precomputation tables
-    pub fn precomp(&self) -> Arc<P::Precomputation> {
+    pub fn precomp(&self) -> Rc<P::Precomputation> {
         // We use shared ownership since precomputation evaluation is an instance method and we don't want to actually
         // clone
-        Arc::clone(&self.bp_gens.precomp)
+        Rc::clone(&self.bp_gens.precomp)
     }
 }
 

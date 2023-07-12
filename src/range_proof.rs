@@ -247,7 +247,7 @@ where
             };
             for bit_field in bit_vector.clone() {
                 a_li.push(bit_field);
-                a_ri.push(bit_field - Scalar::one());
+                a_ri.push(bit_field - Scalar::ONE);
             }
         }
 
@@ -274,7 +274,7 @@ where
 
         // Compute powers of the challenge
         let mut y_powers = Vec::with_capacity(aggregation_factor * bit_length + 2);
-        y_powers.push(Scalar::one());
+        y_powers.push(Scalar::ONE);
         for _ in 1..(aggregation_factor * bit_length + 2) {
             y_powers.push(y_powers[y_powers.len() - 1] * y);
         }
@@ -300,7 +300,7 @@ where
             *item += d[i] * y_powers[bit_length * aggregation_factor - i] + z;
         }
         let mut alpha1 = alpha;
-        let mut z_even_powers = Scalar::one();
+        let mut z_even_powers = Scalar::ONE;
         for j in 0..aggregation_factor {
             z_even_powers *= z_square;
             for (k, alpha1_val) in alpha1.iter_mut().enumerate().take(extension_degree) {
@@ -495,13 +495,13 @@ where
         for _ in 0..log_n {
             two_n_minus_one = two_n_minus_one * two_n_minus_one;
         }
-        two_n_minus_one -= Scalar::one();
+        two_n_minus_one -= Scalar::ONE;
 
         // Weighted coefficients for common generators
-        let mut g_base_scalars = vec![Scalar::zero(); extension_degree];
-        let mut h_base_scalar = Scalar::zero();
-        let mut gi_base_scalars = vec![Scalar::zero(); max_mn];
-        let mut hi_base_scalars = vec![Scalar::zero(); max_mn];
+        let mut g_base_scalars = vec![Scalar::ZERO; extension_degree];
+        let mut h_base_scalar = Scalar::ZERO;
+        let mut gi_base_scalars = vec![Scalar::ZERO; max_mn];
+        let mut hi_base_scalars = vec![Scalar::ZERO; max_mn];
 
         // Final multiscalar multiplication data
         // Because we use precomputation on the generator vectors, we need to separate the static data from the dynamic
@@ -594,7 +594,7 @@ where
                 challenges_sq_inv.push(challenges_inv[i] * challenges_inv[i]);
             }
             let y_nm_1 = y_nm * y;
-            let mut y_sum = Scalar::zero();
+            let mut y_sum = Scalar::ZERO;
             let mut y_sum_temp = y;
             for _ in 0..bit_length * aggregation_factor {
                 y_sum += y_sum_temp;
@@ -654,7 +654,7 @@ where
             }
 
             // Aggregate the generator scalars
-            let mut y_inv_i = Scalar::one();
+            let mut y_inv_i = Scalar::ONE;
             let mut y_nm_i = y_nm;
 
             let mut s = Vec::with_capacity(gen_length);
@@ -676,7 +676,7 @@ where
             }
 
             // Remaining terms
-            let mut z_even_powers = Scalar::one();
+            let mut z_even_powers = Scalar::ONE;
             for minimum_value_promise in minimum_value_promises {
                 z_even_powers *= z_square;
                 let weighted = weight * (-e_square * z_even_powers * y_nm_1);
@@ -700,9 +700,9 @@ where
             dynamic_points.push(a);
 
             dynamic_scalars.extend(challenges_sq.into_iter().map(|c| weight * -e_square * c));
-            dynamic_points.extend(li.into_iter());
+            dynamic_points.extend(li);
             dynamic_scalars.extend(challenges_sq_inv.into_iter().map(|c| weight * -e_square * c));
-            dynamic_points.extend(ri.into_iter());
+            dynamic_points.extend(ri);
         }
         if extract_masks == VerifyAction::RecoverOnly {
             return Ok(masks);
@@ -866,14 +866,17 @@ where
         let a = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos..]));
         let a1 = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 32..]));
         let b = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 64..]));
-        let r1 = Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 96..]))
+        let r1 = Option::from(Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 96..])))
             .ok_or_else(|| ProofError::InvalidArgument("r1 bytes not a canonical byte representation".to_string()))?;
-        let s1 = Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 128..]))
+        let s1 = Option::from(Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 128..])))
             .ok_or_else(|| ProofError::InvalidArgument("s1 bytes not a canonical byte representation".to_string()))?;
         let mut d1 = Vec::with_capacity(extension_degree as usize);
         for i in 0..extension_degree as usize {
             d1.push(
-                Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 160 + i * 32..])).ok_or_else(|| {
+                Option::from(Scalar::from_canonical_bytes(read_32_bytes(
+                    &slice[pos + 160 + i * 32..],
+                )))
+                .ok_or_else(|| {
                     ProofError::InvalidArgument("d1 bytes not a canonical byte representation".to_string())
                 })?,
             );
@@ -955,7 +958,7 @@ mod tests {
     #[test]
     fn test_from_bytes() {
         assert!((RistrettoRangeProof::from_bytes(&[])).is_err());
-        assert!((RistrettoRangeProof::from_bytes(Scalar::zero().as_bytes().as_slice())).is_err());
+        assert!((RistrettoRangeProof::from_bytes(Scalar::ZERO.as_bytes().as_slice())).is_err());
         let proof = RistrettoRangeProof {
             a: Default::default(),
             a1: Default::default(),

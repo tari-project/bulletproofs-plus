@@ -6,15 +6,15 @@
 
 use std::marker::PhantomData;
 
-use digest::{ExtendableOutputDirty, Update, XofReader};
-use sha3::{Sha3XofReader, Shake256};
+use digest::{core_api::XofReaderCoreWrapper, ExtendableOutput, Update, XofReader};
+use sha3::{Shake256, Shake256ReaderCore};
 
 use crate::traits::FromUniformBytes;
 
 /// The `GeneratorsChain` creates an arbitrary-long sequence of orthogonal generators.  The sequence can be
 /// deterministically produced starting with an arbitrary point.
 pub struct GeneratorsChain<P> {
-    reader: Sha3XofReader,
+    reader: XofReaderCoreWrapper<Shake256ReaderCore>,
     _phantom: PhantomData<P>,
 }
 
@@ -26,7 +26,7 @@ impl<P> GeneratorsChain<P> {
         shake.update(label);
 
         GeneratorsChain {
-            reader: shake.finalize_xof_dirty(),
+            reader: shake.finalize_xof(),
             _phantom: PhantomData,
         }
     }

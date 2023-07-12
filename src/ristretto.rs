@@ -220,7 +220,7 @@ mod tests {
     fn test_commitments() {
         let mut rng = rand::thread_rng();
         let value = Scalar::random_not_zero(&mut rng);
-        let blindings = vec![
+        let blindings = [
             Scalar::random_not_zero(&mut rng),
             Scalar::random_not_zero(&mut rng),
             Scalar::random_not_zero(&mut rng),

@@ -15,7 +15,7 @@ use core::{
 };
 use std::convert::TryFrom;
 
-use blake2::Blake2b;
+use blake2::Blake2bMac512;
 use curve25519_dalek::scalar::Scalar;
 
 use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::MAX_RANGE_PROOF_BIT_LENGTH};
@@ -58,7 +58,8 @@ pub fn nonce(
         key.append(&mut b"k".to_vec()); // Domain separated index label (1 byte)
         key.append(&mut encode_usize(index)?); // Fixed length encoding of 'index_k' (4 bytes)
     }
-    let hasher = Blake2b::with_params(&key, &[], encoded_label);
+    let hasher =
+        Blake2bMac512::new_with_salt_and_personal(&key, &[], encoded_label).map_err(|_| ProofError::InvalidBlake2b)?;
 
     Ok(Scalar::from_hasher_blake2b(hasher))
 }
@@ -78,9 +79,9 @@ pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar
     let mut result = Vec::with_capacity(bit_length);
     for i in 0..bit_length {
         if (value >> i) & 1 == 0 {
-            result.push(Scalar::zero());
+            result.push(Scalar::ZERO);
         } else {
-            result.push(Scalar::one());
+            result.push(Scalar::ONE);
         }
     }
     Ok(result)
@@ -214,7 +215,7 @@ mod tests {
         }
         let mut result = 0u128;
         for i in 0..bit_vector.len() as u128 {
-            if bit_vector[i as usize] == Scalar::one() {
+            if bit_vector[i as usize] == Scalar::ONE {
                 result += 1 << i;
             }
         }
