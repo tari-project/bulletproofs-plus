@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.0](https://github.com/tari-project/bulletproofs-plus/compare/v0.2.3...v0.3.0) (2023-07-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* Changes the way that seed nonces are used in mask
+recovery. Existing range proofs will verify, but will fail to recover
+the correct mask.
+
+### Features
+
+* simplify bit vector commitment ([#35](https://github.com/tari-project/bulletproofs-plus/issues/35)) ([f831d64](https://github.com/tari-project/bulletproofs-plus/commit/f831d64c1bc559c1603d375eae4b2c5b438a1c8b)), closes [/github.com/tari-project/bulletproofs-plus/blob/cd7588ee8eaebe862fe9cf5d7c3fd92981703e87/src/range_proof.rs#L265-L273](https://github.com/tari-project//github.com/tari-project/bulletproofs-plus/blob/cd7588ee8eaebe862fe9cf5d7c3fd92981703e87/src/range_proof.rs/issues/L265-L273)
+* use precomputation on (most) fixed generators ([#19](https://github.com/tari-project/bulletproofs-plus/issues/19)) ([cd7588e](https://github.com/tari-project/bulletproofs-plus/commit/cd7588ee8eaebe862fe9cf5d7c3fd92981703e87)), closes [#18](https://github.com/tari-project/bulletproofs-plus/issues/18)
+
+
+### Bug Fixes
+
+* nonce index encoding ([#31](https://github.com/tari-project/bulletproofs-plus/issues/31)) ([394843f](https://github.com/tari-project/bulletproofs-plus/commit/394843fd84ed10fe240f8625b855ced4e953cb69))
+
 ### [0.2.3](https://github.com/tari-project/bulletproofs-plus/compare/v0.2.2...v0.2.3) (2023-04-03)
 
 ### [0.2.2](https://github.com/tari-project/bulletproofs-plus/compare/v0.2.1...v0.2.2) (2023-04-03)
