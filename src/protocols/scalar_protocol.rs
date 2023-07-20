@@ -29,12 +29,12 @@ impl ScalarProtocol for Scalar {
     // 'Scalar::random(rng)' in most cases will not return zero due to the intent of the implementation, but this is
     // not guaranteed. This function makes it clear that zero will never be returned
     fn random_not_zero<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
-        loop {
-            let value = Scalar::random(rng);
-            if value != Scalar::ZERO {
-                return value;
-            }
+        let mut value = Scalar::ZERO;
+        while value == Scalar::ZERO {
+            value = Scalar::random(rng);
         }
+
+        value
     }
 
     fn from_hasher_blake2b(hasher: Blake2bMac512) -> Scalar {
@@ -65,5 +65,30 @@ impl ScalarProtocol for Scalar {
             out[i] = a[i] + b[i];
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use curve25519_dalek::Scalar;
+    use rand_core::OsRng;
+
+    use super::*;
+
+    #[test]
+    fn test_errors() {
+        // Empty scalar vector
+        assert!(Scalar::mul_scalar_vec_with_scalar(&[], &Scalar::ONE).is_err());
+
+        // Mismatched vector lengths
+        assert!(Scalar::add_scalar_vectors(&[Scalar::ONE], &[]).is_err());
+
+        // Empty scalar vector
+        assert!(Scalar::add_scalar_vectors(&[], &[]).is_err());
+    }
+
+    #[test]
+    fn test_nonzero() {
+        assert_ne!(Scalar::random_not_zero(&mut OsRng), Scalar::ZERO);
     }
 }
