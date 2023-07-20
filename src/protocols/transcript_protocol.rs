@@ -16,9 +16,6 @@ pub trait TranscriptProtocol {
     /// Append a domain separator for the range proof with the given `label` and `message`.
     fn domain_separator(&mut self, label: &'static [u8], message: &[u8]);
 
-    /// Append a `scalar` with the given `label`.
-    fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar);
-
     /// Append a `point` with the given `label`.
     fn append_point<P: FixedBytesRepr>(&mut self, label: &'static [u8], point: &P);
 
@@ -37,10 +34,6 @@ pub trait TranscriptProtocol {
 impl TranscriptProtocol for Transcript {
     fn domain_separator(&mut self, label: &'static [u8], message: &[u8]) {
         self.append_message(label, message);
-    }
-
-    fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar) {
-        self.append_message(label, scalar.as_bytes());
     }
 
     fn append_point<P: FixedBytesRepr>(&mut self, label: &'static [u8], point: &P) {
@@ -73,5 +66,21 @@ impl TranscriptProtocol for Transcript {
         } else {
             Ok(value)
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use curve25519_dalek::RistrettoPoint;
+    use merlin::Transcript;
+
+    use super::*;
+
+    #[test]
+    fn test_identity_point() {
+        let mut transcript = Transcript::new(b"test");
+        assert!(transcript
+            .validate_and_append_point(b"identity", &RistrettoPoint::default().compress())
+            .is_err());
     }
 }
