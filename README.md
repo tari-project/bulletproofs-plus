@@ -25,6 +25,8 @@ As always, your mileage may vary.
 
 This implementation takes its cue from the `dalek-cryptography` [Bulletproofs](https://github.com/dalek-cryptography/bulletproofs) implementation, as well as the Monero [Bulletproofs+](https://www.getmonero.org/2020/12/24/Bulletproofs+-in-Monero.html) implementation.
 
+Several of the features and optimizations used in this implementation are described in [Tari RFC-0181](https://rfc.tari.com/RFC-0181_BulletproofsPlus.html).
+
 ## Copyright
 
 All original source code files are marked with
