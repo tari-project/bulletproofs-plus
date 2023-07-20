@@ -356,3 +356,138 @@ impl<'a, P> Drop for InnerProductRound<'a, P> {
         self.seed_nonce.zeroize();
     }
 }
+
+#[cfg(test)]
+mod test {
+    use curve25519_dalek::RistrettoPoint;
+    use rand_core::OsRng;
+
+    use super::*;
+
+    #[test]
+    fn test_init_errors() {
+        let mut transcript = Transcript::new(b"test");
+        let p = RistrettoPoint::default();
+        let s = Scalar::default();
+
+        // Empty vectors
+        let round = InnerProductRound::init(
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            RistrettoPoint::default(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            &mut transcript,
+            None,
+            1,
+        );
+        round.unwrap_err();
+
+        // Mismatched lengths
+        let round = InnerProductRound::init(
+            vec![p, p],
+            vec![p],
+            Vec::new(),
+            RistrettoPoint::default(),
+            vec![s],
+            vec![s],
+            Vec::new(),
+            vec![s],
+            &mut transcript,
+            None,
+            1,
+        );
+        round.unwrap_err();
+
+        let round = InnerProductRound::init(
+            vec![p],
+            vec![p],
+            Vec::new(),
+            RistrettoPoint::default(),
+            vec![s],
+            vec![s],
+            Vec::new(),
+            vec![s],
+            &mut transcript,
+            None,
+            1,
+        );
+        round.unwrap_err();
+
+        // Extension degree
+        let round = InnerProductRound::init(
+            vec![p],
+            vec![p],
+            vec![p],
+            RistrettoPoint::default(),
+            vec![s],
+            vec![s],
+            vec![s, s],
+            vec![s, s, s],
+            &mut transcript,
+            None,
+            1,
+        );
+        round.unwrap_err();
+    }
+
+    #[test]
+    fn test_inversion() {
+        let mut transcript = Transcript::new(b"test");
+        let p = RistrettoPoint::default();
+        let s = Scalar::default();
+        let mut rng = OsRng;
+
+        // Fail an inversion
+        let mut round = InnerProductRound::init(
+            vec![p, p],
+            vec![p, p],
+            vec![p],
+            RistrettoPoint::default(),
+            vec![s, s],
+            vec![s, s],
+            vec![s],
+            vec![s, s, s, s],
+            &mut transcript,
+            None,
+            1,
+        )
+        .unwrap();
+        round.inner_product(&mut rng).unwrap_err();
+    }
+
+    #[test]
+    fn test_getters() {
+        let mut transcript = Transcript::new(b"test");
+        let p = RistrettoPoint::default();
+        let s = Scalar::default();
+
+        // Set up a valid round initialization
+        let round = InnerProductRound::init(
+            vec![p, p],
+            vec![p, p],
+            vec![p],
+            RistrettoPoint::default(),
+            vec![s, s],
+            vec![s, s],
+            vec![s],
+            vec![s, s, s, s],
+            &mut transcript,
+            None,
+            1,
+        )
+        .unwrap();
+
+        // Each getter should fail, since we haven't actually done a round yet
+        round.a1_compressed().unwrap_err();
+        round.b_compressed().unwrap_err();
+        round.r1().unwrap_err();
+        round.s1().unwrap_err();
+        round.d1().unwrap_err();
+        round.li_compressed().unwrap_err();
+        round.ri_compressed().unwrap_err();
+    }
+}
