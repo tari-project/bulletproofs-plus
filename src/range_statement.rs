@@ -77,3 +77,40 @@ impl<P: Compressable + Precomputable> Drop for RangeStatement<P> {
         self.seed_nonce.zeroize();
     }
 }
+
+#[cfg(test)]
+mod test {
+    use curve25519_dalek::RistrettoPoint;
+
+    use super::*;
+    use crate::{
+        generators::pedersen_gens::ExtensionDegree,
+        range_parameters::RangeParameters,
+        ristretto::create_pedersen_gens_with_extension_degree,
+    };
+
+    #[test]
+    fn test_init_errors() {
+        let p = RistrettoPoint::default();
+
+        // Set up parameters
+        let params = RangeParameters::init(
+            64,
+            2,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+
+        // Commitment vector length must be a power of two
+        assert!(RangeStatement::init(params.clone(), vec![p; 3], vec![], None,).is_err());
+
+        // Promises must match commitments in length
+        assert!(RangeStatement::init(params.clone(), vec![p; 2], vec![None], None,).is_err());
+
+        // Need enough generators for the commitments
+        assert!(RangeStatement::init(params.clone(), vec![p; 4], vec![None; 4], None,).is_err());
+
+        // Rewinding isn't supported for nontrivial aggregation
+        assert!(RangeStatement::init(params.clone(), vec![p; 2], vec![None; 2], Some(Scalar::ONE),).is_err());
+    }
+}
