@@ -951,9 +951,16 @@ where
 mod tests {
     use std::convert::TryFrom;
 
-    use curve25519_dalek::{ristretto::CompressedRistretto, scalar::Scalar};
+    use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 
-    use crate::{generators::pedersen_gens::ExtensionDegree, ristretto::RistrettoRangeProof};
+    use super::*;
+    use crate::{
+        commitment_opening::CommitmentOpening,
+        generators::pedersen_gens::ExtensionDegree,
+        range_parameters::RangeParameters,
+        ristretto::{create_pedersen_gens_with_extension_degree, RistrettoRangeProof},
+        BulletproofGens,
+    };
 
     #[test]
     fn test_from_bytes() {
@@ -1062,5 +1069,263 @@ mod tests {
                 panic!("Should err");
             }
         }
+    }
+
+    #[test]
+    fn test_consistency_errors() {
+        // Generate two proofs
+        let params = RangeParameters::init(
+            4,
+            1,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+        let mut witnesses = Vec::new();
+        let mut statements = Vec::new();
+        let mut proofs = Vec::new();
+        for _ in 0..2 {
+            witnesses.push(RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap());
+            statements.push(
+                RangeStatement::init(
+                    params.clone(),
+                    vec![params.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+                    vec![None],
+                    None,
+                )
+                .unwrap(),
+            );
+            proofs.push(RangeProof::prove("test", statements.last().unwrap(), witnesses.last().unwrap()).unwrap());
+        }
+
+        // Empty vectors
+        assert!(RangeProof::verify_statements_and_generators_consistency(&[], &proofs).is_err());
+        assert!(RangeProof::verify_statements_and_generators_consistency(&statements, &[]).is_err());
+
+        // Vector length mismatch
+        assert!(RangeProof::verify_statements_and_generators_consistency(&statements, &proofs[..1]).is_err());
+
+        // Make the first statement's extension degree mismatch against the corresponding proof
+        let params_mismatch = RangeParameters::init(
+            4,
+            1,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::AddOneBasePoint),
+        )
+        .unwrap();
+        let statement_mismatch = RangeStatement::init(
+            params_mismatch.clone(),
+            vec![params_mismatch.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::verify_statements_and_generators_consistency(&[statement_mismatch], &proofs[..1]).is_err());
+
+        // Make the second statement's `g_base_vec` mismatch against the first statement
+        let mut gens_mismatch = create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen);
+        gens_mismatch.g_base_vec[0] = RistrettoPoint::default();
+        let params_mismatch = RangeParameters::init(4, 1, gens_mismatch).unwrap();
+        let statement_mismatch = RangeStatement::init(
+            params_mismatch.clone(),
+            vec![params_mismatch.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::verify_statements_and_generators_consistency(
+            &[statements[0].clone(), statement_mismatch],
+            &proofs
+        )
+        .is_err());
+
+        // Make the second statement's `h_base` mismatch against the first statement
+        let mut gens_mismatch = create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen);
+        gens_mismatch.h_base = RistrettoPoint::default();
+        let params_mismatch = RangeParameters::init(4, 1, gens_mismatch).unwrap();
+        let statement_mismatch = RangeStatement::init(
+            params_mismatch.clone(),
+            vec![params_mismatch.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::verify_statements_and_generators_consistency(
+            &[statements[0].clone(), statement_mismatch],
+            &proofs
+        )
+        .is_err());
+
+        // Make the second statement's bit length mismatch against the first statement
+        let params_mismatch = RangeParameters::init(
+            2,
+            1,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+        let statement_mismatch = RangeStatement::init(
+            params_mismatch.clone(),
+            vec![params_mismatch.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::verify_statements_and_generators_consistency(
+            &[statements[0].clone(), statement_mismatch],
+            &proofs
+        )
+        .is_err());
+
+        // Make the second statement's extension degree mismatch against the first statement
+        let mut gens_mismatch = create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen);
+        gens_mismatch.extension_degree = ExtensionDegree::AddOneBasePoint;
+        let params_mismatch = RangeParameters::init(4, 1, gens_mismatch).unwrap();
+        let statement_mismatch = RangeStatement::init(
+            params_mismatch.clone(),
+            vec![params_mismatch.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::verify_statements_and_generators_consistency(
+            &[statements[0].clone(), statement_mismatch],
+            &proofs
+        )
+        .is_err());
+
+        // Use a minimum value promise exceeding the bit length
+        let statement_invalid = RangeStatement::init(
+            params.clone(),
+            vec![params.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![Some(1 << 4)],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::verify_statements_and_generators_consistency(
+            &[statements[0].clone(), statement_invalid],
+            &proofs
+        )
+        .is_err());
+
+        // Make the second statement's `gi_base` mismatch against the first statement
+        let mut gens_mismatch = BulletproofGens::new(4, 1);
+        gens_mismatch.g_vec[0][0] = RistrettoPoint::default();
+        let params_mismatch = RangeParameters {
+            bp_gens: gens_mismatch,
+            pc_gens: create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        };
+        let statement_mismatch = RangeStatement::init(
+            params_mismatch.clone(),
+            vec![params_mismatch.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::verify_statements_and_generators_consistency(
+            &[statements[0].clone(), statement_mismatch],
+            &proofs
+        )
+        .is_err());
+
+        // Make the second statement's `hi_base` mismatch against the first statement
+        let mut gens_mismatch = BulletproofGens::new(4, 1);
+        gens_mismatch.h_vec[0][0] = RistrettoPoint::default();
+        let params_mismatch = RangeParameters {
+            bp_gens: gens_mismatch,
+            pc_gens: create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        };
+        let statement_mismatch = RangeStatement::init(
+            params_mismatch.clone(),
+            vec![params_mismatch.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::verify_statements_and_generators_consistency(
+            &[statements[0].clone(), statement_mismatch],
+            &proofs
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_getters() {
+        // Generate a valid proof
+        let params = RangeParameters::init(
+            4,
+            1,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        let mut proof = RangeProof::prove("test", &statement, &witness).unwrap();
+
+        // Mutate proof elements
+        let mut bytes = [0u8; 32];
+        bytes[0] = 1;
+
+        proof.a = CompressedRistretto::from_fixed_bytes(bytes);
+        assert!(proof.a_decompressed().is_err());
+
+        proof.a1 = CompressedRistretto::from_fixed_bytes(bytes);
+        assert!(proof.a1_decompressed().is_err());
+
+        proof.b = CompressedRistretto::from_fixed_bytes(bytes);
+        assert!(proof.b_decompressed().is_err());
+
+        // Mutate proof vectors
+        proof.li[0] = CompressedRistretto::from_fixed_bytes(bytes);
+        assert!(proof.li_decompressed().is_err());
+        proof.li.clear();
+        assert!(proof.li_decompressed().is_err());
+        assert!(proof.li().is_err());
+
+        proof.ri[0] = CompressedRistretto::from_fixed_bytes(bytes);
+        assert!(proof.ri_decompressed().is_err());
+        proof.ri.clear();
+        assert!(proof.ri_decompressed().is_err());
+        assert!(proof.ri().is_err());
+    }
+
+    #[test]
+    fn test_extension_degree_from_proof_bytes() {
+        assert!(RangeProof::<RistrettoPoint>::extension_degree_from_proof_bytes(&[]).is_err());
+        assert!(RangeProof::<RistrettoPoint>::extension_degree_from_proof_bytes(&[0u8; 32]).is_err());
+    }
+
+    #[test]
+    fn test_verify_errors() {
+        // Generate a valid proof
+        let params = RangeParameters::init(
+            4,
+            1,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        let mut proof = RangeProof::prove("test", &statement, &witness).unwrap();
+
+        // Empty statement and proof vectors
+        assert!(RangeProof::verify_batch("test", &[], &[proof.clone()], VerifyAction::VerifyOnly).is_err());
+        assert!(RangeProof::verify_batch("test", &[statement.clone()], &[], VerifyAction::VerifyOnly).is_err());
+
+        // Proof vector mismatches
+        proof.li.pop();
+        assert!(RangeProof::verify("test", &[statement.clone()], &[proof.clone()], VerifyAction::VerifyOnly).is_err());
+
+        proof.ri.pop();
+        assert!(RangeProof::verify("test", &[statement], &[proof], VerifyAction::VerifyOnly).is_err());
     }
 }

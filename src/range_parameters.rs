@@ -22,9 +22,9 @@ use crate::{
 #[derive(Clone)]
 pub struct RangeParameters<P: Compressable + Precomputable> {
     /// Generators needed for aggregating up to `m` range proofs of up to `n` bits each.
-    bp_gens: BulletproofGens<P>,
+    pub(crate) bp_gens: BulletproofGens<P>,
     /// The pair of base points for Pedersen commitments.
-    pc_gens: PedersenGens<P>,
+    pub(crate) pc_gens: PedersenGens<P>,
 }
 
 impl<P> RangeParameters<P>
