@@ -42,7 +42,7 @@ impl<P: Compressable + FromUniformBytes + Clone + Precomputable> RangeStatement<
                 "Number of commitments must be a power of two".to_string(),
             ));
         }
-        if !minimum_value_promises.len() == commitments.len() {
+        if minimum_value_promises.len() != commitments.len() {
             return Err(ProofError::InvalidArgument(
                 "Incorrect number of minimum value promises".to_string(),
             ));
