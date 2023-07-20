@@ -280,7 +280,7 @@ where
         }
 
         // Compute d efficiently
-        let mut d = Vec::with_capacity(bit_length + bit_length * aggregation_factor);
+        let mut d = Vec::with_capacity(bit_length * aggregation_factor);
         d.push(z_square);
         let two = Scalar::from(2u8);
         for i in 1..bit_length {
@@ -602,7 +602,7 @@ where
             }
 
             // Compute d efficiently
-            let mut d = Vec::with_capacity(bit_length + bit_length * aggregation_factor);
+            let mut d = Vec::with_capacity(bit_length * aggregation_factor);
             d.push(z_square);
             for i in 1..bit_length {
                 d.push(two * d[i - 1]);
