@@ -55,11 +55,6 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
         })
     }
 
-    /// Return a reference to the non-public bulletproof generators
-    pub fn bp_gens(&self) -> &BulletproofGens<P> {
-        &self.bp_gens
-    }
-
     /// Return a reference to the non-public base point generators
     pub fn pc_gens(&self) -> &PedersenGens<P> {
         &self.pc_gens
@@ -136,5 +131,26 @@ where
             .field("pc_gens", &self.pc_gens)
             .field("bp_gens", &self.bp_gens)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::ristretto::create_pedersen_gens_with_extension_degree;
+
+    #[test]
+    fn test_init_errors() {
+        // Create some generators
+        let gens = create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen);
+
+        // Aggregation factor must be a power of two
+        RangeParameters::init(64, 3, gens.clone()).unwrap_err();
+
+        // Bit length must be a power of two
+        RangeParameters::init(3, 4, gens.clone()).unwrap_err();
+
+        // Bit length cannot be too large
+        RangeParameters::init(2 * MAX_RANGE_PROOF_BIT_LENGTH, 4, gens.clone()).unwrap_err();
     }
 }
