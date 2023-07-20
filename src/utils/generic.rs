@@ -224,48 +224,22 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::match_wild_err_arm)]
     fn test_bit_vector() {
-        match bit_vector_of_scalars(11, 4) {
-            Ok(values) => {
-                assert_eq!(11, bit_vector_to_value(&values).unwrap());
-            },
-            Err(_) => {
-                panic!("Should not err")
-            },
-        }
-        match bit_vector_of_scalars(15, 4) {
-            Ok(values) => {
-                assert_eq!(15, bit_vector_to_value(&values).unwrap());
-            },
-            Err(_) => {
-                panic!("Should not err")
-            },
-        }
-        if bit_vector_of_scalars(15, 5).is_ok() {
-            panic!("Should panic");
-        }
-        if bit_vector_of_scalars(16, 4).is_ok() {
-            panic!("Should panic");
-        }
-        if bit_vector_of_scalars(0, MAX_RANGE_PROOF_BIT_LENGTH * 2).is_ok() {
-            panic!("Should panic");
-        }
-        match bit_vector_of_scalars(u64::MAX - 12187, MAX_RANGE_PROOF_BIT_LENGTH) {
-            Ok(values) => {
-                assert_eq!(u64::MAX - 12187, bit_vector_to_value(&values).unwrap());
-            },
-            Err(_) => {
-                panic!("Should not err")
-            },
-        }
-        match bit_vector_of_scalars(u64::MAX, MAX_RANGE_PROOF_BIT_LENGTH) {
-            Ok(values) => {
-                assert_eq!(u64::MAX, bit_vector_to_value(&values).unwrap());
-            },
-            Err(_) => {
-                panic!("Should not err")
-            },
-        }
+        // Valid cases
+        assert_eq!(bit_vector_to_value(&bit_vector_of_scalars(11, 4).unwrap()).unwrap(), 11);
+        assert_eq!(bit_vector_to_value(&bit_vector_of_scalars(15, 4).unwrap()).unwrap(), 15);
+        assert_eq!(
+            bit_vector_to_value(&bit_vector_of_scalars(u64::MAX - 12187, MAX_RANGE_PROOF_BIT_LENGTH).unwrap()).unwrap(),
+            u64::MAX - 12187
+        );
+        assert_eq!(
+            bit_vector_to_value(&bit_vector_of_scalars(u64::MAX, MAX_RANGE_PROOF_BIT_LENGTH).unwrap()).unwrap(),
+            u64::MAX
+        );
+
+        // Error cases
+        assert!(bit_vector_of_scalars(15, 5).is_err());
+        assert!(bit_vector_of_scalars(16, 4).is_err());
+        assert!(bit_vector_of_scalars(0, MAX_RANGE_PROOF_BIT_LENGTH * 2).is_err());
     }
 }
