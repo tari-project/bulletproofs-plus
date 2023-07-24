@@ -94,7 +94,7 @@ const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
 /// let bit_length = 64; // Other powers of two are permissible up to 2^6 = 64
 ///
 /// // 0.  Batch data
-/// let proof_batch = vec![1, 2, 1, 4];
+/// let proof_batch = vec![1, 4]; // a batch with two proofs, one of which is aggregated
 /// let mut private_masks: Vec<Option<ExtendedMask>> = vec![];
 /// let mut public_masks = vec![];
 /// let mut statements_private = vec![];

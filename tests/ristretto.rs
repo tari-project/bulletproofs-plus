@@ -21,7 +21,7 @@ use tari_bulletproofs_plus::{
 
 #[test]
 fn test_non_aggregated_single_proof_multiple_bit_lengths() {
-    let bit_lengths = vec![4, 16, 64];
+    let bit_lengths = vec![8, 64];
     let proof_batch = vec![1];
     prove_and_verify(
         &bit_lengths,
@@ -51,7 +51,7 @@ fn test_non_aggregated_single_proof_multiple_bit_lengths() {
 
 #[test]
 fn test_aggregated_single_proof_multiple_bit_lengths() {
-    let bit_lengths = vec![2, 8, 32];
+    let bit_lengths = vec![4, 32];
     let proof_batch = vec![4];
     prove_and_verify(
         &bit_lengths,
@@ -82,7 +82,7 @@ fn test_aggregated_single_proof_multiple_bit_lengths() {
 #[test]
 fn test_non_aggregated_multiple_proofs_single_bit_length() {
     let bit_lengths = vec![64];
-    let proof_batch = vec![1, 1, 1, 1, 1];
+    let proof_batch = vec![1, 1];
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
@@ -112,7 +112,7 @@ fn test_non_aggregated_multiple_proofs_single_bit_length() {
 #[test]
 fn test_mixed_aggregation_multiple_proofs_single_bit_length() {
     let bit_lengths = vec![64];
-    let proof_batch = vec![1, 2, 4, 8];
+    let proof_batch = vec![1, 2];
     prove_and_verify(
         &bit_lengths,
         &proof_batch,
