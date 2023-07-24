@@ -47,3 +47,25 @@ impl Drop for RangeWitness {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use curve25519_dalek::Scalar;
+
+    use super::*;
+
+    #[test]
+    fn test_init_errors() {
+        let s = Scalar::ZERO;
+
+        // Empty openings
+        assert!(RangeWitness::init(Vec::new()).is_err());
+
+        // Mismatched blinding factor lengths
+        let openings = vec![
+            CommitmentOpening::new(1u64, vec![s]),
+            CommitmentOpening::new(1u64, vec![s, s]),
+        ];
+        assert!(RangeWitness::init(openings).is_err());
+    }
+}

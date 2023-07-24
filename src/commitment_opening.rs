@@ -42,3 +42,15 @@ impl Drop for CommitmentOpening {
         self.r.zeroize();
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_empty_blinding() {
+        let opening = CommitmentOpening::new(0u64, Vec::new());
+
+        assert!(opening.r_len().is_err());
+    }
+}

@@ -36,3 +36,38 @@ impl ExtendedMask {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_assign() {
+        // Valid assignments
+        for degree in 1..=6 {
+            let blindings = vec![Scalar::ZERO; degree];
+            let extension = ExtensionDegree::try_from_size(degree).unwrap();
+
+            assert!(ExtendedMask::assign(extension, blindings).is_ok());
+        }
+
+        // Empty blinding vector
+        assert!(ExtendedMask::assign(ExtensionDegree::DefaultPedersen, Vec::new()).is_err());
+
+        // Extension degree mismatch
+        let blindings = vec![Scalar::ZERO];
+        assert!(ExtendedMask::assign(ExtensionDegree::AddTwoBasePoints, blindings).is_err());
+    }
+
+    #[test]
+    fn test_blindings() {
+        // Empty blinding vector; this shouldn't be possible
+        let mask = ExtendedMask { blindings: Vec::new() };
+        assert!(mask.blindings().is_err());
+
+        // Valid mask
+        let blindings = vec![Scalar::ZERO, Scalar::ONE];
+        let mask = ExtendedMask::assign(ExtensionDegree::AddOneBasePoint, blindings.clone()).unwrap();
+        assert_eq!(mask.blindings().unwrap(), blindings);
+    }
+}

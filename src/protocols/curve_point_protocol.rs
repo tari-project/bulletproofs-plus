@@ -81,3 +81,22 @@ pub trait CurvePointProtocol:
         Ok(out)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use curve25519_dalek::RistrettoPoint;
+
+    use super::*;
+
+    #[test]
+    fn test_errors() {
+        // Empty point vector
+        assert!(RistrettoPoint::mul_point_vec_with_scalar(&[], &Scalar::ONE).is_err());
+
+        // Mismatched vector lengths
+        assert!(RistrettoPoint::add_point_vectors(&[RistrettoPoint::default()], &[]).is_err());
+
+        // Empty point vector
+        assert!(RistrettoPoint::add_point_vectors(&[], &[]).is_err());
+    }
+}

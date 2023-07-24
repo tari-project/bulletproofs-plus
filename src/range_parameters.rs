@@ -22,9 +22,9 @@ use crate::{
 #[derive(Clone)]
 pub struct RangeParameters<P: Compressable + Precomputable> {
     /// Generators needed for aggregating up to `m` range proofs of up to `n` bits each.
-    bp_gens: BulletproofGens<P>,
+    pub(crate) bp_gens: BulletproofGens<P>,
     /// The pair of base points for Pedersen commitments.
-    pc_gens: PedersenGens<P>,
+    pub(crate) pc_gens: PedersenGens<P>,
 }
 
 impl<P> RangeParameters<P>
@@ -53,11 +53,6 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
             bp_gens: BulletproofGens::new(bit_length, aggregation_factor),
             pc_gens,
         })
-    }
-
-    /// Return a reference to the non-public bulletproof generators
-    pub fn bp_gens(&self) -> &BulletproofGens<P> {
-        &self.bp_gens
     }
 
     /// Return a reference to the non-public base point generators
@@ -136,5 +131,26 @@ where
             .field("pc_gens", &self.pc_gens)
             .field("bp_gens", &self.bp_gens)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::ristretto::create_pedersen_gens_with_extension_degree;
+
+    #[test]
+    fn test_init_errors() {
+        // Create some generators
+        let gens = create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen);
+
+        // Aggregation factor must be a power of two
+        RangeParameters::init(64, 3, gens.clone()).unwrap_err();
+
+        // Bit length must be a power of two
+        RangeParameters::init(3, 4, gens.clone()).unwrap_err();
+
+        // Bit length cannot be too large
+        RangeParameters::init(2 * MAX_RANGE_PROOF_BIT_LENGTH, 4, gens.clone()).unwrap_err();
     }
 }
