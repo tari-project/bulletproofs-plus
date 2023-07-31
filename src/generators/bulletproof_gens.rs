@@ -50,9 +50,13 @@ pub struct BulletproofGens<P: Precomputable> {
     pub(crate) precomp: Arc<P::Precomputation>,
 }
 
-// This manual `Clone` implementation is required since derived cloning requires the curve library precomputation struct to support `Clone`
+// This manual `Clone` implementation is required since derived cloning requires the curve library precomputation struct
+// to support `Clone`
 impl<P> Clone for BulletproofGens<P>
-where P: Precomputable, Vec<P>: Clone {
+where
+    P: Precomputable,
+    Vec<P>: Clone,
+{
     fn clone(&self) -> Self {
         BulletproofGens {
             gens_capacity: self.gens_capacity,
