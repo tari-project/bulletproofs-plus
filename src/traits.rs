@@ -39,5 +39,5 @@ pub trait Decompressable {
 /// Abstraction for any type supporting multiscalar multiplication precomputation
 pub trait Precomputable {
     /// The type representing the precomputation instantiation
-    type Precomputation: Send + Sync + Clone + VartimePrecomputedMultiscalarMul<Point = Self>;
+    type Precomputation: Send + Sync + VartimePrecomputedMultiscalarMul<Point = Self>;
 }
