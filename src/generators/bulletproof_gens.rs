@@ -37,7 +37,6 @@ use crate::{
 /// This construction is also forward-compatible with constraint system proofs, which use a much larger slice of the
 /// generator chain, and even forward-compatible to multiparty aggregation of constraint system proofs, since the
 /// generators are namespaced by their party index.
-#[derive(Clone)]
 pub struct BulletproofGens<P: Precomputable> {
     /// The maximum number of usable generators for each party.
     pub gens_capacity: usize,
@@ -49,6 +48,24 @@ pub struct BulletproofGens<P: Precomputable> {
     pub(crate) h_vec: Vec<Vec<P>>,
     /// Interleaved precomputed generators
     pub(crate) precomp: Arc<P::Precomputation>,
+}
+
+// This manual `Clone` implementation is required since derived cloning requires the curve library precomputation struct
+// to support `Clone`
+impl<P> Clone for BulletproofGens<P>
+where
+    P: Precomputable,
+    Vec<P>: Clone,
+{
+    fn clone(&self) -> Self {
+        BulletproofGens {
+            gens_capacity: self.gens_capacity,
+            party_capacity: self.party_capacity,
+            g_vec: self.g_vec.clone(),
+            h_vec: self.h_vec.clone(),
+            precomp: self.precomp.clone(),
+        }
+    }
 }
 
 impl<P: FromUniformBytes + Precomputable> BulletproofGens<P> {
