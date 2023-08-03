@@ -6,20 +6,14 @@
 use std::{
     borrow::Borrow,
     cmp::min,
-    ops::{Add, AddAssign, Mul},
+    ops::{Add, AddAssign},
 };
 
-use curve25519_dalek::{
-    scalar::Scalar,
-    traits::{Identity, VartimeMultiscalarMul},
-};
+use curve25519_dalek::traits::{Identity, VartimeMultiscalarMul};
 use digest::Digest;
 use sha3::Sha3_512;
 
-use crate::{
-    errors::ProofError,
-    traits::{Compressable, FromUniformBytes},
-};
+use crate::traits::{Compressable, FromUniformBytes};
 
 /// The `CurvePointProtocol` trait. Any implementation of this trait can be used with BP+.
 pub trait CurvePointProtocol:
@@ -51,52 +45,5 @@ pub trait CurvePointProtocol:
         let size = min(output.len(), 64);
         (buffer[0..size]).copy_from_slice(&output.as_slice()[0..size]);
         Self::from_uniform_bytes(&buffer)
-    }
-
-    /// Helper function to multiply a point vector with a scalar vector
-    fn mul_point_vec_with_scalar(point_vec: &[Self], scalar: &Scalar) -> Result<Vec<Self>, ProofError>
-    where for<'p> &'p Self: Mul<Scalar, Output = Self> {
-        if point_vec.is_empty() {
-            return Err(ProofError::InvalidLength(
-                "Cannot multiply empty point vector with scalar".to_string(),
-            ));
-        }
-        let mut out = vec![Self::identity(); point_vec.len()];
-        for i in 0..point_vec.len() {
-            out[i] = &point_vec[i] * *scalar;
-        }
-        Ok(out)
-    }
-
-    /// Helper function to add two point vectors
-    fn add_point_vectors(a: &[Self], b: &[Self]) -> Result<Vec<Self>, ProofError>
-    where for<'p> &'p Self: Add<Output = Self> {
-        if a.len() != b.len() || a.is_empty() {
-            return Err(ProofError::InvalidLength("Cannot add empty point vectors".to_string()));
-        }
-        let mut out = vec![Self::identity(); a.len()];
-        for i in 0..a.len() {
-            out[i] = &a[i] + &b[i];
-        }
-        Ok(out)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use curve25519_dalek::RistrettoPoint;
-
-    use super::*;
-
-    #[test]
-    fn test_errors() {
-        // Empty point vector
-        assert!(RistrettoPoint::mul_point_vec_with_scalar(&[], &Scalar::ONE).is_err());
-
-        // Mismatched vector lengths
-        assert!(RistrettoPoint::add_point_vectors(&[RistrettoPoint::default()], &[]).is_err());
-
-        // Empty point vector
-        assert!(RistrettoPoint::add_point_vectors(&[], &[]).is_err());
     }
 }
