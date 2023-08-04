@@ -240,14 +240,19 @@ where
         )?;
         let e_inverse = e.invert();
 
-        self.gi_base = P::add_point_vectors(
-            P::mul_point_vec_with_scalar(gi_base_lo, &e_inverse)?.as_slice(),
-            P::mul_point_vec_with_scalar(gi_base_hi, &(e * y_n_inverse))?.as_slice(),
-        )?;
-        self.hi_base = P::add_point_vectors(
-            P::mul_point_vec_with_scalar(hi_base_lo, &e)?.as_slice(),
-            P::mul_point_vec_with_scalar(hi_base_hi, &e_inverse)?.as_slice(),
-        )?;
+        // Fold the generator vectors
+        let e_y_n_inverse = e * y_n_inverse;
+        self.gi_base = gi_base_lo
+            .iter()
+            .zip(gi_base_hi.iter())
+            .map(|(lo, hi)| P::vartime_multiscalar_mul([&e_inverse, &e_y_n_inverse], [lo, hi]))
+            .collect();
+
+        self.hi_base = hi_base_lo
+            .iter()
+            .zip(hi_base_hi.iter())
+            .map(|(lo, hi)| P::vartime_multiscalar_mul([&e, &e_inverse], [lo, hi]))
+            .collect();
 
         self.ai = Scalar::add_scalar_vectors(
             Scalar::mul_scalar_vec_with_scalar(a1, &e)?.as_slice(),
