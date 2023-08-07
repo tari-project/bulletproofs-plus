@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.2](https://github.com/tari-project/bulletproofs-plus/compare/v0.3.1...v0.3.2) (2023-08-07)
+
+
+### Features
+
+* change precomputation `rc` to `arc` ([#44](https://github.com/tari-project/bulletproofs-plus/issues/44)) ([d495fb2](https://github.com/tari-project/bulletproofs-plus/commit/d495fb24f9c7c34e0bfb0a38598b67e216fc56bf))
+* minor verifier optimizations ([#53](https://github.com/tari-project/bulletproofs-plus/issues/53)) ([7960214](https://github.com/tari-project/bulletproofs-plus/commit/796021499f3812908cfd0409951a1c944d4b71fc))
+* simplify inner-product generator folding ([#52](https://github.com/tari-project/bulletproofs-plus/issues/52)) ([271892c](https://github.com/tari-project/bulletproofs-plus/commit/271892c7727547da7024500e5b77a2d5894eaa3f))
+
+
+### Bug Fixes
+
+* promise check in range statement ([#48](https://github.com/tari-project/bulletproofs-plus/issues/48)) ([3e0008e](https://github.com/tari-project/bulletproofs-plus/commit/3e0008e31a55a30ee1b9c1849cd3861a5687616f))
+* reduce vector capacity ([#45](https://github.com/tari-project/bulletproofs-plus/issues/45)) ([9caa0c9](https://github.com/tari-project/bulletproofs-plus/commit/9caa0c9985ae85363ed2751042d14485c25f62a6))
+
 ### [0.3.1](https://github.com/tari-project/bulletproofs-plus/compare/v0.3.0...v0.3.1) (2023-07-18)
 
 ### [0.3.0](https://github.com/tari-project/bulletproofs-plus/compare/v0.2.3...v0.3.0) (2023-07-13)
