@@ -31,7 +31,6 @@ pub struct InnerProductRound<'a, P> {
     h_base: P,
     y_powers: Vec<Scalar>,
     done: bool,
-    extension_degree: ExtensionDegree,
 
     // Prover data
     ai: Vec<Scalar>,
@@ -64,7 +63,7 @@ where
 {
     #![allow(clippy::too_many_arguments)]
     /// Initialize a new 'InnerProductRound' with sanity checks
-    pub fn init(
+    pub(crate) fn init(
         gi_base: Vec<P>,
         hi_base: Vec<P>,
         g_base: Vec<P>,
@@ -83,13 +82,13 @@ where
                 "Vectors gi_base, hi_base, ai, bi and y_powers cannot be empty".to_string(),
             ));
         }
-        if !(hi_base.len() == n && ai.len() == n && bi.len() == n) || (y_powers.len() != (n + 2)) {
+        if !(hi_base.len() == n && ai.len() == n && bi.len() == n && y_powers.len() == n + 2) {
             return Err(ProofError::InvalidArgument(
                 "Vector length for inner product round".to_string(),
             ));
         }
-        let extension_degree = ExtensionDegree::try_from_size(g_base.len())?;
-        if extension_degree as usize != alpha.len() {
+        let extension_degree = ExtensionDegree::try_from_size(g_base.len())? as usize;
+        if extension_degree != alpha.len() {
             return Err(ProofError::InvalidLength("Inconsistent extension degree".to_string()));
         }
         Ok(Self {
@@ -99,7 +98,6 @@ where
             h_base,
             y_powers,
             done: false,
-            extension_degree,
             ai,
             bi,
             alpha,
@@ -107,7 +105,7 @@ where
             b: None,
             r1: None,
             s1: None,
-            d1: Vec::with_capacity(extension_degree as usize),
+            d1: Vec::with_capacity(extension_degree),
             li: Vec::with_capacity(n * aggregation_factor + 2),
             ri: Vec::with_capacity(n * aggregation_factor + 2),
             transcript: transcript.into(),
@@ -117,9 +115,19 @@ where
     }
 
     /// Calculate the inner product, updating 'self' for each round
-    pub fn inner_product<T: RngCore + CryptoRng>(&mut self, rng: &mut T) -> Result<(), ProofError> {
+    pub(crate) fn inner_product<T: RngCore + CryptoRng>(&mut self, rng: &mut T) -> Result<(), ProofError> {
+        // Ensure that vector lengths are still consistent, just in case
         let mut n = self.gi_base.len();
-        let extension_degree = self.extension_degree as usize;
+        if !(self.hi_base.len() == n && self.ai.len() == n && self.bi.len() == n && self.y_powers.len() >= n + 2) {
+            return Err(ProofError::InvalidArgument(
+                "Vector length for inner product round".to_string(),
+            ));
+        }
+        let extension_degree = ExtensionDegree::try_from_size(self.g_base.len())? as usize;
+        if extension_degree != self.alpha.len() {
+            return Err(ProofError::InvalidLength("Inconsistent extension degree".to_string()));
+        }
+
         if n == 1 {
             self.done = true;
 
@@ -167,15 +175,13 @@ where
             return Ok(());
         };
 
-        n /= 2; // Rounds towards zero, truncating any fractional part
-        let a1 = &self.ai[..n];
-        let a2 = &self.ai[n..];
-        let b1 = &self.bi[..n];
-        let b2 = &self.bi[n..];
-        let gi_base_lo = &self.gi_base[..n];
-        let gi_base_hi = &self.gi_base[n..];
-        let hi_base_lo = &self.hi_base[..n];
-        let hi_base_hi = &self.hi_base[n..];
+        // Split vectors in half; since `n` is always a nontrivial power of two, this is well defined
+        n /= 2;
+        let (a1, a2) = self.ai.split_at(n);
+        let (b1, b2) = self.bi.split_at(n);
+        let (gi_base_lo, gi_base_hi) = self.gi_base.split_at(n);
+        let (hi_base_lo, hi_base_hi) = self.hi_base.split_at(n);
+
         let y_n_inverse = if self.y_powers[n] == Scalar::ZERO {
             return Err(ProofError::InvalidArgument(
                 "Cannot invert a zero valued Scalar".to_string(),
@@ -272,12 +278,12 @@ where
     }
 
     /// Indicating when the inner product rounds are complete
-    pub fn is_done(&self) -> bool {
+    pub(crate) fn is_done(&self) -> bool {
         self.done
     }
 
     /// Compresses and returns the non-public point 'a1'
-    pub fn a1_compressed(&self) -> Result<P::Compressed, ProofError> {
+    pub(crate) fn a1_compressed(&self) -> Result<P::Compressed, ProofError> {
         if let Some(ref a1) = self.a1 {
             Ok(a1.compress())
         } else {
@@ -286,7 +292,7 @@ where
     }
 
     /// Compresses and returns the non-public point 'b'
-    pub fn b_compressed(&self) -> Result<P::Compressed, ProofError> {
+    pub(crate) fn b_compressed(&self) -> Result<P::Compressed, ProofError> {
         if let Some(ref b) = self.b {
             Ok(b.compress())
         } else {
@@ -295,7 +301,7 @@ where
     }
 
     /// Returns the non-public scalar 'r1'
-    pub fn r1(&self) -> Result<Scalar, ProofError> {
+    pub(crate) fn r1(&self) -> Result<Scalar, ProofError> {
         if let Some(r1) = self.r1 {
             Ok(r1)
         } else {
@@ -304,7 +310,7 @@ where
     }
 
     /// Returns the non-public scalar 's1'
-    pub fn s1(&self) -> Result<Scalar, ProofError> {
+    pub(crate) fn s1(&self) -> Result<Scalar, ProofError> {
         if let Some(s1) = self.s1 {
             Ok(s1)
         } else {
@@ -313,7 +319,7 @@ where
     }
 
     /// Returns the non-public scalar 'd1'
-    pub fn d1(&self) -> Result<Vec<Scalar>, ProofError> {
+    pub(crate) fn d1(&self) -> Result<Vec<Scalar>, ProofError> {
         if self.d1.is_empty() {
             Err(ProofError::InvalidArgument("Value 'd1' not assigned yet".to_string()))
         } else {
@@ -322,7 +328,7 @@ where
     }
 
     /// Compresses and returns the non-public vector of points 'li'
-    pub fn li_compressed(&self) -> Result<Vec<P::Compressed>, ProofError> {
+    pub(crate) fn li_compressed(&self) -> Result<Vec<P::Compressed>, ProofError> {
         if self.li.is_empty() {
             Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
         } else {
@@ -335,7 +341,7 @@ where
     }
 
     /// Compresses and returns the non-public vector of points 'ri'
-    pub fn ri_compressed(&self) -> Result<Vec<P::Compressed>, ProofError> {
+    pub(crate) fn ri_compressed(&self) -> Result<Vec<P::Compressed>, ProofError> {
         if self.ri.is_empty() {
             Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
         } else {
