@@ -515,12 +515,7 @@ where
         let mut dynamic_points: Vec<P> = Vec::with_capacity(msm_dynamic_len);
 
         // Recovered masks
-        let mut masks = match extract_masks {
-            VerifyAction::VerifyOnly => {
-                vec![]
-            },
-            _ => Vec::with_capacity(range_proofs.len()),
-        };
+        let mut masks = Vec::with_capacity(range_proofs.len());
 
         let two = Scalar::from(2u8);
 
@@ -666,10 +661,13 @@ where
                 let j = 1 << log_i;
                 s.push(s[i - j] * challenges_sq[rounds - log_i - 1]);
             }
+            let r1_e = r1 * e;
+            let s1_e = s1 * e;
+            let e_square_z = e_square * z;
             for i in 0..gen_length {
-                let g = r1 * e * y_inv_i * s[i];
-                let h = s1 * e * s[gen_length - i - 1];
-                gi_base_scalars[i] += weight * (g + e_square * z);
+                let g = r1_e * y_inv_i * s[i];
+                let h = s1_e * s[gen_length - i - 1];
+                gi_base_scalars[i] += weight * (g + e_square_z);
                 hi_base_scalars[i] += weight * (h - e_square * (d[i] * y_nm_i + z));
                 y_inv_i *= y_inverse;
                 y_nm_i *= y_inverse;
