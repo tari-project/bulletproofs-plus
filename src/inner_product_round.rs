@@ -8,6 +8,7 @@
 use std::ops::{Add, Mul};
 
 use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
+use itertools::izip;
 use merlin::Transcript;
 use rand::{CryptoRng, RngCore};
 use zeroize::Zeroize;
@@ -156,13 +157,13 @@ where
 
             let e =
                 transcripts::transcript_points_a1_b_challenge_e(&mut self.transcript, &a1.compress(), &b.compress())?;
+            let e_square = e * e;
 
             self.r1 = Some(r + self.ai[0] * e);
             self.s1 = Some(s + self.bi[0] * e);
-            let e_square = e * e;
-            for k in 0..extension_degree {
-                self.d1.push(eta[k] + d[k] * e + self.alpha[k] * e_square)
-            }
+            self.d1 = izip!(eta, d, self.alpha.iter())
+                .map(|(eta, d, alpha)| eta + d * e + alpha * e_square)
+                .collect();
 
             return Ok(());
         };
@@ -204,12 +205,10 @@ where
         };
         self.round += 1;
 
-        let mut c_l = Scalar::ZERO;
-        let mut c_r = Scalar::ZERO;
-        for i in 0..n {
-            c_l += a1[i] * self.y_powers[i + 1] * b2[i];
-            c_r += a2[i] * self.y_powers[n + i + 1] * b1[i];
-        }
+        let c_l = izip!(a1, self.y_powers.iter().skip(1), b2)
+            .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b);
+        let c_r = izip!(a2, self.y_powers.iter().skip(n + 1), b1)
+            .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b);
 
         // Compute L and R by multi-scalar multiplication
         self.li.push(P::vartime_multiscalar_mul(
@@ -233,39 +232,49 @@ where
                 .chain(hi_base_hi),
         ));
 
+        // Get the round challenge and associated values
         let e = transcripts::transcript_points_l_r_challenge_e(
             &mut self.transcript,
-            &self.li[self.li.len() - 1].compress(),
-            &self.ri[self.ri.len() - 1].compress(),
+            &self
+                .li
+                .last()
+                .ok_or(ProofError::InvalidLength("Bad inner product vector length".to_string()))?
+                .compress(),
+            &self
+                .ri
+                .last()
+                .ok_or(ProofError::InvalidLength("Bad inner product vector length".to_string()))?
+                .compress(),
         )?;
+        let e_square = e * e;
         let e_inverse = e.invert();
+        let e_inverse_square = e_inverse * e_inverse;
 
-        // Fold the generator vectors
+        // Fold the vectors
         let e_y_n_inverse = e * y_n_inverse;
         self.gi_base = gi_base_lo
             .iter()
             .zip(gi_base_hi.iter())
             .map(|(lo, hi)| P::vartime_multiscalar_mul([&e_inverse, &e_y_n_inverse], [lo, hi]))
             .collect();
-
         self.hi_base = hi_base_lo
             .iter()
             .zip(hi_base_hi.iter())
             .map(|(lo, hi)| P::vartime_multiscalar_mul([&e, &e_inverse], [lo, hi]))
             .collect();
+        self.ai = a1
+            .iter()
+            .zip(a2_offset.iter())
+            .map(|(a1, a2)| a1 * e + a2 * e_inverse)
+            .collect();
+        self.bi = b1
+            .iter()
+            .zip(b2.iter())
+            .map(|(b1, b2)| b1 * e_inverse + b2 * e)
+            .collect();
 
-        self.ai = Scalar::add_scalar_vectors(
-            Scalar::mul_scalar_vec_with_scalar(a1, &e)?.as_slice(),
-            Scalar::mul_scalar_vec_with_scalar(&a2_offset, &e_inverse)?.as_slice(),
-        )?;
-        self.bi = Scalar::add_scalar_vectors(
-            Scalar::mul_scalar_vec_with_scalar(b1, &e_inverse)?.as_slice(),
-            Scalar::mul_scalar_vec_with_scalar(b2, &e)?.as_slice(),
-        )?;
-        let e_square = e * e;
-        let e_inverse_square = e_inverse * e_inverse;
-        for k in 0..extension_degree {
-            self.alpha[k] += d_l[k] * e_square + d_r[k] * e_inverse_square;
+        for (alpha, (l, r)) in self.alpha.iter_mut().zip(d_l.iter().zip(d_r.iter())) {
+            *alpha += l * e_square + r * e_inverse_square;
         }
 
         Ok(())
