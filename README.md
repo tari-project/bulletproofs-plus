@@ -15,9 +15,11 @@ In particular, it supports:
 - **Minimum value promises**. You can additionally prove that a commitment binds to at least a specified value.
 - **Mask extraction**. If the prover and verifier agree on a shared secret, the verifier can use it to recover the mask used for the commitment in a non-aggregated proof.
 
-Unlike the original [Bulletproofs](https://eprint.iacr.org/2017/1066) range proving system, Bulletproofs+ is:
+Compared to an [updated fork](https://github.com/tari-project/bulletproofs) of the `dalek-cryptography` [Bulletproofs](https://github.com/dalek-cryptography/bulletproofs) implementation, this Bulletproofs+ implementation is:
 - **Smaller**. Regardless of the aggregation factor, a Bulletproofs+ proof is 96 bytes shorter.
-- **Faster**. Compared to a [fork](https://github.com/tari-project/bulletproofs) of the `dalek-cryptography` [Bulletproofs](https://github.com/dalek-cryptography/bulletproofs) implementation, this implementation verifies non-aggregated proofs in only ~85% of the time.
+- **Faster to generate proofs**. This implementation generates a non-aggregated 64-bit range proof about 10% faster, with similar speedups for aggregated proofs.
+- **Slower to verify single proofs**. While this implementation verifies a single 64-bit range proof in comparable time, it verifies aggregated proofs more slowly.
+- **Faster to verify batched proofs**. Because this implementation supports batching, its marginal verification time for a single 64-bit range proof can be reduced to under half the corresponding non-batched time.
 
 As always, your mileage may vary.
 
