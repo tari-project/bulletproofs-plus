@@ -572,14 +572,22 @@ where
                     transcripts::transcript_points_l_r_challenge_e(&mut transcript, &proof.li()?[j], &proof.ri()?[j])?;
                 challenges.push(e);
             }
-            let mut challenges_inv = challenges.clone();
-            let challenges_inv_prod = Scalar::batch_invert(&mut challenges_inv);
             let e = transcripts::transcript_points_a1_b_challenge_e(&mut transcript, &proof.a1, &proof.b)?;
+
+            // Compute challenge inverses in a batch
+            let mut challenges_inv = challenges.clone();
+            challenges_inv.extend_from_slice(&[y, y - Scalar::ONE]);
+            let challenges_inv_prod = Scalar::batch_invert(&mut challenges_inv) * y * (y - Scalar::ONE);
+            let y_1_inverse = challenges_inv
+                .pop()
+                .ok_or(ProofError::VerificationFailed("Unexpected vector error".to_string()))?;
+            let y_inverse = challenges_inv
+                .pop()
+                .ok_or(ProofError::VerificationFailed("Unexpected vector error".to_string()))?;
 
             // Compute useful challenge values
             let z_square = z * z;
             let e_square = e * e;
-            let y_inverse = y.invert();
             let mut y_nm = y;
             let mut challenges_sq = Vec::with_capacity(challenges.len());
             let mut challenges_sq_inv = Vec::with_capacity(challenges_inv.len());
@@ -589,12 +597,9 @@ where
                 challenges_sq_inv.push(challenges_inv[i] * challenges_inv[i]);
             }
             let y_nm_1 = y_nm * y;
-            let mut y_sum = Scalar::ZERO;
-            let mut y_sum_temp = y;
-            for _ in 0..bit_length * aggregation_factor {
-                y_sum += y_sum_temp;
-                y_sum_temp *= y;
-            }
+
+            // Compute the sum of powers of the challenge as a partial sum of a geometric series
+            let y_sum = y * (y_nm - Scalar::ONE) * y_1_inverse;
 
             // Compute d efficiently
             let mut d = Vec::with_capacity(bit_length * aggregation_factor);
