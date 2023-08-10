@@ -15,7 +15,7 @@ use curve25519_dalek::{
     scalar::Scalar,
     traits::{Identity, IsIdentity, VartimePrecomputedMultiscalarMul},
 };
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use merlin::Transcript;
 use rand::thread_rng;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
@@ -24,7 +24,6 @@ use crate::{
     errors::ProofError,
     extended_mask::ExtendedMask,
     generators::pedersen_gens::ExtensionDegree,
-    inner_product_round::InnerProductRound,
     protocols::{
         curve_point_protocol::CurvePointProtocol,
         scalar_protocol::ScalarProtocol,
@@ -202,7 +201,13 @@ where
         statement: &RangeStatement<P>,
         witness: &RangeWitness,
     ) -> Result<Self, ProofError> {
+        // Useful lengths
+        let bit_length = statement.generators.bit_length();
         let aggregation_factor = statement.commitments.len();
+        let extension_degree = statement.generators.extension_degree() as usize;
+        let full_length = bit_length * aggregation_factor;
+
+        // Consistency checks (can we nix these?)
         if witness.openings.len() != aggregation_factor {
             return Err(ProofError::InvalidLength(
                 "Witness openings statement commitments do not match!".to_string(),
@@ -213,9 +218,6 @@ where
                 "Witness and statement extension degrees do not match!".to_string(),
             ));
         }
-        let extension_degree = statement.generators.extension_degree() as usize;
-
-        let bit_length = statement.generators.bit_length();
 
         // Start the transcript
         let mut transcript = Transcript::new(transcript_label.as_bytes());
@@ -231,17 +233,14 @@ where
         )?;
 
         // Set bit arrays
-        let mut a_li = Vec::with_capacity(bit_length * aggregation_factor);
-        let mut a_ri = Vec::with_capacity(bit_length * aggregation_factor);
+        let mut a_li = Vec::with_capacity(full_length);
+        let mut a_ri = Vec::with_capacity(full_length);
         for (j, value) in witness.openings.iter().map(|o| o.v).enumerate() {
             let bit_vector = if let Some(minimum_value) = statement.minimum_value_promises[j] {
-                if minimum_value > value {
-                    return Err(ProofError::InvalidArgument(
-                        "Minimum value cannot be larger than value!".to_string(),
-                    ));
-                } else {
-                    bit_vector_of_scalars(value - minimum_value, bit_length)?
-                }
+                let offset_value = value.checked_sub(minimum_value).ok_or(ProofError::InvalidArgument(
+                    "Minimum value is larger than value".to_string(),
+                ))?;
+                bit_vector_of_scalars(offset_value, bit_length)?
             } else {
                 bit_vector_of_scalars(value, bit_length)?
             };
@@ -273,14 +272,15 @@ where
         let z_square = z * z;
 
         // Compute powers of the challenge
-        let mut y_powers = Vec::with_capacity(aggregation_factor * bit_length + 2);
-        y_powers.push(Scalar::ONE);
-        for _ in 1..(aggregation_factor * bit_length + 2) {
-            y_powers.push(y_powers[y_powers.len() - 1] * y);
+        let mut y_powers = Vec::with_capacity(full_length + 2);
+        let mut y_power = Scalar::ONE;
+        for _ in 0..(full_length + 2) {
+            y_powers.push(y_power);
+            y_power *= y;
         }
 
         // Compute d efficiently
-        let mut d = Vec::with_capacity(bit_length * aggregation_factor);
+        let mut d = Vec::with_capacity(full_length);
         d.push(z_square);
         let two = Scalar::from(2u8);
         for i in 1..bit_length {
@@ -299,46 +299,185 @@ where
         for (i, item) in a_ri.iter_mut().enumerate() {
             *item += d[i] * y_powers[bit_length * aggregation_factor - i] + z;
         }
-        let mut alpha1 = alpha;
         let mut z_even_powers = Scalar::ONE;
         for j in 0..aggregation_factor {
             z_even_powers *= z_square;
-            for (k, alpha1_val) in alpha1.iter_mut().enumerate().take(extension_degree) {
+            for (k, alpha1_val) in alpha.iter_mut().enumerate().take(extension_degree) {
                 *alpha1_val += z_even_powers * witness.openings[j].r[k] * y_powers[bit_length * aggregation_factor + 1];
             }
         }
 
-        // Calculate the inner product
-        transcript.domain_separator(b"Bulletproofs+", b"Inner Product Proof");
-        let mut ip_data = InnerProductRound::init(
-            statement.generators.gi_base_iter().cloned().collect(),
-            statement.generators.hi_base_iter().cloned().collect(),
-            statement.generators.g_bases().to_vec(),
-            statement.generators.h_base().clone(),
-            a_li,
-            a_ri,
-            alpha1,
-            y_powers,
-            &mut transcript,
-            statement.seed_nonce,
-            aggregation_factor,
-        )?;
-        loop {
-            let _result = ip_data.inner_product(rng);
-            if ip_data.is_done() {
-                return Ok(RangeProof {
-                    a: a.compress(),
-                    a1: ip_data.a1_compressed()?,
-                    b: ip_data.b_compressed()?,
-                    r1: ip_data.r1()?,
-                    s1: ip_data.s1()?,
-                    d1: ip_data.d1()?,
-                    li: ip_data.li_compressed()?,
-                    ri: ip_data.ri_compressed()?,
-                    extension_degree: statement.generators.extension_degree(),
-                });
+        let mut gi_base: Vec<P> = statement.generators.gi_base_iter().cloned().collect();
+        let mut hi_base: Vec<P> = statement.generators.hi_base_iter().cloned().collect();
+        let g_base = statement.generators.g_bases();
+        let h_base = statement.generators.h_base();
+
+        let rounds = usize::try_from(
+            full_length.checked_ilog2().ok_or(ProofError::InvalidArgument("Size overflow".to_string()))?
+        ).map_err(|_| ProofError::InvalidArgument("Size overflow".to_string()))?;
+        let mut li = Vec::<P>::with_capacity(rounds);
+        let mut ri = Vec::<P>::with_capacity(rounds);
+
+        let mut n = full_length;
+        let mut round = 0;
+
+        // Perform the inner-product folding rounds
+        while n > 1 {
+            n /= 2;
+
+            // Split the vectors for folding
+            let (a_lo, a_hi) = a_li.split_at(n);
+            let (b_lo, b_hi) = a_ri.split_at(n);
+            let (gi_base_lo, gi_base_hi) = gi_base.split_at(n);
+            let (hi_base_lo, hi_base_hi) = hi_base.split_at(n);
+
+            let y_n_inverse = if y_powers[n] == Scalar::ZERO {
+                return Err(ProofError::InvalidArgument(
+                    "Cannot invert a zero valued Scalar".to_string(),
+                ));
+            } else {
+                y_powers[n].invert()
+            };
+
+            let a_lo_offset = a_lo.iter().map(|s| s * y_n_inverse).collect::<Vec<Scalar>>();
+            let a_hi_offset = a_hi.iter().map(|s| s * y_powers[n]).collect::<Vec<Scalar>>();
+
+            let (mut d_l, mut d_r) = (
+                Vec::with_capacity(extension_degree),
+                Vec::with_capacity(extension_degree),
+            );
+            if let Some(seed_nonce) = statement.seed_nonce {
+                for k in 0..extension_degree {
+                    d_l.push((nonce(&seed_nonce, "dL", Some(round), Some(k)))?);
+                    d_r.push((nonce(&seed_nonce, "dR", Some(round), Some(k)))?);
+                }
+            } else {
+                for _k in 0..extension_degree {
+                    // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+                    d_l.push(Scalar::random_not_zero(rng));
+                    d_r.push(Scalar::random_not_zero(rng));
+                }
+            };
+            round += 1;
+
+            let c_l = izip!(a_lo, y_powers.iter().skip(1), b_hi)
+                .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b);
+            let c_r = izip!(a_hi, y_powers.iter().skip(n + 1), b_lo)
+                .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b);
+
+            // Compute L and R by multi-scalar multiplication
+            li.push(P::vartime_multiscalar_mul(
+                std::iter::once(&c_l)
+                    .chain(d_l.iter())
+                    .chain(a_lo_offset.iter())
+                    .chain(b_hi.iter()),
+                std::iter::once(h_base)
+                    .chain(g_base.iter())
+                    .chain(gi_base_hi)
+                    .chain(hi_base_lo),
+            ));
+            ri.push(P::vartime_multiscalar_mul(
+                std::iter::once(&c_r)
+                    .chain(d_r.iter())
+                    .chain(a_hi_offset.iter())
+                    .chain(b_lo.iter()),
+                std::iter::once(h_base)
+                    .chain(g_base.iter())
+                    .chain(gi_base_lo)
+                    .chain(hi_base_hi),
+            ));
+
+            // Get the round challenge and associated values
+            let e = transcripts::transcript_points_l_r_challenge_e(
+                &mut transcript,
+                &li.last()
+                    .ok_or(ProofError::InvalidLength("Bad inner product vector length".to_string()))?
+                    .compress(),
+                &ri.last()
+                    .ok_or(ProofError::InvalidLength("Bad inner product vector length".to_string()))?
+                    .compress(),
+            )?;
+            let e_square = e * e;
+            let e_inverse = e.invert();
+            let e_inverse_square = e_inverse * e_inverse;
+
+            // Fold the vectors
+            let e_y_n_inverse = e * y_n_inverse;
+            gi_base = gi_base_lo
+                .iter()
+                .zip(gi_base_hi.iter())
+                .map(|(lo, hi)| P::vartime_multiscalar_mul([&e_inverse, &e_y_n_inverse], [lo, hi]))
+                .collect();
+            hi_base = hi_base_lo
+                .iter()
+                .zip(hi_base_hi.iter())
+                .map(|(lo, hi)| P::vartime_multiscalar_mul([&e, &e_inverse], [lo, hi]))
+                .collect();
+            a_li = a_lo
+                .iter()
+                .zip(a_hi_offset.iter())
+                .map(|(lo, hi)| lo * e + hi * e_inverse)
+                .collect();
+            a_ri = b_lo
+                .iter()
+                .zip(b_hi.iter())
+                .map(|(lo, hi)| lo * e_inverse + hi * e)
+                .collect();
+
+            for (alpha, (l, r)) in alpha.iter_mut().zip(d_l.iter().zip(d_r.iter())) {
+                *alpha += l * e_square + r * e_inverse_square;
             }
         }
+
+        // Random masks
+        // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+        let (r, s) = (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng));
+        let (mut d, mut eta) = (
+            Vec::with_capacity(extension_degree),
+            Vec::with_capacity(extension_degree),
+        );
+        if let Some(seed_nonce) = statement.seed_nonce {
+            for k in 0..extension_degree {
+                d.push((nonce(&seed_nonce, "d", None, Some(k)))?);
+                eta.push((nonce(&seed_nonce, "eta", None, Some(k)))?);
+            }
+        } else {
+            for _k in 0..extension_degree {
+                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+                d.push(Scalar::random_not_zero(rng));
+                eta.push(Scalar::random_not_zero(rng));
+            }
+        };
+
+        let mut a1 =
+            &gi_base[0] * r + &hi_base[0] * s + h_base * (r * y_powers[1] * a_ri[0] + s * y_powers[1] * a_li[0]);
+        let mut b = h_base * (r * y_powers[1] * s);
+        for k in 0..extension_degree {
+            a1 += &g_base[k] * d[k];
+            b += &g_base[k] * eta[k]
+        }
+
+        let e = transcripts::transcript_points_a1_b_challenge_e(&mut transcript, &a1.compress(), &b.compress())?;
+        let e_square = e * e;
+
+        let r1 = r + a_li[0] * e;
+        let s1 = s + a_ri[0] * e;
+        let d1: Vec<Scalar> = izip!(eta, d, alpha.iter())
+            .map(|(eta, d, alpha)| eta + d * e + alpha * e_square)
+            .collect();
+
+        // Assemble the proof
+        Ok(RangeProof {
+            a: a.compress(),
+            a1: a1.compress(),
+            b: b.compress(),
+            r1,
+            s1,
+            d1,
+            li: li.iter().map(|p| p.compress()).collect(),
+            ri: ri.iter().map(|p| p.compress()).collect(),
+            extension_degree: statement.generators.extension_degree(),
+        })
     }
 
     fn verify_statements_and_generators_consistency(
@@ -565,7 +704,6 @@ where
 
             // Reconstruct challenges
             let (y, z) = transcripts::transcript_point_a_challenges_y_z(&mut transcript, &proof.a)?;
-            transcript.domain_separator(b"Bulletproofs+", b"Inner Product Proof");
             let mut challenges = Vec::with_capacity(rounds);
             for j in 0..rounds {
                 let e =
