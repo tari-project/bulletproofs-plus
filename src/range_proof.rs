@@ -512,7 +512,11 @@ where
 
         let (g_base_vec, h_base) = (statements[0].generators.g_bases(), statements[0].generators.h_base());
         let bit_length = statements[0].generators.bit_length();
-        let mut max_mn = statements[0].commitments.len() * statements[0].generators.bit_length();
+        let mut max_mn = statements[0]
+            .commitments
+            .len()
+            .checked_mul(statements[0].generators.bit_length())
+            .ok_or(ProofError::SizeOverflow)?;
         let mut max_index = 0;
         let extension_degree = statements[0].generators.extension_degree();
 
@@ -540,8 +544,13 @@ where
             {
                 return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
             }
-            if statement.commitments.len() * statement.generators.bit_length() > max_mn {
-                max_mn = statement.commitments.len() * statement.generators.bit_length();
+            let full_length = statement
+                .commitments
+                .len()
+                .checked_mul(statement.generators.bit_length())
+                .ok_or(ProofError::SizeOverflow)?;
+            if full_length > max_mn {
+                max_mn = full_length;
                 max_index = i;
             }
         }
@@ -551,7 +560,8 @@ where
         );
         for (i, statement) in statements.iter().enumerate() {
             for value in Iterator::flatten(statement.minimum_value_promises.iter()) {
-                if value >> (bit_length - 1) > 1 {
+                // If the bit length is 64, no 64-bit value can exceed the capacity
+                if bit_length < 64 && value >> bit_length > 0 {
                     return Err(ProofError::InvalidLength(
                         "Minimum value promise exceeds bit vector capacity".to_string(),
                     ));
@@ -641,17 +651,9 @@ where
         let h_base_compressed = statements[0].generators.h_base_compressed();
         let precomp = statements[max_index].generators.precomp();
 
-        // Compute log2(N)
-        let mut log_n = 0u32;
-        let mut temp_n = bit_length >> 1;
-        while temp_n != 0 {
-            log_n += 1;
-            temp_n >>= 1;
-        }
-
-        // Compute 2**N-1 for later use
+        // Compute 2**n-1 for later use
         let mut two_n_minus_one = Scalar::from(2u8);
-        for _ in 0..log_n {
+        for _ in 0..bit_length.ilog2() {
             two_n_minus_one = two_n_minus_one * two_n_minus_one;
         }
         two_n_minus_one -= Scalar::ONE;
@@ -666,9 +668,15 @@ where
         // Because we use precomputation on the generator vectors, we need to separate the static data from the dynamic
         // data. However, we can't combine precomputation data, so the Pedersen generators go with the dynamic
         // data :(
-        let mut msm_dynamic_len = extension_degree + 1;
-        for (index, item) in statements.iter().enumerate() {
-            msm_dynamic_len += item.generators.aggregation_factor() + 3 + range_proofs[index].li.len() * 2;
+        let mut msm_dynamic_len = extension_degree.checked_add(1).ok_or(ProofError::SizeOverflow)?;
+        for (statement, proof) in statements.iter().zip(range_proofs.iter()) {
+            msm_dynamic_len = msm_dynamic_len
+                .checked_add(statement.generators.aggregation_factor())
+                .ok_or(ProofError::SizeOverflow)?;
+            msm_dynamic_len = msm_dynamic_len.checked_add(3).ok_or(ProofError::SizeOverflow)?;
+            msm_dynamic_len = msm_dynamic_len
+                .checked_add(proof.li.len().checked_mul(2).ok_or(ProofError::SizeOverflow)?)
+                .ok_or(ProofError::SizeOverflow)?;
         }
         let mut dynamic_scalars: Vec<Scalar> = Vec::with_capacity(msm_dynamic_len);
         let mut dynamic_points: Vec<P> = Vec::with_capacity(msm_dynamic_len);
@@ -692,19 +700,25 @@ where
             let li = proof.li_decompressed()?;
             let ri = proof.ri_decompressed()?;
 
+            // Useful lengths
+            let aggregation_factor = commitments.len();
+            let full_length = aggregation_factor
+                .checked_mul(bit_length)
+                .ok_or(ProofError::SizeOverflow)?;
+            let rounds = li.len();
+
             if li.len() != ri.len() {
                 return Err(ProofError::InvalidLength(
                     "Vector L length not equal to vector R length".to_string(),
                 ));
             }
-            if 1 << li.len() != commitments.len() * bit_length {
-                return Err(ProofError::InvalidLength("Vector L length not adequate".to_string()));
+            if 1usize
+                .checked_shl(u32::try_from(rounds).map_err(|_| ProofError::SizeOverflow)?)
+                .ok_or(ProofError::SizeOverflow)? !=
+                full_length
+            {
+                return Err(ProofError::InvalidLength("Vector L/R length not adequate".to_string()));
             }
-
-            // Helper values
-            let aggregation_factor = commitments.len();
-            let gen_length = aggregation_factor * bit_length;
-            let rounds = li.len();
 
             // Batch weight (may not be equal to a zero valued scalar) - this may not be zero ever
             let weight = Scalar::random_not_zero(rng);
@@ -745,21 +759,16 @@ where
             // Compute useful challenge values
             let z_square = z * z;
             let e_square = e * e;
-            let mut y_nm = y;
-            let mut challenges_sq = Vec::with_capacity(challenges.len());
-            let mut challenges_sq_inv = Vec::with_capacity(challenges_inv.len());
-            for i in 0..rounds {
-                y_nm = y_nm * y_nm;
-                challenges_sq.push(challenges[i] * challenges[i]);
-                challenges_sq_inv.push(challenges_inv[i] * challenges_inv[i]);
-            }
+            let challenges_sq: Vec<Scalar> = challenges.iter().map(|c| c * c).collect();
+            let challenges_sq_inv: Vec<Scalar> = challenges_inv.iter().map(|c| c * c).collect();
+            let y_nm = (0..rounds).fold(y, |y_nm, _| y_nm * y_nm);
             let y_nm_1 = y_nm * y;
 
             // Compute the sum of powers of the challenge as a partial sum of a geometric series
             let y_sum = y * (y_nm - Scalar::ONE) * y_1_inverse;
 
             // Compute d efficiently
-            let mut d = Vec::with_capacity(bit_length * aggregation_factor);
+            let mut d = Vec::with_capacity(full_length);
             d.push(z_square);
             for i in 1..bit_length {
                 d.push(two * d[i - 1]);
@@ -773,7 +782,7 @@ where
             // Compute d's sum efficiently
             let mut d_sum = z_square;
             let mut d_sum_temp_z = z_square;
-            let mut d_sum_temp_2m = 2 * aggregation_factor;
+            let mut d_sum_temp_2m = aggregation_factor.checked_mul(2).ok_or(ProofError::SizeOverflow)?;
             while d_sum_temp_2m > 2 {
                 d_sum = d_sum + d_sum * d_sum_temp_z;
                 d_sum_temp_z = d_sum_temp_z * d_sum_temp_z;
@@ -814,9 +823,9 @@ where
             let mut y_inv_i = Scalar::ONE;
             let mut y_nm_i = y_nm;
 
-            let mut s = Vec::with_capacity(gen_length);
+            let mut s = Vec::with_capacity(full_length);
             s.push(challenges_inv_prod);
-            for i in 1..gen_length {
+            for i in 1..full_length {
                 #[allow(clippy::cast_possible_truncation)]
                 // Note: 'i' must be cast to u32 in this case (usize is 64bit on 64bit platforms)
                 let log_i = (32 - 1 - (i as u32).leading_zeros()) as usize;
@@ -826,9 +835,9 @@ where
             let r1_e = r1 * e;
             let s1_e = s1 * e;
             let e_square_z = e_square * z;
-            for i in 0..gen_length {
+            for i in 0..full_length {
                 let g = r1_e * y_inv_i * s[i];
-                let h = s1_e * s[gen_length - i - 1];
+                let h = s1_e * s[full_length - i - 1];
                 gi_base_scalars[i] += weight * (g + e_square_z);
                 hi_base_scalars[i] += weight * (h - e_square * (d[i] * y_nm_i + z));
                 y_inv_i *= y_inverse;
