@@ -20,4 +20,7 @@ pub enum ProofError {
     /// Invalid `Blake2b` hash operation
     #[error("Invalid Blake2b")]
     InvalidBlake2b,
+    /// Internal size overflow
+    #[error("Internal size overflow")]
+    SizeOverflow,
 }

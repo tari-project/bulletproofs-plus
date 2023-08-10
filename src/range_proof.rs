@@ -205,7 +205,9 @@ where
         let bit_length = statement.generators.bit_length();
         let aggregation_factor = statement.commitments.len();
         let extension_degree = statement.generators.extension_degree() as usize;
-        let full_length = bit_length * aggregation_factor;
+        let full_length = bit_length
+            .checked_mul(aggregation_factor)
+            .ok_or(ProofError::SizeOverflow)?;
 
         // Consistency checks (can we nix these?)
         if witness.openings.len() != aggregation_factor {
@@ -214,7 +216,7 @@ where
             ));
         }
         if witness.extension_degree != statement.generators.extension_degree() {
-            return Err(ProofError::InvalidArgument(
+            return Err(ProofError::InvalidLength(
                 "Witness and statement extension degrees do not match!".to_string(),
             ));
         }
@@ -272,9 +274,10 @@ where
         let z_square = z * z;
 
         // Compute powers of the challenge
-        let mut y_powers = Vec::with_capacity(full_length + 2);
+        let y_powers_len = full_length.checked_add(2).ok_or(ProofError::SizeOverflow)?;
+        let mut y_powers = Vec::with_capacity(y_powers_len);
         let mut y_power = Scalar::ONE;
-        for _ in 0..(full_length + 2) {
+        for _ in 0..y_powers_len {
             y_powers.push(y_power);
             y_power *= y;
         }
@@ -312,9 +315,7 @@ where
         let g_base = statement.generators.g_bases();
         let h_base = statement.generators.h_base();
 
-        let rounds = usize::try_from(
-            full_length.checked_ilog2().ok_or(ProofError::InvalidArgument("Size overflow".to_string()))?
-        ).map_err(|_| ProofError::InvalidArgument("Size overflow".to_string()))?;
+        let rounds = usize::try_from(full_length.ilog2()).map_err(|_| ProofError::SizeOverflow)?;
         let mut li = Vec::<P>::with_capacity(rounds);
         let mut ri = Vec::<P>::with_capacity(rounds);
 
