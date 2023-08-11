@@ -343,22 +343,23 @@ where
             let a_lo_offset = a_lo.iter().map(|s| s * y_n_inverse).collect::<Vec<Scalar>>();
             let a_hi_offset = a_hi.iter().map(|s| s * y_powers[n]).collect::<Vec<Scalar>>();
 
-            let (mut d_l, mut d_r) = (
-                Vec::with_capacity(extension_degree),
-                Vec::with_capacity(extension_degree),
-            );
-            if let Some(seed_nonce) = statement.seed_nonce {
-                for k in 0..extension_degree {
-                    d_l.push((nonce(&seed_nonce, "dL", Some(round), Some(k)))?);
-                    d_r.push((nonce(&seed_nonce, "dR", Some(round), Some(k)))?);
-                }
+            let d_l = if let Some(seed_nonce) = statement.seed_nonce {
+                (0..extension_degree)
+                    .map(|k| nonce(&seed_nonce, "dL", Some(round), Some(k)))
+                    .collect::<Result<Vec<_>, ProofError>>()?
             } else {
-                for _k in 0..extension_degree {
-                    // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-                    d_l.push(Scalar::random_not_zero(rng));
-                    d_r.push(Scalar::random_not_zero(rng));
-                }
+                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+                (0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect()
             };
+            let d_r = if let Some(seed_nonce) = statement.seed_nonce {
+                (0..extension_degree)
+                    .map(|k| nonce(&seed_nonce, "dR", Some(round), Some(k)))
+                    .collect::<Result<Vec<_>, ProofError>>()?
+            } else {
+                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+                (0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect()
+            };
+
             round += 1;
 
             let c_l = izip!(a_lo, y_powers.iter().skip(1), b_hi)
@@ -433,21 +434,21 @@ where
         // Random masks
         // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
         let (r, s) = (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng));
-        let (mut d, mut eta) = (
-            Vec::with_capacity(extension_degree),
-            Vec::with_capacity(extension_degree),
-        );
-        if let Some(seed_nonce) = statement.seed_nonce {
-            for k in 0..extension_degree {
-                d.push((nonce(&seed_nonce, "d", None, Some(k)))?);
-                eta.push((nonce(&seed_nonce, "eta", None, Some(k)))?);
-            }
+        let d = if let Some(seed_nonce) = statement.seed_nonce {
+            (0..extension_degree)
+                .map(|k| nonce(&seed_nonce, "d", None, Some(k)))
+                .collect::<Result<Vec<_>, ProofError>>()?
         } else {
-            for _k in 0..extension_degree {
-                // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-                d.push(Scalar::random_not_zero(rng));
-                eta.push(Scalar::random_not_zero(rng));
-            }
+            // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+            (0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect()
+        };
+        let eta = if let Some(seed_nonce) = statement.seed_nonce {
+            (0..extension_degree)
+                .map(|k| nonce(&seed_nonce, "eta", None, Some(k)))
+                .collect::<Result<Vec<_>, ProofError>>()?
+        } else {
+            // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
+            (0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect()
         };
 
         let mut a1 =
