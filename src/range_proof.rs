@@ -895,28 +895,26 @@ where
 
     // Helper function to decompress Li
     fn li_decompressed(&self) -> Result<Vec<P>, ProofError> {
-        let mut li = Vec::with_capacity(self.li.len());
-        for item in &self.li {
-            li.push(item.decompress().ok_or_else(|| {
-                ProofError::InvalidArgument(
+        self.li
+            .iter()
+            .map(|p| {
+                p.decompress().ok_or(ProofError::InvalidArgument(
                     "An item in member 'L' was not the canonical encoding of a point".to_string(),
-                )
-            })?)
-        }
-        Ok(li)
+                ))
+            })
+            .collect::<Result<Vec<_>, ProofError>>()
     }
 
     // Helper function to decompress Ri
     fn ri_decompressed(&self) -> Result<Vec<P>, ProofError> {
-        let mut ri = Vec::with_capacity(self.ri.len());
-        for item in &self.ri {
-            ri.push(item.decompress().ok_or_else(|| {
-                ProofError::InvalidArgument(
-                    "An item in member 'R' was not the canonical encoding of a point".to_string(),
-                )
-            })?)
-        }
-        Ok(ri)
+        self.ri
+            .iter()
+            .map(|p| {
+                p.decompress().ok_or(ProofError::InvalidArgument(
+                    "An item in member 'L' was not the canonical encoding of a point".to_string(),
+                ))
+            })
+            .collect::<Result<Vec<_>, ProofError>>()
     }
 }
 
