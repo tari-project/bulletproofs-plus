@@ -33,7 +33,7 @@ use crate::{
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
     transcripts,
-    utils::generic::{bit_vector_of_scalars, nonce, read_1_byte, read_32_bytes},
+    utils::generic::{bit_vector_of_scalars, nonce, read_1_byte, read_32_bytes, split_at_checked},
 };
 
 /// Optionally extract masks when verifying the proofs
@@ -327,10 +327,10 @@ where
             n /= 2;
 
             // Split the vectors for folding
-            let (a_lo, a_hi) = a_li.split_at(n);
-            let (b_lo, b_hi) = a_ri.split_at(n);
-            let (gi_base_lo, gi_base_hi) = gi_base.split_at(n);
-            let (hi_base_lo, hi_base_hi) = hi_base.split_at(n);
+            let (a_lo, a_hi) = split_at_checked(&a_li, n)?;
+            let (b_lo, b_hi) = split_at_checked(&a_ri, n)?;
+            let (gi_base_lo, gi_base_hi) = split_at_checked(&gi_base, n)?;
+            let (hi_base_lo, hi_base_hi) = split_at_checked(&hi_base, n)?;
 
             let y_n_inverse = if y_powers[n] == Scalar::ZERO {
                 return Err(ProofError::InvalidArgument(

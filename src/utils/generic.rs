@@ -101,6 +101,15 @@ pub fn read_1_byte(data: &[u8]) -> [u8; 1] {
     buf8
 }
 
+/// Split a vector, checking the bound to avoid a panic
+pub fn split_at_checked<T>(vec: &[T], n: usize) -> Result<(&[T], &[T]), ProofError> {
+    if n <= vec.len() {
+        Ok(vec.split_at(n))
+    } else {
+        Err(ProofError::InvalidLength("Invalid vector split index".to_string()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use curve25519_dalek::scalar::Scalar;
