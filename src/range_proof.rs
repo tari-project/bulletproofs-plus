@@ -902,7 +902,7 @@ where
                     "An item in member 'L' was not the canonical encoding of a point".to_string(),
                 ))
             })
-            .collect::<Result<Vec<_>, ProofError>>()
+            .collect()
     }
 
     // Helper function to decompress Ri
@@ -914,7 +914,7 @@ where
                     "An item in member 'L' was not the canonical encoding of a point".to_string(),
                 ))
             })
-            .collect::<Result<Vec<_>, ProofError>>()
+            .collect()
     }
 }
 
