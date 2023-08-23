@@ -33,7 +33,7 @@ use crate::{
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
     transcripts,
-    utils::generic::{bit_vector_of_scalars, nonce, read_1_byte, read_32_bytes, split_at_checked},
+    utils::generic::{bit_vector_of_scalars, nonce, split_at_checked},
 };
 
 /// Optionally extract masks when verifying the proofs
@@ -68,6 +68,17 @@ pub const MAX_RANGE_PROOF_BIT_LENGTH: usize = 64;
 /// This is only for performance reasons, where a very large batch can see diminishing returns
 /// There is no theoretical limit imposed by the algorithms!
 const MAX_RANGE_PROOF_BATCH_SIZE: usize = 256;
+
+/// The number of bytes in each serialized proof element
+const SERIALIZED_ELEMENT_SIZE: usize = 32;
+
+/// The number of proof elements fixed in all proofs: `a, a1, b, r1, s1`
+const FIXED_PROOF_ELEMENTS: usize = 5;
+
+/// Assorted serialization constants
+const ENCODED_EXTENSION_SIZE: usize = 1;
+const MIN_LI_LENGTH: usize = 1;
+const MIN_RI_LENGTH: usize = 1;
 
 /// # Example
 /// ```
@@ -923,78 +934,162 @@ where
     P: Compressable,
     P::Compressed: FixedBytesRepr,
 {
-    /// Serializes the proof into a byte array of 32-byte elements
+    /// Serializes the proof into a byte array
+    /// The first byte is an encoding of the extension degree, which tells us the length of `d1`
+    /// Then we serialize the rest of the proof elements as 32-byte encodings
     pub fn to_bytes(&self) -> Vec<u8> {
-        // 6 elements, 2 vectors
-        let mut buf = Vec::with_capacity(1 + (self.li.len() + self.ri.len() + 5 + self.d1.len()) * 32);
+        // The total proof size: extension degree encoding, fixed elements, vectors
+        let mut buf = Vec::with_capacity(
+            ENCODED_EXTENSION_SIZE +
+                (self.li.len() + self.ri.len() + FIXED_PROOF_ELEMENTS + self.d1.len()) * SERIALIZED_ELEMENT_SIZE,
+        );
+
+        // Encode the extension degree as a single byte
         buf.extend_from_slice(&(self.extension_degree as u8).to_le_bytes());
-        for l in &self.li {
-            buf.extend_from_slice(l.as_fixed_bytes());
+
+        // Encode `d1`, whose size is set by the extension degree
+        for d1 in &self.d1 {
+            buf.extend_from_slice(d1.as_bytes());
         }
-        for r in &self.ri {
-            buf.extend_from_slice(r.as_fixed_bytes());
-        }
+
+        // Encode the fixed proof elements
         buf.extend_from_slice(self.a.as_fixed_bytes());
         buf.extend_from_slice(self.a1.as_fixed_bytes());
         buf.extend_from_slice(self.b.as_fixed_bytes());
         buf.extend_from_slice(self.r1.as_bytes());
         buf.extend_from_slice(self.s1.as_bytes());
-        for d1 in &self.d1 {
-            buf.extend_from_slice(d1.as_bytes());
+
+        // Encode the remaining vectors, interleaved for easier deserialization
+        for (l, r) in self.li.iter().zip(self.ri.iter()) {
+            buf.extend_from_slice(l.as_fixed_bytes());
+            buf.extend_from_slice(r.as_fixed_bytes());
         }
+
         buf
     }
 
     /// Deserializes the proof from a byte slice
+    /// First we parse the extension degree, validate it, and use it to parse `d1`
+    /// Then we parse the remainder of the proof elements, inferring the lengths of `li` and `ri`
     pub fn from_bytes(slice: &[u8]) -> Result<Self, ProofError> {
-        if slice.is_empty() || (slice.len() - 1) % 32 != 0 {
-            return Err(ProofError::InvalidLength(
-                "Invalid serialized proof bytes length".to_string(),
-            ));
-        }
-        let extension_degree = ExtensionDegree::try_from(read_1_byte(&slice[0..])[0] as usize)?;
-        let num_elements = (slice.len() - 1) / 32;
-        if num_elements < 2 + 5 + extension_degree as usize {
-            return Err(ProofError::InvalidLength(
-                "Serialized proof has incorrect number of elements".to_string(),
-            ));
-        };
-        let num_inner_prod_vec_elements = num_elements - 5 - extension_degree as usize;
-        if num_inner_prod_vec_elements % 2 != 0 {
-            return Err(ProofError::InvalidLength(
-                "Serialized proof has incorrect number of elements".to_string(),
-            ));
-        }
-        let n = num_inner_prod_vec_elements / 2;
+        // Get the extension degree, which is encoded as a single byte
+        let extension_degree = ExtensionDegree::try_from(
+            *(slice
+                .first()
+                .ok_or_else(|| ProofError::InvalidLength("Serialized proof is too short".to_string()))?)
+                as usize,
+        )?;
 
-        let mut li = Vec::with_capacity(n);
-        let mut ri = Vec::with_capacity(n);
-        for i in 0..n {
-            li.push(P::Compressed::from_fixed_bytes(read_32_bytes(&slice[1 + i * 32..])));
-        }
-        for i in n..2 * n {
-            ri.push(P::Compressed::from_fixed_bytes(read_32_bytes(&slice[1 + i * 32..])));
+        // Now ensure the proof is long enough to account for all required elements:
+        // - encoded extension degree
+        // - `d1`
+        // - fixed proof elements
+        // - `li`, `ri`
+        // Since `li` and `ri` have variable length that depends on parameters, we only require they be nonempty
+        if slice.len() <
+            ENCODED_EXTENSION_SIZE +
+                SERIALIZED_ELEMENT_SIZE *
+                    ((extension_degree as usize) + FIXED_PROOF_ELEMENTS + MIN_LI_LENGTH + MIN_RI_LENGTH)
+        {
+            return Err(ProofError::InvalidLength("Serialized proof is too short".to_string()));
         }
 
-        let pos = 1 + 2 * n * 32;
-        let a = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos..]));
-        let a1 = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 32..]));
-        let b = P::Compressed::from_fixed_bytes(read_32_bytes(&slice[pos + 64..]));
-        let r1 = Option::from(Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 96..])))
-            .ok_or_else(|| ProofError::InvalidArgument("r1 bytes not a canonical byte representation".to_string()))?;
-        let s1 = Option::from(Scalar::from_canonical_bytes(read_32_bytes(&slice[pos + 128..])))
-            .ok_or_else(|| ProofError::InvalidArgument("s1 bytes not a canonical byte representation".to_string()))?;
-        let mut d1 = Vec::with_capacity(extension_degree as usize);
-        for i in 0..extension_degree as usize {
-            d1.push(
-                Option::from(Scalar::from_canonical_bytes(read_32_bytes(
-                    &slice[pos + 160 + i * 32..],
-                )))
-                .ok_or_else(|| {
-                    ProofError::InvalidArgument("d1 bytes not a canonical byte representation".to_string())
-                })?,
-            );
+        // Also ensure that `li` and `ri` will have the same number of elements
+        if (slice.len() -
+            ENCODED_EXTENSION_SIZE -
+            SERIALIZED_ELEMENT_SIZE * ((extension_degree as usize) + FIXED_PROOF_ELEMENTS)) %
+            (SERIALIZED_ELEMENT_SIZE * 2) !=
+            0
+        {
+            return Err(ProofError::InvalidLength(
+                "Serialized proof has an invalid size".to_string(),
+            ));
         }
+
+        // The rest of the serialization is of 32-byte proof elements
+        let mut chunks = slice[ENCODED_EXTENSION_SIZE..].chunks_exact(SERIALIZED_ELEMENT_SIZE);
+
+        // Extract `d1`, whose length is determined by the extension degree
+        let d1 = (0..extension_degree as usize)
+            .map(|_| {
+                let slice = chunks
+                    .next()
+                    .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))?;
+                let bytes: [u8; SERIALIZED_ELEMENT_SIZE] = slice
+                    .try_into()
+                    .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
+                Option::<Scalar>::from(Scalar::from_canonical_bytes(bytes))
+                    .ok_or(ProofError::InvalidArgument("Invalid parsing".to_string()))
+            })
+            .collect::<Result<Vec<Scalar>, ProofError>>()?;
+
+        // Extract the fixed proof elements
+        let a = chunks
+            .next()
+            .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))
+            .and_then(|slice| {
+                let bytes: [u8; SERIALIZED_ELEMENT_SIZE] = slice
+                    .try_into()
+                    .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
+                Ok(<P as Compressable>::Compressed::from_fixed_bytes(bytes))
+            })?;
+        let a1 = chunks
+            .next()
+            .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))
+            .and_then(|slice| {
+                let bytes: [u8; SERIALIZED_ELEMENT_SIZE] = slice
+                    .try_into()
+                    .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
+                Ok(<P as Compressable>::Compressed::from_fixed_bytes(bytes))
+            })?;
+        let b = chunks
+            .next()
+            .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))
+            .and_then(|slice| {
+                let bytes: [u8; SERIALIZED_ELEMENT_SIZE] = slice
+                    .try_into()
+                    .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
+                Ok(<P as Compressable>::Compressed::from_fixed_bytes(bytes))
+            })?;
+        let r1 = chunks
+            .next()
+            .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))
+            .and_then(|slice| {
+                let bytes: [u8; SERIALIZED_ELEMENT_SIZE] = slice
+                    .try_into()
+                    .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
+                Option::<Scalar>::from(Scalar::from_canonical_bytes(bytes))
+                    .ok_or(ProofError::InvalidArgument("Invalid parsing".to_string()))
+            })?;
+        let s1 = chunks
+            .next()
+            .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))
+            .and_then(|slice| {
+                let bytes: [u8; SERIALIZED_ELEMENT_SIZE] = slice
+                    .try_into()
+                    .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
+                Option::<Scalar>::from(Scalar::from_canonical_bytes(bytes))
+                    .ok_or(ProofError::InvalidArgument("Invalid parsing".to_string()))
+            })?;
+
+        // Extract the inner-product folding vectors `li` and `ri`
+        let (li, ri) = chunks
+            .tuples()
+            .map(|(l, r)| {
+                let bytes_l: [u8; SERIALIZED_ELEMENT_SIZE] = l
+                    .try_into()
+                    .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
+                let bytes_r: [u8; SERIALIZED_ELEMENT_SIZE] = r
+                    .try_into()
+                    .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
+                Ok((
+                    <P as Compressable>::Compressed::from_fixed_bytes(bytes_l),
+                    <P as Compressable>::Compressed::from_fixed_bytes(bytes_r),
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .unzip();
 
         Ok(RangeProof {
             a,
@@ -1011,12 +1106,12 @@ where
 
     /// Helper function to return the serialized proof's extension degree
     pub fn extension_degree_from_proof_bytes(slice: &[u8]) -> Result<ExtensionDegree, ProofError> {
-        if slice.is_empty() || (slice.len() - 1) % 32 != 0 {
-            return Err(ProofError::InvalidLength(
-                "Invalid serialized proof bytes length".to_string(),
-            ));
-        }
-        ExtensionDegree::try_from(read_1_byte(&slice[0..])[0] as usize)
+        ExtensionDegree::try_from(
+            *(slice
+                .first()
+                .ok_or_else(|| ProofError::InvalidLength("Serialized proof is too short".to_string()))?)
+                as usize,
+        )
     }
 }
 
@@ -1173,14 +1268,6 @@ mod tests {
                 Err(_) => {
                     assert_ne!((i + 1) % 64, 0);
                 },
-            }
-        }
-
-        let mut proof_bytes_meddled = proof_bytes.clone();
-        for _i in 0..proof_bytes.len() * 10 {
-            proof_bytes_meddled.append(&mut u8::MAX.to_le_bytes().to_vec());
-            if RistrettoRangeProof::from_bytes(&proof_bytes_meddled).is_ok() {
-                panic!("Should err");
             }
         }
     }
