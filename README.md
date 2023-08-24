@@ -18,7 +18,8 @@ In particular, it supports:
 Compared to an [updated fork](https://github.com/tari-project/bulletproofs) of the `dalek-cryptography` [Bulletproofs](https://github.com/dalek-cryptography/bulletproofs) implementation, this Bulletproofs+ implementation is:
 - **Smaller**. Regardless of the aggregation factor, a Bulletproofs+ proof is 96 bytes shorter.
 - **Faster to generate proofs**. This implementation generates a non-aggregated 64-bit range proof about 10% faster, with similar speedups for aggregated proofs.
-- **Slower to verify single proofs**. While this implementation verifies a single 64-bit range proof in comparable time, it verifies aggregated proofs more slowly.
+- **Faster to verify single proofs**. This implementation verifies a single 64-bit range proof about 15% faster.
+- **Slower to verify aggregated proofs**. This implementaiton verifies aggregated proofs more slowly.
 - **Faster to verify batched proofs**. Because this implementation supports batching, its marginal verification time for a single 64-bit range proof can be reduced to under half the corresponding non-batched time.
 
 As always, your mileage may vary.
