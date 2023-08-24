@@ -22,12 +22,12 @@ static EXTENSION_DEGREE: [ExtensionDegree; 2] = [ExtensionDegree::DefaultPederse
 static BP_GENS_ARR: [usize; 5] = [0, 3, 5, 7, 9];
 // To do a full spectrum of tests, use these constants instead
 // static EXTENSION_DEGREE: [ExtensionDegree; 6] = [
-//     ExtensionDegree::Zero,
-//     ExtensionDegree::One,
-//     ExtensionDegree::Two,
-//     ExtensionDegree::Three,
-//     ExtensionDegree::Four,
-//     ExtensionDegree::Five,
+//     ExtensionDegree::DefaultPedersen,
+//     ExtensionDegree::AddOneBasePoint,
+//     ExtensionDegree::AddTwoBasePoints,
+//     ExtensionDegree::AddThreeBasePoints,
+//     ExtensionDegree::AddFourBasePoints,
+//     ExtensionDegree::AddFiveBasePoints,
 // ];
 // static BP_GENS_ARR: [usize; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
