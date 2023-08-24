@@ -101,6 +101,15 @@ pub fn read_1_byte(data: &[u8]) -> [u8; 1] {
     buf8
 }
 
+/// Split a vector, checking the bound to avoid a panic
+pub fn split_at_checked<T>(vec: &[T], n: usize) -> Result<(&[T], &[T]), ProofError> {
+    if n <= vec.len() {
+        Ok(vec.split_at(n))
+    } else {
+        Err(ProofError::InvalidLength("Invalid vector split index".to_string()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use curve25519_dalek::scalar::Scalar;
@@ -110,8 +119,38 @@ mod tests {
         errors::ProofError,
         protocols::scalar_protocol::ScalarProtocol,
         range_proof::MAX_RANGE_PROOF_BIT_LENGTH,
-        utils::generic::{bit_vector_of_scalars, nonce, BLAKE2B_PERSONA_LIMIT},
+        utils::generic::{bit_vector_of_scalars, nonce, split_at_checked, BLAKE2B_PERSONA_LIMIT},
     };
+
+    #[test]
+    fn test_split() {
+        // Check valid splits
+        let v = vec![0u8, 1u8, 2u8];
+        let (l, r) = split_at_checked(&v, 0).unwrap();
+        assert_eq!(l, vec![]);
+        assert_eq!(r, vec![0u8, 1u8, 2u8]);
+
+        let (l, r) = split_at_checked(&v, 1).unwrap();
+        assert_eq!(l, vec![0u8]);
+        assert_eq!(r, vec![1u8, 2u8]);
+
+        let (l, r) = split_at_checked(&v, 2).unwrap();
+        assert_eq!(l, vec![0u8, 1u8]);
+        assert_eq!(r, vec![2u8]);
+
+        let (l, r) = split_at_checked(&v, 3).unwrap();
+        assert_eq!(l, vec![0u8, 1u8, 2u8]);
+        assert_eq!(r, vec![]);
+
+        // Check invalid split
+        assert!(split_at_checked(&v, 4).is_err());
+
+        // Split an empty vector
+        let v = Vec::<u8>::new();
+        let (l, r) = split_at_checked(&v, 0).unwrap();
+        assert_eq!(l, Vec::<u8>::new());
+        assert_eq!(r, Vec::<u8>::new());
+    }
 
     #[test]
     fn test_nonce() {

@@ -16,8 +16,6 @@ pub mod errors;
 pub mod extended_mask;
 /// Bulletproofs+ `generators` module contains API for producing a set of generators for a range proof
 pub mod generators;
-/// Bulletproofs+ inner product calculation for each round
-mod inner_product_round;
 /// Bulletproofs+ library protocol extensions
 pub mod protocols;
 /// Bulletproofs+ range parameters (generators and base points) needed for a batch of range proofs
