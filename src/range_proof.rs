@@ -708,8 +708,7 @@ where
             let (y, z) = transcripts::transcript_point_a_challenges_y_z(&mut transcript, &proof.a)?;
             let mut challenges = Vec::with_capacity(rounds);
             for j in 0..rounds {
-                let e =
-                    transcripts::transcript_points_l_r_challenge_e(&mut transcript, &proof.li()?[j], &proof.ri()?[j])?;
+                let e = transcripts::transcript_points_l_r_challenge_e(&mut transcript, &proof.li[j], &proof.ri[j])?;
                 challenges.push(e);
             }
             let e = transcripts::transcript_points_a1_b_challenge_e(&mut transcript, &proof.a1, &proof.b)?;
@@ -896,54 +895,26 @@ where
 
     // Helper function to decompress Li
     fn li_decompressed(&self) -> Result<Vec<P>, ProofError> {
-        if self.li.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
-        } else {
-            let mut li = Vec::with_capacity(self.li.len());
-            for item in self.li.clone() {
-                li.push(item.decompress().ok_or_else(|| {
-                    ProofError::InvalidArgument(
-                        "An item in member 'L' was not the canonical encoding of a point".to_string(),
-                    )
-                })?)
-            }
-            Ok(li)
-        }
-    }
-
-    // Helper function to return compressed Li
-    fn li(&self) -> Result<Vec<P::Compressed>, ProofError> {
-        if self.li.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'L' not assigned yet".to_string()))
-        } else {
-            Ok(self.li.clone())
-        }
+        self.li
+            .iter()
+            .map(|p| {
+                p.decompress().ok_or(ProofError::InvalidArgument(
+                    "An item in member 'L' was not the canonical encoding of a point".to_string(),
+                ))
+            })
+            .collect()
     }
 
     // Helper function to decompress Ri
     fn ri_decompressed(&self) -> Result<Vec<P>, ProofError> {
-        if self.ri.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
-        } else {
-            let mut ri = Vec::with_capacity(self.ri.len());
-            for item in self.ri.clone() {
-                ri.push(item.decompress().ok_or_else(|| {
-                    ProofError::InvalidArgument(
-                        "An item in member 'R' was not the canonical encoding of a point".to_string(),
-                    )
-                })?)
-            }
-            Ok(ri)
-        }
-    }
-
-    // Helper function to return compressed Ri
-    fn ri(&self) -> Result<Vec<P::Compressed>, ProofError> {
-        if self.ri.is_empty() {
-            Err(ProofError::InvalidArgument("Vector 'R' not assigned yet".to_string()))
-        } else {
-            Ok(self.ri.clone())
-        }
+        self.ri
+            .iter()
+            .map(|p| {
+                p.decompress().ok_or(ProofError::InvalidArgument(
+                    "An item in member 'L' was not the canonical encoding of a point".to_string(),
+                ))
+            })
+            .collect()
     }
 }
 
@@ -1424,15 +1395,9 @@ mod tests {
         // Mutate proof vectors
         proof.li[0] = CompressedRistretto::from_fixed_bytes(bytes);
         assert!(proof.li_decompressed().is_err());
-        proof.li.clear();
-        assert!(proof.li_decompressed().is_err());
-        assert!(proof.li().is_err());
 
         proof.ri[0] = CompressedRistretto::from_fixed_bytes(bytes);
         assert!(proof.ri_decompressed().is_err());
-        proof.ri.clear();
-        assert!(proof.ri_decompressed().is_err());
-        assert!(proof.ri().is_err());
     }
 
     #[test]
