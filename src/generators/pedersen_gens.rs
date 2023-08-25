@@ -53,6 +53,10 @@ pub enum ExtensionDegree {
 }
 
 impl ExtensionDegree {
+    /// The number of extension degrees
+    /// This MUST be correct, or other functions may panic
+    pub(crate) const EXTENSION_DEGREES: usize = 6;
+
     /// Helper function to convert a size into an extension degree
     pub fn try_from_size(size: usize) -> Result<ExtensionDegree, ProofError> {
         match size {
@@ -103,5 +107,19 @@ where P: Compressable + MultiscalarMul<Point = P> + Clone
             let points = once(&self.h_base).chain(g_base_head);
             Ok(P::multiscalar_mul(scalars, points))
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::ExtensionDegree;
+
+    #[test]
+    fn test_extension_degree_size() {
+        // Assert the extension degree size constant is correct (remember they are 1-indexed)
+        for i in 0..ExtensionDegree::EXTENSION_DEGREES {
+            assert!(ExtensionDegree::try_from_size(i + 1).is_ok());
+        }
+        assert!(ExtensionDegree::try_from_size(ExtensionDegree::EXTENSION_DEGREES + 1).is_err());
     }
 }

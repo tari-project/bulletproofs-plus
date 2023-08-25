@@ -9,6 +9,7 @@ use curve25519_dalek::{
     constants::{RISTRETTO_BASEPOINT_COMPRESSED, RISTRETTO_BASEPOINT_POINT},
     ristretto::{CompressedRistretto, RistrettoPoint, VartimeRistrettoPrecomputation},
 };
+use once_cell::sync::OnceCell;
 
 use crate::{
     generators::pedersen_gens::ExtensionDegree,
@@ -71,111 +72,40 @@ pub fn create_pedersen_gens_with_extension_degree(extension_degree: ExtensionDeg
     }
 }
 
-// Assign vectors only performing the number of lazy static base point calculations that is necessary, using
-// on the fly compression for compressed base points otherwise
+// Get masking points and compressed points based on extension degree
 fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<CompressedRistretto>) {
-    match extension_degree {
-        ExtensionDegree::DefaultPedersen => (vec![*RISTRETTO_BASEPOINT_POINT_BLINDING_1], vec![
-            *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
-        ]),
-        ExtensionDegree::AddOneBasePoint => (
-            vec![
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
-            ],
-            vec![
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
-            ],
-        ),
-        ExtensionDegree::AddTwoBasePoints => (
-            vec![
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_3,
-            ],
-            vec![
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
-            ],
-        ),
-        ExtensionDegree::AddThreeBasePoints => (
-            vec![
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_3,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_4,
-            ],
-            vec![
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_4,
-            ],
-        ),
-        ExtensionDegree::AddFourBasePoints => (
-            vec![
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_3,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_4,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_5,
-            ],
-            vec![
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_4,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_5,
-            ],
-        ),
-        ExtensionDegree::AddFiveBasePoints => (
-            vec![
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_3,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_4,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_5,
-                *RISTRETTO_BASEPOINT_POINT_BLINDING_6,
-            ],
-            vec![
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_4,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_5,
-                *RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_6,
-            ],
-        ),
-    }
+    (
+        ristretto_masking_basepoints()[..extension_degree as usize].to_vec(),
+        ristretto_compressed_masking_basepoints()[..extension_degree as usize].to_vec(),
+    )
 }
 
-lazy_static! {
-    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_1: RistrettoPoint =
-        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_1 degree ZERO");
-    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_2: RistrettoPoint =
-        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_2 degree ONE");
-    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_3: RistrettoPoint =
-        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_3 degree TWO");
-    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_4: RistrettoPoint =
-        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_4 degree THREE");
-    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_5: RistrettoPoint =
-        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_5 degree FOUR");
-    static ref RISTRETTO_BASEPOINT_POINT_BLINDING_6: RistrettoPoint =
-        RistrettoPoint::hash_from_bytes_sha3_512(b"RISTRETTO_BASEPOINT_POINT_BLINDING_6 degree FIVE");
-    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_1: CompressedRistretto =
-        (*RISTRETTO_BASEPOINT_POINT_BLINDING_1).compress();
-    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_2: CompressedRistretto =
-        (*RISTRETTO_BASEPOINT_POINT_BLINDING_2).compress();
-    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_3: CompressedRistretto =
-        (*RISTRETTO_BASEPOINT_POINT_BLINDING_3).compress();
-    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_4: CompressedRistretto =
-        (*RISTRETTO_BASEPOINT_POINT_BLINDING_4).compress();
-    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_5: CompressedRistretto =
-        (*RISTRETTO_BASEPOINT_POINT_BLINDING_5).compress();
-    static ref RISTRETTO_BASEPOINT_COMPRESSED_BLINDING_6: CompressedRistretto =
-        (*RISTRETTO_BASEPOINT_POINT_BLINDING_6).compress();
+/// A static array of pre-generated points
+fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::EXTENSION_DEGREES] {
+    static INSTANCE: OnceCell<[RistrettoPoint; ExtensionDegree::EXTENSION_DEGREES]> = OnceCell::new();
+    INSTANCE.get_or_init(|| {
+        let mut arr = [RistrettoPoint::default(); ExtensionDegree::EXTENSION_DEGREES];
+        for (i, compressed) in arr.iter_mut().enumerate().take(ExtensionDegree::EXTENSION_DEGREES) {
+            // These are 1-indexed to match the `ExtensionSize` enumeration definition
+            let label = "RISTRETTO_MASKING_BASEPOINT_".to_owned() + &(i + 1).to_string();
+            *compressed = RistrettoPoint::hash_from_bytes_sha3_512(label.as_bytes());
+        }
+
+        arr
+    })
+}
+
+/// A static array of compressed pre-generated points
+fn ristretto_compressed_masking_basepoints() -> &'static [CompressedRistretto; ExtensionDegree::EXTENSION_DEGREES] {
+    static INSTANCE: OnceCell<[CompressedRistretto; ExtensionDegree::EXTENSION_DEGREES]> = OnceCell::new();
+    INSTANCE.get_or_init(|| {
+        let mut arr = [CompressedRistretto::default(); ExtensionDegree::EXTENSION_DEGREES];
+        for (i, point) in ristretto_masking_basepoints().iter().enumerate() {
+            arr[i] = point.compress();
+        }
+
+        arr
+    })
 }
 
 #[cfg(test)]
@@ -197,17 +127,14 @@ mod tests {
     #[test]
     fn test_constants() {
         // Extended Pedersen generators with extension degree of zero to five
-        let lazy_statics = [
-            *RISTRETTO_BASEPOINT_POINT_BLINDING_1,
-            *RISTRETTO_BASEPOINT_POINT_BLINDING_2,
-            *RISTRETTO_BASEPOINT_POINT_BLINDING_3,
-            *RISTRETTO_BASEPOINT_POINT_BLINDING_4,
-            *RISTRETTO_BASEPOINT_POINT_BLINDING_5,
-            *RISTRETTO_BASEPOINT_POINT_BLINDING_6,
-        ];
+        let masking_basepoints = ristretto_masking_basepoints();
         for extension_degree in EXTENSION_DEGREE {
             let pc_gens = create_pedersen_gens_with_extension_degree(extension_degree);
-            for (i, item) in lazy_statics.iter().enumerate().take(pc_gens.extension_degree as usize) {
+            for (i, item) in masking_basepoints
+                .iter()
+                .enumerate()
+                .take(pc_gens.extension_degree as usize)
+            {
                 assert_eq!(pc_gens.g_base_vec[i].compress(), pc_gens.g_base_compressed_vec[i]);
                 assert_eq!(item.compress(), pc_gens.g_base_compressed_vec[i]);
             }
