@@ -1269,9 +1269,7 @@ mod tests {
         for i in 0..u8::MAX {
             if ExtensionDegree::try_from(i as usize).is_err() {
                 proof_bytes_meddled[0] = i;
-                if RistrettoRangeProof::from_bytes(&proof_bytes_meddled).is_ok() {
-                    panic!("Should err");
-                }
+                assert!(RistrettoRangeProof::from_bytes(&proof_bytes_meddled).is_err());
                 break;
             }
         }
