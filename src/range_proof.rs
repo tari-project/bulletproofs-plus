@@ -712,11 +712,13 @@ where
                     "Vector L length not equal to vector R length".to_string(),
                 ));
             }
-            if 1usize
-                .checked_shl(u32::try_from(rounds).map_err(|_| ProofError::SizeOverflow)?)
-                .ok_or(ProofError::SizeOverflow)? !=
-                full_length
-            {
+
+            // Check for an overflow from the number of rounds
+            let rounds_u32 = u32::try_from(rounds).map_err(|_| ProofError::SizeOverflow)?;
+            if rounds_u32.leading_zeros() == 0 {
+                return Err(ProofError::SizeOverflow);
+            }
+            if 1usize.checked_shl(rounds_u32).ok_or(ProofError::SizeOverflow)? != full_length {
                 return Err(ProofError::InvalidLength("Vector L/R length not adequate".to_string()));
             }
 
