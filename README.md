@@ -24,6 +24,8 @@ Compared to an [updated fork](https://github.com/tari-project/bulletproofs) of t
 
 As always, your mileage may vary.
 
+This implementation uses the excellent [`zeroize`](https://crates.io/crates/zeroize) library to make a best-effort approach at minimizing exposure of value- and mask-related data in memory, as this is often considered sensitive. However, it is difficult in general to guarantee that there are no coding patterns leading to [unintended copies](https://docs.rs/zeroize/1.6.0/zeroize/#stackheap-zeroing-notes) of data, so care should always be taken not to make too many assumptions about the contents of memory.
+
 ## References
 
 This implementation takes its cue from the `dalek-cryptography` [Bulletproofs](https://github.com/dalek-cryptography/bulletproofs) implementation, as well as the Monero [Bulletproofs+](https://www.getmonero.org/2020/12/24/Bulletproofs+-in-Monero.html) implementation.

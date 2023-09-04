@@ -19,7 +19,7 @@ use blake2::Blake2bMac512;
 use curve25519_dalek::scalar::Scalar;
 use zeroize::Zeroizing;
 
-use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::MAX_RANGE_PROOF_BIT_LENGTH};
+use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol};
 
 /// The maximum number of bytes that `Blake2b` can accommodate in its `persona` field
 /// This is defined in https://www.blake2.net/blake2.pdf section 2.8
@@ -65,29 +65,6 @@ pub fn nonce(
     Ok(Scalar::from_hasher_blake2b(hasher))
 }
 
-/// Decompose a given value into a vector of scalars for the required bit length
-pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar>, ProofError> {
-    if !bit_length.is_power_of_two() || bit_length > MAX_RANGE_PROOF_BIT_LENGTH {
-        return Err(ProofError::InvalidLength(
-            "Bit size not valid, must be a power of 2 and <= 64".to_string(),
-        ));
-    }
-    if value >> (bit_length - 1) > 1 {
-        return Err(ProofError::InvalidLength(
-            "Value too large, bit vector capacity will be exceeded".to_string(),
-        ));
-    }
-    let mut result = Vec::with_capacity(bit_length);
-    for i in 0..bit_length {
-        if (value >> i) & 1 == 0 {
-            result.push(Scalar::ZERO);
-        } else {
-            result.push(Scalar::ONE);
-        }
-    }
-    Ok(result)
-}
-
 /// Split a vector, checking the bound to avoid a panic
 pub fn split_at_checked<T>(vec: &[T], n: usize) -> Result<(&[T], &[T]), ProofError> {
     if n <= vec.len() {
@@ -103,10 +80,8 @@ mod tests {
     use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
     use crate::{
-        errors::ProofError,
         protocols::scalar_protocol::ScalarProtocol,
-        range_proof::MAX_RANGE_PROOF_BIT_LENGTH,
-        utils::generic::{bit_vector_of_scalars, nonce, split_at_checked, BLAKE2B_PERSONA_LIMIT},
+        utils::generic::{nonce, split_at_checked, BLAKE2B_PERSONA_LIMIT},
     };
 
     #[test]
@@ -231,41 +206,5 @@ mod tests {
         // Verify that indexes are invalid if exceeding a `u32` limit
         assert!(nonce(&seed_nonce, "", Some(u32::MAX as usize + 1), None).is_err());
         assert!(nonce(&seed_nonce, "", None, Some(u32::MAX as usize + 1)).is_err());
-    }
-
-    fn bit_vector_to_value(bit_vector: &[Scalar]) -> Result<u64, ProofError> {
-        if !bit_vector.len().is_power_of_two() || bit_vector.len() > MAX_RANGE_PROOF_BIT_LENGTH {
-            return Err(ProofError::InvalidLength(
-                "Bit vector must be a power of 2 with length <= 64".to_string(),
-            ));
-        }
-        let mut result = 0u128;
-        for i in 0..bit_vector.len() as u128 {
-            if bit_vector[i as usize] == Scalar::ONE {
-                result += 1 << i;
-            }
-        }
-        #[allow(clippy::cast_possible_truncation)]
-        Ok(result as u64)
-    }
-
-    #[test]
-    fn test_bit_vector() {
-        // Valid cases
-        assert_eq!(bit_vector_to_value(&bit_vector_of_scalars(11, 4).unwrap()).unwrap(), 11);
-        assert_eq!(bit_vector_to_value(&bit_vector_of_scalars(15, 4).unwrap()).unwrap(), 15);
-        assert_eq!(
-            bit_vector_to_value(&bit_vector_of_scalars(u64::MAX - 12187, MAX_RANGE_PROOF_BIT_LENGTH).unwrap()).unwrap(),
-            u64::MAX - 12187
-        );
-        assert_eq!(
-            bit_vector_to_value(&bit_vector_of_scalars(u64::MAX, MAX_RANGE_PROOF_BIT_LENGTH).unwrap()).unwrap(),
-            u64::MAX
-        );
-
-        // Error cases
-        assert!(bit_vector_of_scalars(15, 5).is_err());
-        assert!(bit_vector_of_scalars(16, 4).is_err());
-        assert!(bit_vector_of_scalars(0, MAX_RANGE_PROOF_BIT_LENGTH * 2).is_err());
     }
 }

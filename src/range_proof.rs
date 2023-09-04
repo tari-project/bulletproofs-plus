@@ -8,7 +8,7 @@
 use std::{
     convert::{TryFrom, TryInto},
     marker::PhantomData,
-    ops::{Add, Mul},
+    ops::{Add, Mul, Shr},
 };
 
 use curve25519_dalek::{
@@ -34,7 +34,7 @@ use crate::{
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
     transcripts,
-    utils::generic::{bit_vector_of_scalars, nonce, split_at_checked},
+    utils::generic::{nonce, split_at_checked},
 };
 
 /// Optionally extract masks when verifying the proofs
@@ -249,20 +249,27 @@ where
         )?;
 
         // Set bit arrays
-        let mut a_li = Vec::with_capacity(full_length);
-        let mut a_ri = Vec::with_capacity(full_length);
-        for (j, value) in witness.openings.iter().map(|o| o.v).enumerate() {
-            let bit_vector = if let Some(minimum_value) = statement.minimum_value_promises[j] {
-                let offset_value = value.checked_sub(minimum_value).ok_or(ProofError::InvalidArgument(
+        let mut a_li = Zeroizing::new(Vec::with_capacity(full_length));
+        let mut a_ri = Zeroizing::new(Vec::with_capacity(full_length));
+        for (minimum_value, value) in statement
+            .minimum_value_promises
+            .iter()
+            .zip(witness.openings.iter().map(|o| &o.v))
+        {
+            // Offset by the minimum value if needed
+            let offset_value = if let Some(minimum_value) = minimum_value {
+                Zeroizing::new(value.checked_sub(*minimum_value).ok_or(ProofError::InvalidArgument(
                     "Minimum value is larger than value".to_string(),
-                ))?;
-                bit_vector_of_scalars(offset_value, bit_length)?
+                ))?)
             } else {
-                bit_vector_of_scalars(value, bit_length)?
+                Zeroizing::new(*value)
             };
-            for bit_field in bit_vector.clone() {
-                a_li.push(bit_field);
-                a_ri.push(bit_field - Scalar::ONE);
+
+            // Decompose into bits
+            for i in 0..bit_length {
+                let i_u32 = u32::try_from(i).map_err(|_| ProofError::SizeOverflow)?;
+                a_li.push(Scalar::from(offset_value.shr(i_u32) & 1));
+                a_ri.push(Scalar::from(offset_value.shr(i_u32) & 1) - Scalar::ONE);
             }
         }
 
@@ -310,7 +317,7 @@ where
         }
 
         // Prepare for inner product
-        for item in &mut a_li {
+        for item in a_li.iter_mut() {
             *item -= z;
         }
         for (i, item) in a_ri.iter_mut().enumerate() {
@@ -380,14 +387,18 @@ where
 
             round += 1;
 
-            let c_l = izip!(a_lo, y_powers.iter().skip(1), b_hi)
-                .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b);
-            let c_r = izip!(a_hi, y_powers.iter().skip(n + 1), b_lo)
-                .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b);
+            let c_l = Zeroizing::new(
+                izip!(a_lo, y_powers.iter().skip(1), b_hi)
+                    .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b),
+            );
+            let c_r = Zeroizing::new(
+                izip!(a_hi, y_powers.iter().skip(n + 1), b_lo)
+                    .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b),
+            );
 
             // Compute L and R by multi-scalar multiplication
             li.push(P::vartime_multiscalar_mul(
-                std::iter::once(&c_l)
+                std::iter::once::<&Scalar>(&c_l)
                     .chain(d_l.iter())
                     .chain(a_lo_offset.iter())
                     .chain(b_hi.iter()),
@@ -397,7 +408,7 @@ where
                     .chain(hi_base_lo),
             ));
             ri.push(P::vartime_multiscalar_mul(
-                std::iter::once(&c_r)
+                std::iter::once::<&Scalar>(&c_r)
                     .chain(d_r.iter())
                     .chain(a_hi_offset.iter())
                     .chain(b_lo.iter()),
@@ -433,16 +444,18 @@ where
                 .zip(hi_base_hi.iter())
                 .map(|(lo, hi)| P::vartime_multiscalar_mul([&e, &e_inverse], [lo, hi]))
                 .collect();
-            a_li = a_lo
-                .iter()
-                .zip(a_hi_offset.iter())
-                .map(|(lo, hi)| lo * e + hi * e_inverse)
-                .collect();
-            a_ri = b_lo
-                .iter()
-                .zip(b_hi.iter())
-                .map(|(lo, hi)| lo * e_inverse + hi * e)
-                .collect();
+            a_li = Zeroizing::new(
+                a_lo.iter()
+                    .zip(a_hi_offset.iter())
+                    .map(|(lo, hi)| lo * e + hi * e_inverse)
+                    .collect(),
+            );
+            a_ri = Zeroizing::new(
+                b_lo.iter()
+                    .zip(b_hi.iter())
+                    .map(|(lo, hi)| lo * e_inverse + hi * e)
+                    .collect(),
+            );
 
             for (alpha, (l, r)) in alpha.iter_mut().zip(d_l.iter().zip(d_r.iter())) {
                 *alpha += l * e_square + r * e_inverse_square;
@@ -451,7 +464,8 @@ where
 
         // Random masks
         // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-        let (r, s) = (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng));
+        let r = Zeroizing::new(Scalar::random_not_zero(rng));
+        let s = Zeroizing::new(Scalar::random_not_zero(rng));
         let d = if let Some(seed_nonce) = statement.seed_nonce {
             Zeroizing::new(
                 (0..extension_degree)
@@ -474,8 +488,8 @@ where
         };
 
         let mut a1 =
-            &gi_base[0] * r + &hi_base[0] * s + h_base * (r * y_powers[1] * a_ri[0] + s * y_powers[1] * a_li[0]);
-        let mut b = h_base * (r * y_powers[1] * s);
+            &gi_base[0] * *r + &hi_base[0] * *s + h_base * (*r * y_powers[1] * a_ri[0] + *s * y_powers[1] * a_li[0]);
+        let mut b = h_base * (*r * y_powers[1] * *s);
         for k in 0..extension_degree {
             a1 += &g_base[k] * d[k];
             b += &g_base[k] * eta[k]
@@ -484,8 +498,8 @@ where
         let e = transcripts::transcript_points_a1_b_challenge_e(&mut transcript, &a1.compress(), &b.compress())?;
         let e_square = e * e;
 
-        let r1 = r + a_li[0] * e;
-        let s1 = s + a_ri[0] * e;
+        let r1 = *r + a_li[0] * e;
+        let s1 = *s + a_ri[0] * e;
         let d1: Vec<Scalar> = izip!(eta.iter(), d.iter(), alpha.iter())
             .map(|(eta, d, alpha)| eta + d * e + alpha * e_square)
             .collect();
