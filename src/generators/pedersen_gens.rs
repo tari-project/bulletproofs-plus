@@ -42,15 +42,15 @@ pub enum ExtensionDegree {
     /// Default Pedersen commitment
     DefaultPedersen = 1,
     /// Pedersen commitment extended with one degree
-    AddOneBasePoint = 2,
+    AddOneBasePoint,
     /// Pedersen commitment extended with two degrees
-    AddTwoBasePoints = 3,
+    AddTwoBasePoints,
     /// Pedersen commitment extended with three degrees
-    AddThreeBasePoints = 4,
+    AddThreeBasePoints,
     /// Pedersen commitment extended with four degrees
-    AddFourBasePoints = 5,
+    AddFourBasePoints,
     /// Pedersen commitment extended with five degrees
-    AddFiveBasePoints = 6,
+    AddFiveBasePoints,
 }
 
 impl ExtensionDegree {
