@@ -81,14 +81,13 @@ fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<Co
 }
 
 /// A static array of pre-generated points
-fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::EXTENSION_DEGREES] {
-    static INSTANCE: OnceCell<[RistrettoPoint; ExtensionDegree::EXTENSION_DEGREES]> = OnceCell::new();
+fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::TOTAL] {
+    static INSTANCE: OnceCell<[RistrettoPoint; ExtensionDegree::TOTAL]> = OnceCell::new();
     INSTANCE.get_or_init(|| {
-        let mut arr = [RistrettoPoint::default(); ExtensionDegree::EXTENSION_DEGREES];
-        for (i, compressed) in arr.iter_mut().enumerate().take(ExtensionDegree::EXTENSION_DEGREES) {
-            // These are 1-indexed to match the `ExtensionSize` enumeration definition
-            let label = "RISTRETTO_MASKING_BASEPOINT_".to_owned() + &(i + 1).to_string();
-            *compressed = RistrettoPoint::hash_from_bytes_sha3_512(label.as_bytes());
+        let mut arr = [RistrettoPoint::default(); ExtensionDegree::TOTAL];
+        for (i, point) in (ExtensionDegree::MINIMUM..).zip(arr.iter_mut()) {
+            let label = "RISTRETTO_MASKING_BASEPOINT_".to_owned() + &i.to_string();
+            *point = RistrettoPoint::hash_from_bytes_sha3_512(label.as_bytes());
         }
 
         arr
@@ -96,10 +95,10 @@ fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::
 }
 
 /// A static array of compressed pre-generated points
-fn ristretto_compressed_masking_basepoints() -> &'static [CompressedRistretto; ExtensionDegree::EXTENSION_DEGREES] {
-    static INSTANCE: OnceCell<[CompressedRistretto; ExtensionDegree::EXTENSION_DEGREES]> = OnceCell::new();
+fn ristretto_compressed_masking_basepoints() -> &'static [CompressedRistretto; ExtensionDegree::TOTAL] {
+    static INSTANCE: OnceCell<[CompressedRistretto; ExtensionDegree::TOTAL]> = OnceCell::new();
     INSTANCE.get_or_init(|| {
-        let mut arr = [CompressedRistretto::default(); ExtensionDegree::EXTENSION_DEGREES];
+        let mut arr = [CompressedRistretto::default(); ExtensionDegree::TOTAL];
         for (i, point) in ristretto_masking_basepoints().iter().enumerate() {
             arr[i] = point.compress();
         }

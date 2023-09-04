@@ -36,6 +36,7 @@ pub struct PedersenGens<P: Compressable> {
 
 /// The extension degree for extended commitments. Currently this is limited to 5 extension degrees, but in theory it
 /// could be arbitrarily long, although practically, very few if any test cases will use more than 2 extension degrees.
+/// These values MUST increment, or other functions may panic.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ExtensionDegree {
     /// Default Pedersen commitment
@@ -53,9 +54,14 @@ pub enum ExtensionDegree {
 }
 
 impl ExtensionDegree {
-    /// The number of extension degrees
+    /// The highest numerical value corresponding to a valid extension degree
     /// This MUST be correct, or other functions may panic
-    pub(crate) const EXTENSION_DEGREES: usize = 6;
+    pub(crate) const MAXIMUM: usize = ExtensionDegree::AddFiveBasePoints as usize;
+    /// The lowest numerical value corresponding to a valid extension degree
+    /// This MUST be correct, or other functions may panic
+    pub(crate) const MINIMUM: usize = ExtensionDegree::DefaultPedersen as usize;
+    /// The total number of valid extension degrees
+    pub(crate) const TOTAL: usize = ExtensionDegree::MAXIMUM - ExtensionDegree::MINIMUM + 1;
 
     /// Helper function to convert a size into an extension degree
     pub fn try_from_size(size: usize) -> Result<ExtensionDegree, ProofError> {
@@ -115,11 +121,17 @@ mod test {
     use super::ExtensionDegree;
 
     #[test]
+    // Test the size range, assuming extension degree values are incremented
     fn test_extension_degree_size() {
-        // Assert the extension degree size constant is correct (remember they are 1-indexed)
-        for i in 0..ExtensionDegree::EXTENSION_DEGREES {
-            assert!(ExtensionDegree::try_from_size(i + 1).is_ok());
+        // Value is too low
+        assert!(ExtensionDegree::try_from_size(ExtensionDegree::MINIMUM - 1).is_err());
+
+        // Valid values
+        for i in ExtensionDegree::MINIMUM..=ExtensionDegree::MAXIMUM {
+            assert!(ExtensionDegree::try_from_size(i).is_ok());
         }
-        assert!(ExtensionDegree::try_from_size(ExtensionDegree::EXTENSION_DEGREES + 1).is_err());
+
+        // Value is too high
+        assert!(ExtensionDegree::try_from_size(ExtensionDegree::MAXIMUM + 1).is_err());
     }
 }
