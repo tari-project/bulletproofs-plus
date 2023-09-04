@@ -17,6 +17,7 @@ use std::convert::TryFrom;
 
 use blake2::Blake2bMac512;
 use curve25519_dalek::scalar::Scalar;
+use zeroize::Zeroizing;
 
 use crate::{errors::ProofError, protocols::scalar_protocol::ScalarProtocol, range_proof::MAX_RANGE_PROOF_BIT_LENGTH};
 
@@ -47,7 +48,7 @@ pub fn nonce(
 
     // We use fixed-length encodings of the seed and (optional) indexes
     // Further, we use domain separation for the indexes to avoid collisions
-    let mut key = Vec::with_capacity(43); // 1 + 32 + optional(1 + 4)  + optional(1 + 4)
+    let mut key = Zeroizing::new(Vec::with_capacity(43)); // 1 + 32 + optional(1 + 4)  + optional(1 + 4)
     key.push(0u8); // Initialize the vector to enable 'append' (1 byte)
     key.append(&mut seed_nonce.to_bytes().to_vec()); // Fixed length encoding of 'seed_nonce' (32 bytes)
     if let Some(index) = index_j {

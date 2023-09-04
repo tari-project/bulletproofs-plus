@@ -19,6 +19,7 @@ use itertools::{izip, Itertools};
 use merlin::Transcript;
 use rand::thread_rng;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+use zeroize::Zeroizing;
 
 use crate::{
     errors::ProofError,
@@ -267,7 +268,7 @@ where
 
         // Compute A by multi-scalar multiplication
         let rng = &mut thread_rng();
-        let mut alpha = Vec::with_capacity(extension_degree);
+        let mut alpha = Zeroizing::new(Vec::with_capacity(extension_degree));
         for k in 0..extension_degree {
             alpha.push(if let Some(seed_nonce) = statement.seed_nonce {
                 nonce(&seed_nonce, "alpha", None, Some(k))?
@@ -357,20 +358,24 @@ where
             let a_hi_offset = a_hi.iter().map(|s| s * y_powers[n]).collect::<Vec<Scalar>>();
 
             let d_l = if let Some(seed_nonce) = statement.seed_nonce {
-                (0..extension_degree)
-                    .map(|k| nonce(&seed_nonce, "dL", Some(round), Some(k)))
-                    .collect::<Result<Vec<_>, ProofError>>()?
+                Zeroizing::new(
+                    (0..extension_degree)
+                        .map(|k| nonce(&seed_nonce, "dL", Some(round), Some(k)))
+                        .collect::<Result<Vec<_>, ProofError>>()?,
+                )
             } else {
                 // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-                (0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect()
+                Zeroizing::new((0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect())
             };
             let d_r = if let Some(seed_nonce) = statement.seed_nonce {
-                (0..extension_degree)
-                    .map(|k| nonce(&seed_nonce, "dR", Some(round), Some(k)))
-                    .collect::<Result<Vec<_>, ProofError>>()?
+                Zeroizing::new(
+                    (0..extension_degree)
+                        .map(|k| nonce(&seed_nonce, "dR", Some(round), Some(k)))
+                        .collect::<Result<Vec<_>, ProofError>>()?,
+                )
             } else {
                 // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-                (0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect()
+                Zeroizing::new((0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect())
             };
 
             round += 1;
@@ -448,20 +453,24 @@ where
         // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
         let (r, s) = (Scalar::random_not_zero(rng), Scalar::random_not_zero(rng));
         let d = if let Some(seed_nonce) = statement.seed_nonce {
-            (0..extension_degree)
-                .map(|k| nonce(&seed_nonce, "d", None, Some(k)))
-                .collect::<Result<Vec<_>, ProofError>>()?
+            Zeroizing::new(
+                (0..extension_degree)
+                    .map(|k| nonce(&seed_nonce, "d", None, Some(k)))
+                    .collect::<Result<Vec<_>, ProofError>>()?,
+            )
         } else {
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-            (0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect()
+            Zeroizing::new((0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect())
         };
         let eta = if let Some(seed_nonce) = statement.seed_nonce {
-            (0..extension_degree)
-                .map(|k| nonce(&seed_nonce, "eta", None, Some(k)))
-                .collect::<Result<Vec<_>, ProofError>>()?
+            Zeroizing::new(
+                (0..extension_degree)
+                    .map(|k| nonce(&seed_nonce, "eta", None, Some(k)))
+                    .collect::<Result<Vec<_>, ProofError>>()?,
+            )
         } else {
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-            (0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect()
+            Zeroizing::new((0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect())
         };
 
         let mut a1 =
@@ -477,7 +486,7 @@ where
 
         let r1 = r + a_li[0] * e;
         let s1 = s + a_ri[0] * e;
-        let d1: Vec<Scalar> = izip!(eta, d, alpha.iter())
+        let d1: Vec<Scalar> = izip!(eta.iter(), d.iter(), alpha.iter())
             .map(|(eta, d, alpha)| eta + d * e + alpha * e_square)
             .collect();
 
