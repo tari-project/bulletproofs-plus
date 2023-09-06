@@ -54,14 +54,14 @@ pub enum ExtensionDegree {
 }
 
 impl ExtensionDegree {
+    /// The total number of valid extension degrees
+    pub(crate) const COUNT: usize = ExtensionDegree::MAXIMUM - ExtensionDegree::MINIMUM + 1;
     /// The highest numerical value corresponding to a valid extension degree
     /// This MUST be correct, or other functions may panic
     pub(crate) const MAXIMUM: usize = ExtensionDegree::AddFiveBasePoints as usize;
     /// The lowest numerical value corresponding to a valid extension degree
     /// This MUST be correct, or other functions may panic
     pub(crate) const MINIMUM: usize = ExtensionDegree::DefaultPedersen as usize;
-    /// The total number of valid extension degrees
-    pub(crate) const TOTAL: usize = ExtensionDegree::MAXIMUM - ExtensionDegree::MINIMUM + 1;
 
     /// Helper function to convert a size into an extension degree
     pub fn try_from_size(size: usize) -> Result<ExtensionDegree, ProofError> {

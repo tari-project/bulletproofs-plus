@@ -81,10 +81,10 @@ fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<Co
 }
 
 /// A static array of pre-generated points
-fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::TOTAL] {
-    static INSTANCE: OnceCell<[RistrettoPoint; ExtensionDegree::TOTAL]> = OnceCell::new();
+fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::COUNT] {
+    static INSTANCE: OnceCell<[RistrettoPoint; ExtensionDegree::COUNT]> = OnceCell::new();
     INSTANCE.get_or_init(|| {
-        let mut arr = [RistrettoPoint::default(); ExtensionDegree::TOTAL];
+        let mut arr = [RistrettoPoint::default(); ExtensionDegree::COUNT];
         for (i, point) in (ExtensionDegree::MINIMUM..).zip(arr.iter_mut()) {
             let label = "RISTRETTO_MASKING_BASEPOINT_".to_owned() + &i.to_string();
             *point = RistrettoPoint::hash_from_bytes_sha3_512(label.as_bytes());
@@ -95,10 +95,10 @@ fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::
 }
 
 /// A static array of compressed pre-generated points
-fn ristretto_compressed_masking_basepoints() -> &'static [CompressedRistretto; ExtensionDegree::TOTAL] {
-    static INSTANCE: OnceCell<[CompressedRistretto; ExtensionDegree::TOTAL]> = OnceCell::new();
+fn ristretto_compressed_masking_basepoints() -> &'static [CompressedRistretto; ExtensionDegree::COUNT] {
+    static INSTANCE: OnceCell<[CompressedRistretto; ExtensionDegree::COUNT]> = OnceCell::new();
     INSTANCE.get_or_init(|| {
-        let mut arr = [CompressedRistretto::default(); ExtensionDegree::TOTAL];
+        let mut arr = [CompressedRistretto::default(); ExtensionDegree::COUNT];
         for (i, point) in ristretto_masking_basepoints().iter().enumerate() {
             arr[i] = point.compress();
         }
