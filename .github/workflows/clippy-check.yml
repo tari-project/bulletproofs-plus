@@ -1,26 +1,25 @@
 on: [pull_request]
 name: Clippy
 jobs:
-  clippy_check:
+  format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          components: clippy, rustfmt
+          components: rustfmt
           toolchain: nightly
-          override: true
-      - uses: actions-rs/cargo@v1
+      - name: Formatting
+        run: cargo +nightly fmt --all -- --check
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
         with:
-          command: fmt
-          args: --all -- --check
-      - name: Install cargo-lints
-        uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: cargo-lints
-      - name: Clippy lints
-        uses: actions-rs/cargo@v1
-        with:
-          command: lints
-          args: clippy --all-targets
+          components: clippy
+          toolchain: stable
+      - name: Install linter
+        run: cargo install cargo-lints
+      - name: Lints
+        run: cargo +stable lints clippy --all-targets
