@@ -1007,7 +1007,10 @@ where
         }
 
         // The rest of the serialization is of 32-byte proof elements
-        let mut chunks = slice[ENCODED_EXTENSION_SIZE..].chunks_exact(SERIALIZED_ELEMENT_SIZE);
+        let mut chunks = slice
+            .get(ENCODED_EXTENSION_SIZE..)
+            .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))?
+            .chunks_exact(SERIALIZED_ELEMENT_SIZE);
 
         // Extract `d1`, whose length is determined by the extension degree
         let d1 = (0..extension_degree as usize)
