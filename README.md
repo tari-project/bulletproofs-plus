@@ -1,6 +1,7 @@
 [![Build](https://circleci.com/gh/tari-project/tari/tree/development.svg?style=svg)](https://circleci.com/gh/tari-project/tari/tree/development)
 ![](https://github.com/tari-project/bulletproofs-plus/workflows/Security%20audit/badge.svg)
 ![](https://github.com/tari-project/bulletproofs-plus/workflows/Clippy/badge.svg)
+![](https://github.com/tari-project/bulletproofs-plus/workflows/Test/badge.svg)
 [![Coverage Status](https://coveralls.io/repos/github/tari-project/bulletproofs-plus/badge.svg?branch=main)](https://coveralls.io/github/tari-project/bulletproofs-plus?branch=main)
 
 
@@ -25,6 +26,10 @@ Compared to an [updated fork](https://github.com/tari-project/bulletproofs) of t
 As always, your mileage may vary.
 
 This implementation uses the excellent [`zeroize`](https://crates.io/crates/zeroize) library to make a best-effort approach at minimizing exposure of value- and mask-related data in memory, as this is often considered sensitive. However, it is difficult in general to guarantee that there are no coding patterns leading to [unintended copies](https://docs.rs/zeroize/1.6.0/zeroize/#stackheap-zeroing-notes) of data, so care should always be taken not to make too many assumptions about the contents of memory.
+
+## Testing
+
+Unit tests are available via `cargo test`. Basic fuzz testing can be run (on a nightly toolchain) via `cargo fuzz`.
 
 ## References
 
