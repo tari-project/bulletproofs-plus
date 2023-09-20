@@ -110,6 +110,7 @@ const MIN_RI_LENGTH: usize = 1;
 /// let mut statements_private = vec![];
 /// let mut statements_public = vec![];
 /// let mut proofs = vec![];
+/// let mut transcript_labels = vec![];
 ///
 /// for aggregation_size in proof_batch {
 ///     // 1. Generators
@@ -169,6 +170,7 @@ const MIN_RI_LENGTH: usize = 1;
 ///     let public_statement =
 ///         RangeStatement::init(generators.clone(), commitments, minimum_values.clone(), None).unwrap();
 ///     statements_public.push(public_statement.clone());
+///     transcript_labels.push(transcript_label);
 ///
 ///     // 4. Create the proofs
 ///     let proof = RistrettoRangeProof::prove(transcript_label, &private_statement.clone(), &witness);
@@ -177,7 +179,7 @@ const MIN_RI_LENGTH: usize = 1;
 ///
 /// // 5. Verify the entire batch as the commitment owner, i.e. the prover self
 /// let recovered_private_masks = RangeProof::verify_batch(
-///     transcript_label,
+///     &transcript_labels,
 ///     &statements_private,
 ///     &proofs,
 ///     VerifyAction::RecoverAndVerify,
@@ -187,7 +189,7 @@ const MIN_RI_LENGTH: usize = 1;
 ///
 /// // 6. Verify the entire batch as public entity
 /// let recovered_public_masks =
-///     RangeProof::verify_batch(transcript_label, &statements_public, &proofs, VerifyAction::VerifyOnly).unwrap();
+///     RangeProof::verify_batch(&transcript_labels, &statements_public, &proofs, VerifyAction::VerifyOnly).unwrap();
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
 /// # }
@@ -581,13 +583,13 @@ where
 
     /// Wrapper function for batch verification in different modes: mask recovery, verification, or both
     pub fn verify_batch(
-        transcript_label: &'static str,
+        transcript_labels: &[&'static str],
         statements: &[RangeStatement<P>],
         proofs: &[RangeProof<P>],
         action: VerifyAction,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // By definition, an empty batch fails
-        if statements.is_empty() || proofs.is_empty() {
+        if statements.is_empty() || proofs.is_empty() || transcript_labels.is_empty() {
             return Err(ProofError::InvalidArgument(
                 "Range statements or proofs length empty".to_string(),
             ));
@@ -596,6 +598,11 @@ where
         if statements.len() != proofs.len() {
             return Err(ProofError::InvalidArgument(
                 "Range statements and proofs length mismatch".to_string(),
+            ));
+        }
+        if transcript_labels.len() != statements.len() {
+            return Err(ProofError::InvalidArgument(
+                "Range statements and transcript labels length mismatch".to_string(),
             ));
         }
 
@@ -609,7 +616,7 @@ where
 
         // If the batch fails, propagate the error; otherwise, store the masks and keep going
         if let Some((batch_statements, batch_proofs)) = chunks.next() {
-            let mut result = RangeProof::verify(transcript_label, batch_statements, batch_proofs, action)?;
+            let mut result = RangeProof::verify(transcript_labels, batch_statements, batch_proofs, action)?;
 
             masks.append(&mut result);
         }
@@ -620,7 +627,7 @@ where
     // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
     // range proofs by a party that can supply the optional seed nonces
     fn verify(
-        transcript_label: &'static str,
+        transcript_labels: &[&'static str],
         statements: &[RangeStatement<P>],
         range_proofs: &[RangeProof<P>],
         extract_masks: VerifyAction,
@@ -673,7 +680,7 @@ where
 
         // Process each proof and add it to the batch
         let rng = &mut thread_rng();
-        for (proof, statement) in range_proofs.iter().zip(statements) {
+        for (proof, statement, transcript_label) in izip!(range_proofs, statements, transcript_labels) {
             let commitments = statement.commitments.clone();
             let minimum_value_promises = statement.minimum_value_promises.clone();
             let a = proof.a_decompressed()?;
@@ -703,7 +710,7 @@ where
             let weight = Scalar::random_not_zero(rng);
 
             // Start the transcript
-            let mut transcript = Transcript::new(transcript_label.as_bytes());
+            let mut transcript = Transcript::new((*transcript_label).as_bytes());
             transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
             transcripts::transcript_initialize(
                 &mut transcript,
@@ -1537,14 +1544,20 @@ mod tests {
         let mut proof = RangeProof::prove("test", &statement, &witness).unwrap();
 
         // Empty statement and proof vectors
-        assert!(RangeProof::verify_batch("test", &[], &[proof.clone()], VerifyAction::VerifyOnly).is_err());
-        assert!(RangeProof::verify_batch("test", &[statement.clone()], &[], VerifyAction::VerifyOnly).is_err());
+        assert!(RangeProof::verify_batch(&[], &[], &[proof.clone()], VerifyAction::VerifyOnly).is_err());
+        assert!(RangeProof::verify_batch(&["test"], &[statement.clone()], &[], VerifyAction::VerifyOnly).is_err());
 
         // Proof vector mismatches
         proof.li.pop();
-        assert!(RangeProof::verify("test", &[statement.clone()], &[proof.clone()], VerifyAction::VerifyOnly).is_err());
+        assert!(RangeProof::verify(
+            &["test"],
+            &[statement.clone()],
+            &[proof.clone()],
+            VerifyAction::VerifyOnly
+        )
+        .is_err());
 
         proof.ri.pop();
-        assert!(RangeProof::verify("test", &[statement], &[proof], VerifyAction::VerifyOnly).is_err());
+        assert!(RangeProof::verify(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly).is_err());
     }
 }
