@@ -87,20 +87,6 @@ pub fn bit_vector_of_scalars(value: u64, bit_length: usize) -> Result<Vec<Scalar
     Ok(result)
 }
 
-/// Given `data` with `len >= 32`, return the first 32 bytes.
-pub fn read_32_bytes(data: &[u8]) -> [u8; 32] {
-    let mut buf32 = [0u8; 32];
-    buf32[..].copy_from_slice(&data[..32]);
-    buf32
-}
-
-/// Given `data` with `len >= 1`, return the first 1 byte.
-pub fn read_1_byte(data: &[u8]) -> [u8; 1] {
-    let mut buf8 = [0u8; 1];
-    buf8[..].copy_from_slice(&data[..1]);
-    buf8
-}
-
 /// Split a vector, checking the bound to avoid a panic
 pub fn split_at_checked<T>(vec: &[T], n: usize) -> Result<(&[T], &[T]), ProofError> {
     if n <= vec.len() {
