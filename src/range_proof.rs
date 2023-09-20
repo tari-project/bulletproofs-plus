@@ -1134,8 +1134,9 @@ where
             })?;
 
         // Extract the inner-product folding vectors `li` and `ri`
-        let (li, ri) = chunks
-            .tuples()
+        let mut tuples = chunks.by_ref().tuples::<(&[u8], &[u8])>();
+        let (li, ri) = tuples
+            .by_ref()
             .map(|(l, r)| {
                 let bytes_l: [u8; SERIALIZED_ELEMENT_SIZE] = l
                     .try_into()
@@ -1151,6 +1152,16 @@ where
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .unzip();
+
+        // We want to ensure that no data remains unused; this should never occur due to earlier length checks
+        // To do so, we check two things:
+        // - the tuple iterator has no leftover data, meaning an extra proof element
+        // - the chunk iterator has no leftover data, meaning extra bytes that don't yield a full proof element
+        if tuples.into_buffer().len() > 0 || !chunks.remainder().is_empty() {
+            return Err(ProofError::InvalidLength(
+                "Unused data after deserialization".to_string(),
+            ));
+        }
 
         Ok(RangeProof {
             a,
