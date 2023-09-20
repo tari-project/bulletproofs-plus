@@ -7,6 +7,7 @@
 use std::{borrow::Borrow, convert::TryFrom, iter::once};
 
 use curve25519_dalek::{scalar::Scalar, traits::MultiscalarMul};
+use zeroize::Zeroize;
 
 use crate::{errors::ProofError, traits::Compressable};
 
@@ -37,7 +38,7 @@ pub struct PedersenGens<P: Compressable> {
 /// The extension degree for extended commitments. Currently this is limited to 5 extension degrees, but in theory it
 /// could be arbitrarily long, although practically, very few if any test cases will use more than 2 extension degrees.
 /// These values MUST increment, or other functions may panic.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Zeroize)]
 pub enum ExtensionDegree {
     /// Default Pedersen commitment
     DefaultPedersen = 1,

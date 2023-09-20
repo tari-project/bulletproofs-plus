@@ -5,12 +5,12 @@
 
 use std::convert::TryInto;
 
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{commitment_opening::CommitmentOpening, errors::ProofError, generators::pedersen_gens::ExtensionDegree};
 
 /// A convenience struct for holding commitment openings for the aggregated case
-#[derive(Clone)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct RangeWitness {
     /// The vector of commitment openings for the aggregated case
     pub openings: Vec<CommitmentOpening>,
@@ -36,15 +36,6 @@ impl RangeWitness {
             openings,
             extension_degree: extension_degree.try_into()?,
         })
-    }
-}
-
-/// Overwrite secrets with null bytes when they go out of scope.
-impl Drop for RangeWitness {
-    fn drop(&mut self) {
-        for item in &mut self.openings {
-            item.zeroize();
-        }
     }
 }
 
