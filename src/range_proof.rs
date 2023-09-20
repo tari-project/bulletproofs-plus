@@ -1164,6 +1164,7 @@ mod tests {
     use std::convert::TryFrom;
 
     use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+    use quickcheck::QuickCheck;
 
     use super::*;
     use crate::{
@@ -1173,6 +1174,26 @@ mod tests {
         ristretto::{create_pedersen_gens_with_extension_degree, RistrettoRangeProof},
         BulletproofGens,
     };
+
+    #[test]
+    #[allow(clippy::needless_pass_by_value)]
+    fn test_deserialization() {
+        fn internal(bytes: Vec<u8>) -> bool {
+            // Deserialization should either fail or serialize canonically
+            match RistrettoRangeProof::from_bytes(&bytes) {
+                Err(_) => true,
+                Ok(proof) => proof.to_bytes() == bytes,
+            }
+        }
+
+        const TESTS: u64 = 100_000;
+
+        QuickCheck::new()
+            .min_tests_passed(TESTS)
+            .tests(TESTS)
+            .max_tests(TESTS)
+            .quickcheck(internal as fn(Vec<u8>) -> bool);
+    }
 
     #[test]
     fn test_from_bytes() {

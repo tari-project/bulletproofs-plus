@@ -27,6 +27,7 @@ rand_core = "0.6"
 [dev-dependencies]
 bincode = "1"
 criterion = "0.5"
+quickcheck = "1"
 
 [[bench]]
 name = "range_proof"
