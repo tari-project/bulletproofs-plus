@@ -13,29 +13,16 @@ jobs:
           - nightly-2023-06-04
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust }}
-          override: true
       - name: check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all-features --all-targets
+        run: cargo +${{ matrix.rust }} check --all-features --all-targets
       - name: test/debug
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --all-features
+        run: cargo +${{ matrix.rust }} test --all-features
       - name: test/release
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release --all-features
-      - name: docs build
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
+        run: cargo +${{ matrix.rust }} test --release --all-features
+      - name: Build documentation
+        run: cargo +${{ matrix.rust }} doc --no-deps
