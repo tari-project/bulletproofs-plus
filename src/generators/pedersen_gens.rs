@@ -36,23 +36,33 @@ pub struct PedersenGens<P: Compressable> {
 
 /// The extension degree for extended commitments. Currently this is limited to 5 extension degrees, but in theory it
 /// could be arbitrarily long, although practically, very few if any test cases will use more than 2 extension degrees.
+/// These values MUST increment, or other functions may panic.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ExtensionDegree {
     /// Default Pedersen commitment
     DefaultPedersen = 1,
     /// Pedersen commitment extended with one degree
-    AddOneBasePoint = 2,
+    AddOneBasePoint,
     /// Pedersen commitment extended with two degrees
-    AddTwoBasePoints = 3,
+    AddTwoBasePoints,
     /// Pedersen commitment extended with three degrees
-    AddThreeBasePoints = 4,
+    AddThreeBasePoints,
     /// Pedersen commitment extended with four degrees
-    AddFourBasePoints = 5,
+    AddFourBasePoints,
     /// Pedersen commitment extended with five degrees
-    AddFiveBasePoints = 6,
+    AddFiveBasePoints,
 }
 
 impl ExtensionDegree {
+    /// The total number of valid extension degrees
+    pub(crate) const COUNT: usize = ExtensionDegree::MAXIMUM - ExtensionDegree::MINIMUM + 1;
+    /// The highest numerical value corresponding to a valid extension degree
+    /// This MUST be correct, or other functions may panic
+    pub(crate) const MAXIMUM: usize = ExtensionDegree::AddFiveBasePoints as usize;
+    /// The lowest numerical value corresponding to a valid extension degree
+    /// This MUST be correct, or other functions may panic
+    pub(crate) const MINIMUM: usize = ExtensionDegree::DefaultPedersen as usize;
+
     /// Helper function to convert a size into an extension degree
     pub fn try_from_size(size: usize) -> Result<ExtensionDegree, ProofError> {
         match size {
@@ -103,5 +113,25 @@ where P: Compressable + MultiscalarMul<Point = P> + Clone
             let points = once(&self.h_base).chain(g_base_head);
             Ok(P::multiscalar_mul(scalars, points))
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::ExtensionDegree;
+
+    #[test]
+    // Test the size range, assuming extension degree values are incremented
+    fn test_extension_degree_size() {
+        // Value is too low
+        assert!(ExtensionDegree::try_from_size(ExtensionDegree::MINIMUM - 1).is_err());
+
+        // Valid values
+        for i in ExtensionDegree::MINIMUM..=ExtensionDegree::MAXIMUM {
+            assert!(ExtensionDegree::try_from_size(i).is_ok());
+        }
+
+        // Value is too high
+        assert!(ExtensionDegree::try_from_size(ExtensionDegree::MAXIMUM + 1).is_err());
     }
 }

@@ -3,11 +3,6 @@
 
 //! Bulletproofs+
 
-#![recursion_limit = "1024"]
-
-#[macro_use]
-extern crate lazy_static;
-
 /// Bulletproofs+ commitment opening
 pub mod commitment_opening;
 /// Bulletproofs+ error definitions
