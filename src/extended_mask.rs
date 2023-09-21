@@ -40,6 +40,8 @@ impl ExtendedMask {
 
 #[cfg(test)]
 mod test {
+    use std::convert::TryFrom;
+
     use super::*;
 
     #[test]
@@ -47,7 +49,7 @@ mod test {
         // Valid assignments
         for degree in 1..=6 {
             let blindings = vec![Scalar::ZERO; degree];
-            let extension = ExtensionDegree::try_from_size(degree).unwrap();
+            let extension = ExtensionDegree::try_from(degree).unwrap();
 
             assert!(ExtendedMask::assign(extension, blindings).is_ok());
         }

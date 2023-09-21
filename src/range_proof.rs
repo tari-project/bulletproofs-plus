@@ -545,7 +545,7 @@ where
         let mut max_index = 0;
         let extension_degree = first_statement.generators.extension_degree();
 
-        if extension_degree != ExtensionDegree::try_from_size(first_proof.d1.len())? {
+        if extension_degree != ExtensionDegree::try_from(first_proof.d1.len())? {
             return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
         }
         for (i, (statement, proof)) in statements.iter().zip(range_proofs.iter()).enumerate().skip(1) {
@@ -565,7 +565,7 @@ where
                 ));
             }
             if extension_degree != statement.generators.extension_degree() ||
-                extension_degree != ExtensionDegree::try_from_size(proof.d1.len())?
+                extension_degree != ExtensionDegree::try_from(proof.d1.len())?
             {
                 return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
             }
@@ -1034,8 +1034,7 @@ where
         let extension_degree = ExtensionDegree::try_from(
             *(slice
                 .first()
-                .ok_or_else(|| ProofError::InvalidLength("Serialized proof is too short".to_string()))?)
-                as usize,
+                .ok_or_else(|| ProofError::InvalidLength("Serialized proof is too short".to_string()))?),
         )?;
 
         // Now ensure the proof is long enough to account for all required elements:
@@ -1318,7 +1317,7 @@ mod tests {
         let mut proof_bytes_meddled = proof_bytes.clone();
 
         for i in 0..u8::MAX {
-            if ExtensionDegree::try_from(i as usize).is_err() {
+            if ExtensionDegree::try_from(i).is_err() {
                 proof_bytes_meddled[0] = i;
                 assert!(RistrettoRangeProof::from_bytes(&proof_bytes_meddled).is_err());
                 break;
