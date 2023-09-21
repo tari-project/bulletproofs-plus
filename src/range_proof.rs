@@ -78,8 +78,6 @@ const FIXED_PROOF_ELEMENTS: usize = 5;
 
 /// Assorted serialization constants
 const ENCODED_EXTENSION_SIZE: usize = 1;
-const MIN_LI_LENGTH: usize = 1;
-const MIN_RI_LENGTH: usize = 1;
 
 /// # Example
 /// ```
@@ -1038,32 +1036,6 @@ where
                 as usize,
         )?;
 
-        // Now ensure the proof is long enough to account for all required elements:
-        // - encoded extension degree
-        // - `d1`
-        // - fixed proof elements
-        // - `li`, `ri`
-        // Since `li` and `ri` have variable length that depends on parameters, we only require they be nonempty
-        if slice.len() <
-            ENCODED_EXTENSION_SIZE +
-                SERIALIZED_ELEMENT_SIZE *
-                    ((extension_degree as usize) + FIXED_PROOF_ELEMENTS + MIN_LI_LENGTH + MIN_RI_LENGTH)
-        {
-            return Err(ProofError::InvalidLength("Serialized proof is too short".to_string()));
-        }
-
-        // Also ensure that `li` and `ri` will have the same number of elements
-        if (slice.len() -
-            ENCODED_EXTENSION_SIZE -
-            SERIALIZED_ELEMENT_SIZE * ((extension_degree as usize) + FIXED_PROOF_ELEMENTS)) %
-            (SERIALIZED_ELEMENT_SIZE * 2) !=
-            0
-        {
-            return Err(ProofError::InvalidLength(
-                "Serialized proof has an invalid size".to_string(),
-            ));
-        }
-
         // The rest of the serialization is of 32-byte proof elements
         let mut chunks = slice
             .get(ENCODED_EXTENSION_SIZE..)
@@ -1135,7 +1107,10 @@ where
 
         // Extract the inner-product folding vectors `li` and `ri`
         let mut tuples = chunks.by_ref().tuples::<(&[u8], &[u8])>();
-        let (li, ri) = tuples
+        let (li, ri): (
+            Vec<<P as Compressable>::Compressed>,
+            Vec<<P as Compressable>::Compressed>,
+        ) = tuples
             .by_ref()
             .map(|(l, r)| {
                 let bytes_l: [u8; SERIALIZED_ELEMENT_SIZE] = l
@@ -1152,6 +1127,11 @@ where
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .unzip();
+
+        // The inner-product folding vectors should not be empty
+        if li.is_empty() || ri.is_empty() {
+            return Err(ProofError::InvalidLength("Serialized proof is too short".to_string()));
+        }
 
         // We want to ensure that no data remains unused; this should never occur due to earlier length checks
         // To do so, we check two things:
