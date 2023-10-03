@@ -990,9 +990,9 @@ where
     P: Compressable,
     P::Compressed: FixedBytesRepr,
 {
-    /// Serializes the proof into a byte array
+    /// Serializes the proof into a canonical byte array
     /// The first byte is an encoding of the extension degree, which tells us the length of `d1`
-    /// Then we serialize the rest of the proof elements as 32-byte encodings
+    /// Then we serialize the rest of the proof elements as canonical byte encodings
     pub fn to_bytes(&self) -> Vec<u8> {
         // The total proof size: extension degree encoding, fixed elements, vectors
         let mut buf = Vec::with_capacity(
@@ -1024,7 +1024,7 @@ where
         buf
     }
 
-    /// Deserializes the proof from a byte slice
+    /// Deserializes the proof from a canonical byte slice
     /// First we parse the extension degree, validate it, and use it to parse `d1`
     /// Then we parse the remainder of the proof elements, inferring the lengths of `li` and `ri`
     pub fn from_bytes(slice: &[u8]) -> Result<Self, ProofError> {
@@ -1036,7 +1036,7 @@ where
                 as usize,
         )?;
 
-        // The rest of the serialization is of 32-byte proof elements
+        // The rest of the serialization is of encoded proof elements
         let mut chunks = slice
             .get(ENCODED_EXTENSION_SIZE..)
             .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))?
@@ -1133,7 +1133,7 @@ where
             return Err(ProofError::InvalidLength("Serialized proof is too short".to_string()));
         }
 
-        // We want to ensure that no data remains unused; this should never occur due to earlier length checks
+        // We want to ensure that no data remains unused, to ensure serialization is canonical
         // To do so, we check two things:
         // - the tuple iterator has no leftover data, meaning an extra proof element
         // - the chunk iterator has no leftover data, meaning extra bytes that don't yield a full proof element
