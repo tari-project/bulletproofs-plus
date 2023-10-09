@@ -50,7 +50,7 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
         }
 
         Ok(Self {
-            bp_gens: BulletproofGens::new(bit_length, aggregation_factor),
+            bp_gens: BulletproofGens::new(bit_length, aggregation_factor)?,
             pc_gens,
         })
     }

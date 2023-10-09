@@ -21,10 +21,10 @@ pub struct RangeWitness {
 impl RangeWitness {
     /// Construct a new 'RangeWitness'
     pub fn init(openings: Vec<CommitmentOpening>) -> Result<RangeWitness, ProofError> {
-        if openings.is_empty() {
-            return Err(ProofError::InvalidLength("Vector openings cannot be empty".to_string()));
-        }
-        let extension_degree = openings[0].r_len()?;
+        let first_opening = openings
+            .first()
+            .ok_or(ProofError::InvalidLength("Vector openings cannot be empty".to_string()))?;
+        let extension_degree = first_opening.r_len()?;
         for item in openings.iter().skip(1) {
             if extension_degree != item.r_len()? {
                 return Err(ProofError::InvalidLength(
