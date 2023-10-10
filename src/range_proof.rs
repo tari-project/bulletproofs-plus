@@ -522,31 +522,33 @@ where
         statements: &[RangeStatement<P>],
         range_proofs: &[RangeProof<P>],
     ) -> Result<(usize, usize), ProofError> {
-        if statements.is_empty() || range_proofs.is_empty() {
-            return Err(ProofError::InvalidArgument(
-                "Range statements or proofs length empty".to_string(),
-            ));
-        }
+        let first_statement = statements
+            .first()
+            .ok_or(ProofError::InvalidArgument("Empty proof statements".to_string()))?;
+        let first_proof = range_proofs
+            .first()
+            .ok_or(ProofError::InvalidArgument("Empty proofs".to_string()))?;
         if statements.len() != range_proofs.len() {
             return Err(ProofError::InvalidArgument(
                 "Range statements and proofs length mismatch".to_string(),
             ));
         }
 
-        let (g_base_vec, h_base) = (statements[0].generators.g_bases(), statements[0].generators.h_base());
-        let bit_length = statements[0].generators.bit_length();
-        let mut max_mn = statements[0]
+        let g_base_vec = first_statement.generators.g_bases();
+        let h_base = first_statement.generators.h_base();
+        let bit_length = first_statement.generators.bit_length();
+        let mut max_mn = first_statement
             .commitments
             .len()
-            .checked_mul(statements[0].generators.bit_length())
+            .checked_mul(first_statement.generators.bit_length())
             .ok_or(ProofError::SizeOverflow)?;
         let mut max_index = 0;
-        let extension_degree = statements[0].generators.extension_degree();
+        let extension_degree = first_statement.generators.extension_degree();
 
-        if extension_degree != ExtensionDegree::try_from_size(range_proofs[0].d1.len())? {
+        if extension_degree != ExtensionDegree::try_from_size(first_proof.d1.len())? {
             return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
         }
-        for (i, statement) in statements.iter().enumerate().skip(1) {
+        for (i, (statement, proof)) in statements.iter().zip(range_proofs.iter()).enumerate().skip(1) {
             if g_base_vec != statement.generators.g_bases() {
                 return Err(ProofError::InvalidArgument(
                     "Inconsistent G generator point in batch statement".to_string(),
@@ -563,7 +565,7 @@ where
                 ));
             }
             if extension_degree != statement.generators.extension_degree() ||
-                extension_degree != ExtensionDegree::try_from_size(range_proofs[i].d1.len())?
+                extension_degree != ExtensionDegree::try_from_size(proof.d1.len())?
             {
                 return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
             }
@@ -577,10 +579,9 @@ where
                 max_index = i;
             }
         }
-        let (gi_base_ref, hi_base_ref) = (
-            statements[max_index].generators.gi_base_ref(),
-            statements[max_index].generators.hi_base_ref(),
-        );
+        let max_statement = statements
+            .get(max_index)
+            .ok_or(ProofError::InvalidArgument("Out of bounds statement index".to_string()))?;
         for (i, statement) in statements.iter().enumerate() {
             for value in Iterator::flatten(statement.minimum_value_promises.iter()) {
                 // If the bit length is 64, no 64-bit value can exceed the capacity
@@ -593,21 +594,25 @@ where
             if i == max_index {
                 continue;
             }
-            let statement_gi_base_ref = statement.generators.gi_base_ref();
-            for (j, gi_base_ref_item) in gi_base_ref.iter().enumerate().take(statement_gi_base_ref.len()) {
-                if &statement_gi_base_ref[j] != gi_base_ref_item {
-                    return Err(ProofError::InvalidArgument(
-                        "Inconsistent Gi generator point vector in batch statement".to_string(),
-                    ));
-                }
+            if statement
+                .generators
+                .gi_base_iter()
+                .zip(max_statement.generators.gi_base_iter())
+                .any(|(a, b)| a != b)
+            {
+                return Err(ProofError::InvalidArgument(
+                    "Inconsistent Gi generator point vector in batch statement".to_string(),
+                ));
             }
-            let statement_hi_base_ref = statement.generators.hi_base_ref();
-            for (j, hi_base_ref_item) in hi_base_ref.iter().enumerate().take(statement_hi_base_ref.len()) {
-                if &statement_hi_base_ref[j] != hi_base_ref_item {
-                    return Err(ProofError::InvalidArgument(
-                        "Inconsistent Hi generator point vector in batch statement".to_string(),
-                    ));
-                }
+            if statement
+                .generators
+                .hi_base_iter()
+                .zip(max_statement.generators.hi_base_iter())
+                .any(|(a, b)| a != b)
+            {
+                return Err(ProofError::InvalidArgument(
+                    "Inconsistent Hi generator point vector in batch statement".to_string(),
+                ));
             }
         }
 
@@ -667,12 +672,21 @@ where
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // Verify generators consistency & select largest aggregation factor
         let (max_mn, max_index) = RangeProof::verify_statements_and_generators_consistency(statements, range_proofs)?;
-        let (g_base_vec, h_base) = (statements[0].generators.g_bases(), statements[0].generators.h_base());
-        let bit_length = statements[0].generators.bit_length();
-        let extension_degree = statements[0].generators.extension_degree() as usize;
-        let g_bases_compressed = statements[0].generators.g_bases_compressed();
-        let h_base_compressed = statements[0].generators.h_base_compressed();
-        let precomp = statements[max_index].generators.precomp();
+        let first_statement = statements
+            .first()
+            .ok_or(ProofError::InvalidArgument("Empty proof statements".to_string()))?;
+        let max_statement = statements
+            .get(max_index)
+            .ok_or(ProofError::InvalidArgument("Out of bounds statement index".to_string()))?;
+
+        // Set up useful values
+        let g_base_vec = first_statement.generators.g_bases();
+        let h_base = first_statement.generators.h_base();
+        let bit_length = first_statement.generators.bit_length();
+        let extension_degree = first_statement.generators.extension_degree() as usize;
+        let g_bases_compressed = first_statement.generators.g_bases_compressed();
+        let h_base_compressed = first_statement.generators.h_base_compressed();
+        let precomp = max_statement.generators.precomp();
 
         // Compute 2**n-1 for later use
         let mut two_n_minus_one = Scalar::from(2u8);
@@ -763,11 +777,12 @@ where
 
             // Reconstruct challenges
             let (y, z) = transcripts::transcript_point_a_challenges_y_z(&mut transcript, &proof.a)?;
-            let mut challenges = Vec::with_capacity(rounds);
-            for j in 0..rounds {
-                let e = transcripts::transcript_points_l_r_challenge_e(&mut transcript, &proof.li[j], &proof.ri[j])?;
-                challenges.push(e);
-            }
+            let challenges = proof
+                .li
+                .iter()
+                .zip(proof.ri.iter())
+                .map(|(l, r)| transcripts::transcript_points_l_r_challenge_e(&mut transcript, l, r))
+                .collect::<Result<Vec<Scalar>, ProofError>>()?;
             let e = transcripts::transcript_points_a1_b_challenge_e(&mut transcript, &proof.a1, &proof.b)?;
 
             // Compute challenge inverses in a batch
@@ -827,9 +842,11 @@ where
                                 e * nonce(&seed_nonce, "d", None, Some(k))?) *
                                 e_square.invert();
                             this_mask -= nonce(&seed_nonce, "alpha", None, Some(k))?;
-                            for j in 0..rounds {
-                                this_mask -= challenges_sq[j] * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
-                                this_mask -= challenges_sq_inv[j] * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
+                            for (j, (challenge_sq, challenge_sq_inv)) in
+                                challenges_sq.iter().zip(challenges_sq_inv.iter()).enumerate()
+                            {
+                                this_mask -= challenge_sq * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
+                                this_mask -= challenge_sq_inv * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
                             }
                             this_mask *= (z_square * y_nm_1).invert();
                             temp_masks.push(this_mask);
@@ -1470,7 +1487,7 @@ mod tests {
         .is_err());
 
         // Make the second statement's `gi_base` mismatch against the first statement
-        let mut gens_mismatch = BulletproofGens::new(4, 1);
+        let mut gens_mismatch = BulletproofGens::new(4, 1).unwrap();
         gens_mismatch.g_vec[0][0] = RistrettoPoint::default();
         let params_mismatch = RangeParameters {
             bp_gens: gens_mismatch,
@@ -1490,7 +1507,7 @@ mod tests {
         .is_err());
 
         // Make the second statement's `hi_base` mismatch against the first statement
-        let mut gens_mismatch = BulletproofGens::new(4, 1);
+        let mut gens_mismatch = BulletproofGens::new(4, 1).unwrap();
         gens_mismatch.h_vec[0][0] = RistrettoPoint::default();
         let params_mismatch = RangeParameters {
             bp_gens: gens_mismatch,

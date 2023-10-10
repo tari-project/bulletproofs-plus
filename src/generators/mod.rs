@@ -23,7 +23,7 @@ mod tests {
 
     #[test]
     fn aggregated_gens_iter_matches_flat_map() {
-        let gens = BulletproofGens::new(64, 8);
+        let gens = BulletproofGens::new(64, 8).unwrap();
 
         let helper = |n: usize, m: usize| {
             let agg_g: Vec<RistrettoPoint> = gens.g_iter(n, m).copied().collect();

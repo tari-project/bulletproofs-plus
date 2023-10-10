@@ -5,6 +5,7 @@
 //     SPDX-License-Identifier: MIT
 
 use std::{
+    convert::TryFrom,
     fmt::{Debug, Formatter},
     sync::Arc,
 };
@@ -14,6 +15,7 @@ use curve25519_dalek::traits::VartimePrecomputedMultiscalarMul;
 use itertools::Itertools;
 
 use crate::{
+    errors::ProofError,
     generators::{aggregated_gens_iter::AggregatedGensIter, generators_chain::GeneratorsChain},
     traits::{Compressable, FromUniformBytes, Precomputable},
 };
@@ -78,21 +80,20 @@ impl<P: FromUniformBytes + Precomputable> BulletproofGens<P> {
     ///   the number of multipliers, rounded up to the next power of two.
     ///
     /// * `party_capacity` is the maximum number of parties that can produce an aggregated proof.
-    pub fn new(gens_capacity: usize, party_capacity: usize) -> Self {
+    pub fn new(gens_capacity: usize, party_capacity: usize) -> Result<Self, ProofError> {
         let mut g_vec: Vec<Vec<P>> = (0..party_capacity).map(|_| Vec::new()).collect();
         let mut h_vec: Vec<Vec<P>> = (0..party_capacity).map(|_| Vec::new()).collect();
 
         // Generate the points
-        for i in 0..party_capacity {
-            #[allow(clippy::cast_possible_truncation)]
-            let party_index = i as u32;
+        for (i, (g, h)) in g_vec.iter_mut().zip(h_vec.iter_mut()).enumerate() {
+            let party_index = u32::try_from(i).map_err(|_| ProofError::SizeOverflow)?;
 
             let mut label = [b'G', 0, 0, 0, 0];
             LittleEndian::write_u32(&mut label[1..5], party_index);
-            g_vec[i].extend(&mut GeneratorsChain::<P>::new(&label).take(gens_capacity));
+            g.extend(&mut GeneratorsChain::<P>::new(&label).take(gens_capacity));
 
             label[0] = b'H';
-            h_vec[i].extend(&mut GeneratorsChain::<P>::new(&label).take(gens_capacity));
+            h.extend(&mut GeneratorsChain::<P>::new(&label).take(gens_capacity));
         }
 
         // Generate a flattened interleaved iterator for the precomputation tables
@@ -101,13 +102,13 @@ impl<P: FromUniformBytes + Precomputable> BulletproofGens<P> {
         let iter_interleaved = iter_g_vec.interleave(iter_h_vec);
         let precomp = Arc::new(P::Precomputation::new(iter_interleaved));
 
-        BulletproofGens {
+        Ok(BulletproofGens {
             gens_capacity,
             party_capacity,
             g_vec,
             h_vec,
             precomp,
-        }
+        })
     }
 
     /// Return an iterator over the aggregation of the parties' G generators with given size `n`.
