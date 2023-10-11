@@ -321,13 +321,13 @@ where
             *item -= z;
         }
         for (i, item) in a_ri.iter_mut().enumerate() {
-            *item += d[i] * y_powers[bit_length * aggregation_factor - i] + z;
+            *item += d[i] * y_powers[full_length - i] + z;
         }
         let mut z_even_powers = Scalar::ONE;
-        for j in 0..aggregation_factor {
+        for opening in &witness.openings {
             z_even_powers *= z_square;
-            for (k, alpha1_val) in alpha.iter_mut().enumerate().take(extension_degree) {
-                *alpha1_val += z_even_powers * witness.openings[j].r[k] * y_powers[bit_length * aggregation_factor + 1];
+            for (r, alpha1_val) in opening.r.iter().zip(alpha.iter_mut()) {
+                *alpha1_val += z_even_powers * r * y_powers[full_length + 1];
             }
         }
 
@@ -490,9 +490,11 @@ where
         let mut a1 =
             &gi_base[0] * *r + &hi_base[0] * *s + h_base * (*r * y_powers[1] * a_ri[0] + *s * y_powers[1] * a_li[0]);
         let mut b = h_base * (*r * y_powers[1] * *s);
-        for k in 0..extension_degree {
-            a1 += &g_base[k] * d[k];
-            b += &g_base[k] * eta[k]
+        for (g_base, &d) in g_base.iter().zip(d.iter()) {
+            a1 += g_base * d;
+        }
+        for (g_base, &eta) in g_base.iter().zip(eta.iter()) {
+            b += g_base * eta;
         }
 
         let e = transcripts::transcript_points_a1_b_challenge_e(&mut transcript, &a1.compress(), &b.compress())?;
