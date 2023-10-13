@@ -13,7 +13,7 @@ In particular, it supports:
 - **Proof aggregation**. You can generate a proof containing multiple range assertions in an efficient way.
 - **Extended commitments**. Commitments may contain multiple masks.
 - **Batch verification**. Verifying a set of multiple proofs is extremely fast.
-- **Minimum value promises**. You can additionally prove that a commitment binds to at least a specified value.
+- **Minimum value promises**. You can prove that a commitment binds to at least a specified value.
 - **Mask extraction**. If the prover and verifier agree on a shared secret, the verifier can use it to recover the mask used for the commitment in a non-aggregated proof.
 
 Compared to an [updated fork](https://github.com/tari-project/bulletproofs) of the `dalek-cryptography` [Bulletproofs](https://github.com/dalek-cryptography/bulletproofs) implementation, this Bulletproofs+ implementation is:
@@ -25,7 +25,7 @@ Compared to an [updated fork](https://github.com/tari-project/bulletproofs) of t
 
 As always, your mileage may vary.
 
-This implementation uses the excellent [`zeroize`](https://crates.io/crates/zeroize) library to make a best-effort approach at minimizing exposure of value- and mask-related data in memory, as this is often considered sensitive. However, it is difficult in general to guarantee that there are no coding patterns leading to [unintended copies](https://docs.rs/zeroize/1.6.0/zeroize/#stackheap-zeroing-notes) of data, so care should always be taken not to make too many assumptions about the contents of memory.
+This library underwent a code audit by [Quarkslab](https://www.quarkslab.com/) at a specific commit in the repository history. You can read the [report and issue responses](docs/quarkslab-audit/README.md) in this repository.
 
 ## Testing
 
