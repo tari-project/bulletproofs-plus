@@ -25,4 +25,4 @@ jobs:
       - name: test/release
         run: cargo +${{ matrix.rust }} test --release --all-features
       - name: Build documentation
-        run: cargo +${{ matrix.rust }} doc --no-deps
+        run: RUSTDOCFLAGS="-D warnings" cargo +${{ matrix.rust }} doc --no-deps
