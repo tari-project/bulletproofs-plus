@@ -9,7 +9,7 @@ description = "A smaller faster implementation of Bulletproofs"
 [dependencies]
 blake2 = { version = "0.10", default-features = false }
 byteorder = { version = "1", default-features = false }
-curve25519-dalek = { package = "tari-curve25519-dalek", version = "4.0.3", default-features = false, features = ["alloc", "rand_core", "serde", "zeroize"] }
+curve25519-dalek = { git = "https://github.com/AaronFeickert/curve25519-dalek", branch = "TEST-rebase", features = ["serde", "rand_core"] }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 itertools = { version = "0.12", default-features = false, features = ["use_alloc"] }
 merlin = { version = "3", default-features = false }
