@@ -35,10 +35,10 @@ pub struct PedersenGens<P: Compressable> {
     pub extension_degree: ExtensionDegree,
 }
 
-/// The extension degree for extended commitments. Currently this is limited to 5 extension degrees, but in theory it
-/// could be arbitrarily long, although practically, very few if any test cases will use more than 2 extension degrees.
-/// These values MUST increment, or other functions may panic.
+/// The extension degree for extended commitments. Currently this is arbitrarily limited to 5 extension degrees.
+/// The discriminants MUST increment, or other functions may panic.
 #[derive(Copy, Clone, Debug, PartialEq, Zeroize)]
+#[repr(u8)]
 pub enum ExtensionDegree {
     /// Default Pedersen commitment
     DefaultPedersen = 1,
@@ -63,10 +63,13 @@ impl ExtensionDegree {
     /// The lowest numerical value corresponding to a valid extension degree
     /// This MUST be correct, or other functions may panic
     pub(crate) const MINIMUM: usize = ExtensionDegree::DefaultPedersen as usize;
+}
 
-    /// Helper function to convert a size into an extension degree
-    pub fn try_from_size(size: usize) -> Result<ExtensionDegree, ProofError> {
-        match size {
+impl TryFrom<u8> for ExtensionDegree {
+    type Error = ProofError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
             1 => Ok(ExtensionDegree::DefaultPedersen),
             2 => Ok(ExtensionDegree::AddOneBasePoint),
             3 => Ok(ExtensionDegree::AddTwoBasePoints),
@@ -82,7 +85,9 @@ impl TryFrom<usize> for ExtensionDegree {
     type Error = ProofError;
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        Self::try_from_size(value)
+        ExtensionDegree::try_from(
+            u8::try_from(value).map_err(|_| ProofError::InvalidArgument("Extension degree not valid".to_string()))?,
+        )
     }
 }
 
@@ -119,20 +124,22 @@ where P: Compressable + MultiscalarMul<Point = P> + Clone
 
 #[cfg(test)]
 mod test {
+    use std::convert::TryFrom;
+
     use super::ExtensionDegree;
 
     #[test]
     // Test the size range, assuming extension degree values are incremented
     fn test_extension_degree_size() {
         // Value is too low
-        assert!(ExtensionDegree::try_from_size(ExtensionDegree::MINIMUM - 1).is_err());
+        assert!(ExtensionDegree::try_from(ExtensionDegree::MINIMUM - 1).is_err());
 
         // Valid values
         for i in ExtensionDegree::MINIMUM..=ExtensionDegree::MAXIMUM {
-            assert!(ExtensionDegree::try_from_size(i).is_ok());
+            assert!(ExtensionDegree::try_from(i).is_ok());
         }
 
         // Value is too high
-        assert!(ExtensionDegree::try_from_size(ExtensionDegree::MAXIMUM + 1).is_err());
+        assert!(ExtensionDegree::try_from(ExtensionDegree::MAXIMUM + 1).is_err());
     }
 }
