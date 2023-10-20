@@ -78,8 +78,6 @@ const FIXED_PROOF_ELEMENTS: usize = 5;
 
 /// Assorted serialization constants
 const ENCODED_EXTENSION_SIZE: usize = 1;
-const MIN_LI_LENGTH: usize = 1;
-const MIN_RI_LENGTH: usize = 1;
 
 /// # Example
 /// ```
@@ -992,9 +990,9 @@ where
     P: Compressable,
     P::Compressed: FixedBytesRepr,
 {
-    /// Serializes the proof into a byte array
+    /// Serializes the proof into a canonical byte array
     /// The first byte is an encoding of the extension degree, which tells us the length of `d1`
-    /// Then we serialize the rest of the proof elements as 32-byte encodings
+    /// Then we serialize the rest of the proof elements as canonical byte encodings
     pub fn to_bytes(&self) -> Vec<u8> {
         // The total proof size: extension degree encoding, fixed elements, vectors
         let mut buf = Vec::with_capacity(
@@ -1026,7 +1024,7 @@ where
         buf
     }
 
-    /// Deserializes the proof from a byte slice
+    /// Deserializes the proof from a canonical byte slice
     /// First we parse the extension degree, validate it, and use it to parse `d1`
     /// Then we parse the remainder of the proof elements, inferring the lengths of `li` and `ri`
     pub fn from_bytes(slice: &[u8]) -> Result<Self, ProofError> {
@@ -1038,33 +1036,7 @@ where
                 as usize,
         )?;
 
-        // Now ensure the proof is long enough to account for all required elements:
-        // - encoded extension degree
-        // - `d1`
-        // - fixed proof elements
-        // - `li`, `ri`
-        // Since `li` and `ri` have variable length that depends on parameters, we only require they be nonempty
-        if slice.len() <
-            ENCODED_EXTENSION_SIZE +
-                SERIALIZED_ELEMENT_SIZE *
-                    ((extension_degree as usize) + FIXED_PROOF_ELEMENTS + MIN_LI_LENGTH + MIN_RI_LENGTH)
-        {
-            return Err(ProofError::InvalidLength("Serialized proof is too short".to_string()));
-        }
-
-        // Also ensure that `li` and `ri` will have the same number of elements
-        if (slice.len() -
-            ENCODED_EXTENSION_SIZE -
-            SERIALIZED_ELEMENT_SIZE * ((extension_degree as usize) + FIXED_PROOF_ELEMENTS)) %
-            (SERIALIZED_ELEMENT_SIZE * 2) !=
-            0
-        {
-            return Err(ProofError::InvalidLength(
-                "Serialized proof has an invalid size".to_string(),
-            ));
-        }
-
-        // The rest of the serialization is of 32-byte proof elements
+        // The rest of the serialization is of encoded proof elements
         let mut chunks = slice
             .get(ENCODED_EXTENSION_SIZE..)
             .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))?
@@ -1134,8 +1106,12 @@ where
             })?;
 
         // Extract the inner-product folding vectors `li` and `ri`
-        let (li, ri) = chunks
-            .tuples()
+        let mut tuples = chunks.by_ref().tuples::<(&[u8], &[u8])>();
+        let (li, ri): (
+            Vec<<P as Compressable>::Compressed>,
+            Vec<<P as Compressable>::Compressed>,
+        ) = tuples
+            .by_ref()
             .map(|(l, r)| {
                 let bytes_l: [u8; SERIALIZED_ELEMENT_SIZE] = l
                     .try_into()
@@ -1151,6 +1127,21 @@ where
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .unzip();
+
+        // The inner-product folding vectors should not be empty
+        if li.is_empty() || ri.is_empty() {
+            return Err(ProofError::InvalidLength("Serialized proof is too short".to_string()));
+        }
+
+        // We want to ensure that no data remains unused, to ensure serialization is canonical
+        // To do so, we check two things:
+        // - the tuple iterator has no leftover data, meaning an extra proof element
+        // - the chunk iterator has no leftover data, meaning extra bytes that don't yield a full proof element
+        if tuples.into_buffer().len() > 0 || !chunks.remainder().is_empty() {
+            return Err(ProofError::InvalidLength(
+                "Unused data after deserialization".to_string(),
+            ));
+        }
 
         Ok(RangeProof {
             a,
