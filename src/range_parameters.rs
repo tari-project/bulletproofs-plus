@@ -100,19 +100,9 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
         self.bp_gens.h_iter(self.bit_length(), self.aggregation_factor())
     }
 
-    /// Return the non-public value bulletproof generator references
-    pub fn hi_base_ref(&self) -> Vec<&P> {
-        self.hi_base_iter().collect()
-    }
-
     /// Return the non-public mask iterator to the bulletproof generators
     pub fn gi_base_iter(&self) -> impl Iterator<Item = &P> {
         self.bp_gens.g_iter(self.bit_length(), self.aggregation_factor())
-    }
-
-    /// Return the non-public mask bulletproof generator references
-    pub fn gi_base_ref(&self) -> Vec<&P> {
-        self.gi_base_iter().collect()
     }
 
     /// Return the interleaved precomputation tables
