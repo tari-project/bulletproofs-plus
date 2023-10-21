@@ -334,27 +334,27 @@ where
         let mut d = Vec::with_capacity(full_length);
         d.push(z_square);
         let two = Scalar::from(2u8);
-        for i in 1..bit_length {
-            d.push(two * d[i - 1]);
+        for _ in 1..bit_length {
+            d.push(two * d.last().ok_or(ProofError::SizeOverflow)?);
         }
         for j in 1..aggregation_factor {
             for i in 0..bit_length {
-                d.push(d[(j - 1) * bit_length + i] * z_square);
+                d.push(d.get((j - 1) * bit_length + i).ok_or(ProofError::SizeOverflow)? * z_square);
             }
         }
 
         // Prepare for inner product
-        for item in a_li.iter_mut() {
-            *item -= z;
+        for a_li in a_li.iter_mut() {
+            *a_li -= z;
         }
-        for (i, item) in a_ri.iter_mut().enumerate() {
-            *item += d[i] * y_powers[full_length - i] + z;
+        for (a_ri, d, y_power) in izip!(a_ri.iter_mut(), d.iter(), y_powers.iter().rev().skip(1)) {
+            *a_ri += d * y_power + z;
         }
         let mut z_even_powers = Scalar::ONE;
         for opening in &witness.openings {
             z_even_powers *= z_square;
             for (r, alpha1_val) in opening.r.iter().zip(alpha.iter_mut()) {
-                *alpha1_val += z_even_powers * r * y_powers[full_length + 1];
+                *alpha1_val += z_even_powers * r * y_powers.get(full_length + 1).ok_or(ProofError::SizeOverflow)?;
             }
         }
 
