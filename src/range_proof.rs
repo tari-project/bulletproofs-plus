@@ -848,11 +848,9 @@ where
             // Compute d's sum efficiently
             let mut d_sum = z_square;
             let mut d_sum_temp_z = z_square;
-            let mut d_sum_temp_2m = aggregation_factor.checked_mul(2).ok_or(ProofError::SizeOverflow)?;
-            while d_sum_temp_2m > 2 {
+            for _ in 0..aggregation_factor.ilog2() {
                 d_sum = d_sum + d_sum * d_sum_temp_z;
                 d_sum_temp_z = d_sum_temp_z * d_sum_temp_z;
-                d_sum_temp_2m /= 2; // Rounds towards zero, truncating any fractional part
             }
             d_sum *= two_n_minus_one;
 
