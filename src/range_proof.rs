@@ -14,7 +14,7 @@ use std::{
 
 use curve25519_dalek::{
     scalar::Scalar,
-    traits::{Identity, IsIdentity, VartimePrecomputedMultiscalarMul},
+    traits::{Identity, IsIdentity, MultiscalarMul, VartimePrecomputedMultiscalarMul},
 };
 use itertools::{izip, Itertools};
 use merlin::Transcript;
@@ -199,7 +199,7 @@ impl<P> RangeProof<P>
 where
     for<'p> &'p P: Mul<Scalar, Output = P>,
     for<'p> &'p P: Add<Output = P>,
-    P: CurvePointProtocol + Precomputable,
+    P: CurvePointProtocol + Precomputable + MultiscalarMul<Point = P>,
     P::Compressed: FixedBytesRepr + IsIdentity + Identity,
 {
     /// Helper function to return the proof's extension degree
@@ -222,16 +222,44 @@ where
             .checked_mul(aggregation_factor)
             .ok_or(ProofError::SizeOverflow)?;
 
-        // Consistency checks (can we nix these?)
-        if witness.openings.len() != aggregation_factor {
+        // The witness openings must correspond to the number of statement commitments
+        // This ensures a common aggregation factor
+        if witness.openings.len() != statement.commitments.len() {
             return Err(ProofError::InvalidLength(
-                "Witness openings statement commitments do not match!".to_string(),
+                "Witness openings and statement commitments do not match!".to_string(),
             ));
         }
+
+        // The witness and statement extension degrees must match
+        // This ensures we have the necessary corresponding generators
         if witness.extension_degree != statement.generators.extension_degree() {
             return Err(ProofError::InvalidLength(
                 "Witness and statement extension degrees do not match!".to_string(),
             ));
+        }
+
+        // Each witness value must not overflow the bit length
+        // This ensures bit decompositions are valid
+        for opening in &witness.openings {
+            // If the bit length is large enough, no `u64` value can overflow
+            if bit_length < 64 && opening.v >> bit_length > 0 {
+                return Err(ProofError::InvalidLength(
+                    "Value exceeds bit vector capacity!".to_string(),
+                ));
+            }
+        }
+
+        // Each witness opening must be valid for the corresponding statement commitment
+        // This ensures correctness of the proving relation for this instance
+        for (opening, commitment) in witness.openings.iter().zip(statement.commitments.iter()) {
+            if &statement
+                .generators
+                .pc_gens
+                .commit(&Scalar::from(opening.v), &opening.r)? !=
+                commitment
+            {
+                return Err(ProofError::InvalidArgument("Witness opening is invalid!".to_string()));
+            }
         }
 
         // Start the transcript
@@ -1540,6 +1568,91 @@ mod tests {
     fn test_extension_degree_from_proof_bytes() {
         assert!(RangeProof::<RistrettoPoint>::extension_degree_from_proof_bytes(&[]).is_err());
         assert!(RangeProof::<RistrettoPoint>::extension_degree_from_proof_bytes(&[0u8; 32]).is_err());
+    }
+
+    #[test]
+    fn test_prover_consistency_errors() {
+        // Create range parameters to use for all tests
+        let params = RangeParameters::init(
+            4,
+            2,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+
+        // Witness openings do not correspond to number of statement commitments
+        // The witness opens one commitment, but the statement opens two
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![
+                params
+                    .pc_gens
+                    .commit(&Scalar::from(1u64), &witness.openings[0].r)
+                    .unwrap();
+                2
+            ],
+            vec![None, None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::prove("test", &statement, &witness).is_err());
+
+        // Witness and statement extension degrees do not match
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE, Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params
+                .pc_gens
+                .commit(&Scalar::from(1u64), &witness.openings[0].r[..1])
+                .unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::prove("test", &statement, &witness).is_err());
+
+        // Witness value overflows bit length
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(16u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params
+                .pc_gens
+                .commit(&Scalar::from(16u64), &witness.openings[0].r)
+                .unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::prove("test", &statement, &witness).is_err());
+
+        // Witness opening is invalid for statement commitment
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params
+                .pc_gens
+                .commit(&Scalar::from(2u64), &(witness.openings[0].r))
+                .unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::prove("test", &statement, &witness).is_err());
+
+        // Witness value does not meet minimum value promise
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params
+                .pc_gens
+                .commit(&Scalar::from(1u64), &(witness.openings[0].r))
+                .unwrap()],
+            vec![Some(2u64)],
+            None,
+        )
+        .unwrap();
+        assert!(RangeProof::prove("test", &statement, &witness).is_err());
     }
 
     #[test]
