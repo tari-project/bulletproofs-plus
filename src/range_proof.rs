@@ -358,8 +358,10 @@ where
             }
         }
 
-        let mut gi_base: Vec<P> = statement.generators.gi_base_iter().cloned().collect();
-        let mut hi_base: Vec<P> = statement.generators.hi_base_iter().cloned().collect();
+        // Only take as much of the folding vectors as needed for the aggregation factor
+        let mut gi_base: Vec<P> = statement.generators.gi_base_iter().take(full_length).cloned().collect();
+        let mut hi_base: Vec<P> = statement.generators.hi_base_iter().take(full_length).cloned().collect();
+
         let g_base = statement.generators.g_bases();
         let h_base = statement.generators.h_base();
 
@@ -1690,5 +1692,33 @@ mod tests {
 
         proof.ri.pop();
         assert!(RangeProof::verify(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly).is_err());
+    }
+
+    #[test]
+    fn test_aggregation_lower_than_generators() {
+        // Create range parameters
+        let params = RangeParameters::init(
+            4,
+            2,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+
+        // Witness and statement correspond to fewer commitments than the aggregation factor
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params
+                .pc_gens
+                .commit(&Scalar::from(1u64), &witness.openings[0].r)
+                .unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        let proof = RangeProof::prove("test", &statement, &witness).unwrap();
+
+        // The proof should verify
+        RangeProof::verify_batch(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly).unwrap();
     }
 }
