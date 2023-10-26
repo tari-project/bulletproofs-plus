@@ -25,7 +25,7 @@ Compared to an [updated fork](https://github.com/tari-project/bulletproofs) of t
 
 As always, your mileage may vary.
 
-This library underwent a code audit by [Quarkslab](https://www.quarkslab.com/) at a specific commit in the repository history. You can read the [report and issue responses](docs/quarkslab-audit/README.md) in this repository.
+This library underwent a code audit by [Quarkslab](https://www.quarkslab.com/) at a [specific point](https://github.com/tari-project/bulletproofs-plus/releases/tag/pre-audit-commit) in the repository history. You can read the [report and issue responses](docs/quarkslab-audit/README.md) in this repository.
 
 ## Testing
 

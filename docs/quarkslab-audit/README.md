@@ -1,7 +1,7 @@
 # Code audit by Quarkslab
 
 A code audit of this library was conducted by [Quarkslab](https://www.quarkslab.com/), primarily focusing on determination of the correctness and soundness of the implementation, as well as optimizations and extensions.
-As the audit was conducted at a specific commit in the repository history, readers should carefully note that subsequent changes may not have been examined by the auditors.
+As the audit was conducted at a [specific point](https://github.com/tari-project/bulletproofs-plus/releases/tag/pre-audit-commit) in the repository history, readers should carefully note that subsequent changes may not have been examined by the auditors.
 
 The [full report](report.pdf) is available in this repository.
 
