@@ -334,27 +334,27 @@ where
         let mut d = Vec::with_capacity(full_length);
         d.push(z_square);
         let two = Scalar::from(2u8);
-        for i in 1..bit_length {
-            d.push(two * d[i - 1]);
+        for _ in 1..bit_length {
+            d.push(two * d.last().ok_or(ProofError::SizeOverflow)?);
         }
         for j in 1..aggregation_factor {
             for i in 0..bit_length {
-                d.push(d[(j - 1) * bit_length + i] * z_square);
+                d.push(d.get((j - 1) * bit_length + i).ok_or(ProofError::SizeOverflow)? * z_square);
             }
         }
 
         // Prepare for inner product
-        for item in a_li.iter_mut() {
-            *item -= z;
+        for a_li in a_li.iter_mut() {
+            *a_li -= z;
         }
-        for (i, item) in a_ri.iter_mut().enumerate() {
-            *item += d[i] * y_powers[full_length - i] + z;
+        for (a_ri, d, y_power) in izip!(a_ri.iter_mut(), d.iter(), y_powers.iter().rev().skip(1)) {
+            *a_ri += d * y_power + z;
         }
         let mut z_even_powers = Scalar::ONE;
         for opening in &witness.openings {
             z_even_powers *= z_square;
             for (r, alpha1_val) in opening.r.iter().zip(alpha.iter_mut()) {
-                *alpha1_val += z_even_powers * r * y_powers[full_length + 1];
+                *alpha1_val += z_even_powers * r * y_powers.get(full_length + 1).ok_or(ProofError::SizeOverflow)?;
             }
         }
 
@@ -720,11 +720,8 @@ where
         let precomp = max_statement.generators.precomp();
 
         // Compute 2**n-1 for later use
-        let mut two_n_minus_one = Scalar::from(2u8);
-        for _ in 0..bit_length.ilog2() {
-            two_n_minus_one = two_n_minus_one * two_n_minus_one;
-        }
-        two_n_minus_one -= Scalar::ONE;
+        let two = Scalar::from(2u8);
+        let two_n_minus_one = (0..bit_length.ilog2()).fold(two, |acc, _| acc * acc) - Scalar::ONE;
 
         // Weighted coefficients for common generators
         let mut g_base_scalars = vec![Scalar::ZERO; extension_degree];
@@ -751,8 +748,6 @@ where
 
         // Recovered masks
         let mut masks = Vec::with_capacity(range_proofs.len());
-
-        let two = Scalar::from(2u8);
 
         // Process each proof and add it to the batch
         let rng = &mut thread_rng();
@@ -841,23 +836,21 @@ where
             // Compute d efficiently
             let mut d = Vec::with_capacity(full_length);
             d.push(z_square);
-            for i in 1..bit_length {
-                d.push(two * d[i - 1]);
+            for _ in 1..bit_length {
+                d.push(two * d.last().ok_or(ProofError::SizeOverflow)?);
             }
             for j in 1..aggregation_factor {
                 for i in 0..bit_length {
-                    d.push(d[(j - 1) * bit_length + i] * z_square);
+                    d.push(d.get((j - 1) * bit_length + i).ok_or(ProofError::SizeOverflow)? * z_square);
                 }
             }
 
             // Compute d's sum efficiently
             let mut d_sum = z_square;
             let mut d_sum_temp_z = z_square;
-            let mut d_sum_temp_2m = aggregation_factor.checked_mul(2).ok_or(ProofError::SizeOverflow)?;
-            while d_sum_temp_2m > 2 {
+            for _ in 0..aggregation_factor.ilog2() {
                 d_sum = d_sum + d_sum * d_sum_temp_z;
                 d_sum_temp_z = d_sum_temp_z * d_sum_temp_z;
-                d_sum_temp_2m /= 2; // Rounds towards zero, truncating any fractional part
             }
             d_sum *= two_n_minus_one;
 
@@ -899,20 +892,28 @@ where
             let mut s = Vec::with_capacity(full_length);
             s.push(challenges_inv_prod);
             for i in 1..full_length {
-                #[allow(clippy::cast_possible_truncation)]
-                // Note: 'i' must be cast to u32 in this case (usize is 64bit on 64bit platforms)
-                let log_i = (32 - 1 - (i as u32).leading_zeros()) as usize;
+                let log_i = usize::try_from(i.checked_ilog2().ok_or(ProofError::SizeOverflow)?)
+                    .map_err(|_| ProofError::SizeOverflow)?;
                 let j = 1 << log_i;
-                s.push(s[i - j] * challenges_sq[rounds - log_i - 1]);
+                s.push(
+                    s.get(i - j).ok_or(ProofError::SizeOverflow)? *
+                        challenges_sq.get(rounds - log_i - 1).ok_or(ProofError::SizeOverflow)?,
+                );
             }
             let r1_e = r1 * e;
             let s1_e = s1 * e;
             let e_square_z = e_square * z;
-            for i in 0..full_length {
-                let g = r1_e * y_inv_i * s[i];
-                let h = s1_e * s[full_length - i - 1];
-                gi_base_scalars[i] += weight * (g + e_square_z);
-                hi_base_scalars[i] += weight * (h - e_square * (d[i] * y_nm_i + z));
+            for (s, s_rev, gi_base_scalar, hi_base_scalar, d) in izip!(
+                s.iter(),
+                s.iter().rev(),
+                gi_base_scalars.iter_mut(),
+                hi_base_scalars.iter_mut(),
+                d.iter()
+            ) {
+                let g = r1_e * y_inv_i * s;
+                let h = s1_e * s_rev;
+                *gi_base_scalar += weight * (g + e_square_z);
+                *hi_base_scalar += weight * (h - e_square * (d * y_nm_i + z));
                 y_inv_i *= y_inverse;
                 y_nm_i *= y_inverse;
             }
@@ -930,8 +931,8 @@ where
             dynamic_points.extend(commitments);
 
             h_base_scalar += weight * (r1 * y * s1 + e_square * (y_nm_1 * z * d_sum + (z_square - z) * y_sum));
-            for k in 0..extension_degree {
-                g_base_scalars[k] += weight * d1[k];
+            for (g_base_scalar, d1) in g_base_scalars.iter_mut().zip(d1.iter()) {
+                *g_base_scalar += weight * d1;
             }
 
             dynamic_scalars.push(weight * (-e));
@@ -951,10 +952,8 @@ where
         }
 
         // Pedersen generators
-        for k in 0..extension_degree {
-            dynamic_scalars.push(g_base_scalars[k]);
-            dynamic_points.push(g_base_vec[k].clone());
-        }
+        dynamic_scalars.extend_from_slice(&g_base_scalars);
+        dynamic_points.extend_from_slice(g_base_vec);
         dynamic_scalars.push(h_base_scalar);
         dynamic_points.push(h_base.clone());
 
@@ -1720,5 +1719,16 @@ mod tests {
 
         // The proof should verify
         RangeProof::verify_batch(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly).unwrap();
+    }
+
+    #[test]
+    #[allow(clippy::cast_possible_truncation)]
+    fn test_s_logarithm() {
+        for i in 1usize..64 {
+            assert_eq!(
+                (32 - 1 - (i as u32).leading_zeros()) as usize,
+                usize::try_from(i.ilog2()).unwrap()
+            );
+        }
     }
 }
