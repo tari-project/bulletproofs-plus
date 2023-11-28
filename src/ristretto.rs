@@ -5,11 +5,12 @@
 //!
 //! Implementation of BulletProofs for the Ristretto group for Curve25519.
 
+use std::sync::OnceLock;
+
 use curve25519_dalek::{
     constants::{RISTRETTO_BASEPOINT_COMPRESSED, RISTRETTO_BASEPOINT_POINT},
     ristretto::{CompressedRistretto, RistrettoPoint, VartimeRistrettoPrecomputation},
 };
-use once_cell::sync::OnceCell;
 
 use crate::{
     generators::pedersen_gens::ExtensionDegree,
@@ -82,7 +83,7 @@ fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<Co
 
 /// A static array of pre-generated points
 fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::COUNT] {
-    static INSTANCE: OnceCell<[RistrettoPoint; ExtensionDegree::COUNT]> = OnceCell::new();
+    static INSTANCE: OnceLock<[RistrettoPoint; ExtensionDegree::COUNT]> = OnceLock::new();
     INSTANCE.get_or_init(|| {
         let mut arr = [RistrettoPoint::default(); ExtensionDegree::COUNT];
         for (i, point) in (ExtensionDegree::MINIMUM..).zip(arr.iter_mut()) {
@@ -96,7 +97,7 @@ fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::
 
 /// A static array of compressed pre-generated points
 fn ristretto_compressed_masking_basepoints() -> &'static [CompressedRistretto; ExtensionDegree::COUNT] {
-    static INSTANCE: OnceCell<[CompressedRistretto; ExtensionDegree::COUNT]> = OnceCell::new();
+    static INSTANCE: OnceLock<[CompressedRistretto; ExtensionDegree::COUNT]> = OnceLock::new();
     INSTANCE.get_or_init(|| {
         let mut arr = [CompressedRistretto::default(); ExtensionDegree::COUNT];
         for (i, point) in ristretto_masking_basepoints().iter().enumerate() {
