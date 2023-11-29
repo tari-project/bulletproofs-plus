@@ -3,10 +3,8 @@
 
 //! Bulletproofs+ range parameters (generators and base points) needed for a batch of range proofs
 
-use std::{
-    fmt::{Debug, Formatter},
-    sync::Arc,
-};
+use alloc::sync::Arc;
+use core::fmt::{Debug, Formatter};
 
 use crate::{
     errors::ProofError,
@@ -116,7 +114,7 @@ where
     P: Compressable + Debug + Precomputable,
     P::Compressed: Debug,
 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("RangeParameters")
             .field("pc_gens", &self.pc_gens)
             .field("bp_gens", &self.bp_gens)

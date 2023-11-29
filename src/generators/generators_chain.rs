@@ -4,7 +4,7 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 use digest::{core_api::XofReaderCoreWrapper, ExtendableOutput, Update, XofReader};
 use sha3::{Shake256, Shake256ReaderCore};

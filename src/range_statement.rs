@@ -4,6 +4,8 @@
 //! Bulletproofs+ generators, vector of commitments, vector of optional minimum promised
 //! values and a vector of optional seed nonces for mask recovery
 
+use alloc::vec::Vec;
+
 use curve25519_dalek::scalar::Scalar;
 use zeroize::Zeroize;
 

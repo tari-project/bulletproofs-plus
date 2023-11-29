@@ -3,6 +3,8 @@
 
 //! Bulletproofs+ embedded extended mask
 
+use alloc::vec::Vec;
+
 use curve25519_dalek::scalar::Scalar;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -40,7 +42,7 @@ impl ExtendedMask {
 
 #[cfg(test)]
 mod test {
-    use std::convert::TryFrom;
+    use core::convert::TryFrom;
 
     use super::*;
 

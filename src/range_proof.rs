@@ -5,8 +5,10 @@
 
 #![allow(clippy::too_many_lines)]
 
-use std::{
+use alloc::vec::Vec;
+use core::{
     convert::{TryFrom, TryInto},
+    iter::once,
     marker::PhantomData,
     ops::{Add, Mul, Shr},
     slice::ChunksExact,
@@ -440,24 +442,18 @@ where
 
             // Compute L and R by multi-scalar multiplication
             li.push(P::vartime_multiscalar_mul(
-                std::iter::once::<&Scalar>(&c_l)
+                once::<&Scalar>(&c_l)
                     .chain(d_l.iter())
                     .chain(a_lo_offset.iter())
                     .chain(b_hi.iter()),
-                std::iter::once(h_base)
-                    .chain(g_base.iter())
-                    .chain(gi_base_hi)
-                    .chain(hi_base_lo),
+                once(h_base).chain(g_base.iter()).chain(gi_base_hi).chain(hi_base_lo),
             ));
             ri.push(P::vartime_multiscalar_mul(
-                std::iter::once::<&Scalar>(&c_r)
+                once::<&Scalar>(&c_r)
                     .chain(d_r.iter())
                     .chain(a_hi_offset.iter())
                     .chain(b_lo.iter()),
-                std::iter::once(h_base)
-                    .chain(g_base.iter())
-                    .chain(gi_base_lo)
-                    .chain(hi_base_hi),
+                once(h_base).chain(g_base.iter()).chain(gi_base_lo).chain(hi_base_hi),
             ));
 
             // Get the round challenge and associated values
@@ -1242,7 +1238,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
+    use core::convert::TryFrom;
 
     use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
     use quickcheck::QuickCheck;

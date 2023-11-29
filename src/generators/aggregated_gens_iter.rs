@@ -4,6 +4,8 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
+use alloc::vec::Vec;
+
 /// A convenience iterator struct for the generators
 pub struct AggregatedGensIter<'a, P> {
     pub(super) array: &'a Vec<Vec<P>>,

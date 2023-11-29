@@ -34,3 +34,6 @@ pub use generators::bulletproof_gens::BulletproofGens;
 pub use generators::pedersen_gens::PedersenGens;
 
 pub mod ristretto;
+
+#[macro_use]
+extern crate alloc;

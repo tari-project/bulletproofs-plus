@@ -7,13 +7,13 @@
 //! Bulletproofs+ utilities
 
 use core::{
+    convert::TryFrom,
     option::{Option, Option::Some},
     result::{
         Result,
         Result::{Err, Ok},
     },
 };
-use std::convert::TryFrom;
 
 use blake2::Blake2bMac512;
 use curve25519_dalek::scalar::Scalar;

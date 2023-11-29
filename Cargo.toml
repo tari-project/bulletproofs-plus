@@ -9,13 +9,13 @@ description = "A smaller faster implementation of Bulletproofs"
 [dependencies]
 blake2 = { version = "0.10", default-features = false }
 byteorder = { version = "1", default-features = false }
-curve25519-dalek = { package = "tari-curve25519-dalek", version = "4.0.3", features = ["serde", "rand_core"] }
+curve25519-dalek = { package = "tari-curve25519-dalek", version = "4.0.3", default-features = false, features = ["alloc", "serde", "rand_core", "zeroize"] }
 digest = { version = "0.10", default-features = false }
 itertools = { version = "0.12", default-features = false, features = ["use_alloc"] }
 merlin = { version = "3", default-features = false }
 once_cell = { version = "1", default-features = false, features = ["critical-section"] }
 rand = { version = "0.8", optional = true }
-serde = { version = "1.0", default-features = false, features = ["alloc"] }
+serde = { version = "1", default-features = false, features = ["alloc"] }
 sha3 = { version = "0.10", default-features = false }
 thiserror-no-std = { version = "2", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["alloc", "derive"] }
