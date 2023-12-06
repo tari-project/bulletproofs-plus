@@ -110,6 +110,7 @@ fn ristretto_compressed_masking_basepoints() -> &'static [CompressedRistretto; E
 #[cfg(test)]
 mod tests {
     use curve25519_dalek::scalar::Scalar;
+    use rand::thread_rng;
 
     use super::*;
     use crate::protocols::scalar_protocol::ScalarProtocol;
@@ -144,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_commitments() {
-        let mut rng = rand::thread_rng();
+        let mut rng = thread_rng();
         let value = Scalar::random_not_zero(&mut rng);
         let blindings = [
             Scalar::random_not_zero(&mut rng),

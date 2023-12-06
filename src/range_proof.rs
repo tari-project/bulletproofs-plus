@@ -18,7 +18,9 @@ use curve25519_dalek::{
 };
 use itertools::{izip, Itertools};
 use merlin::Transcript;
+#[cfg(feature = "rand")]
 use rand::thread_rng;
+use rand_core::CryptoRngCore;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use zeroize::Zeroizing;
 
@@ -209,10 +211,22 @@ where
 
     /// Create a single or aggregated range proof for a single party that knows all the secrets
     /// The prover must ensure that the commitments and witness opening data are consistent
+    #[cfg(feature = "rand")]
     pub fn prove(
         transcript_label: &'static str,
         statement: &RangeStatement<P>,
         witness: &RangeWitness,
+    ) -> Result<Self, ProofError> {
+        Self::prove_with_rng(transcript_label, statement, witness, &mut thread_rng())
+    }
+
+    /// Create a single or aggregated range proof for a single party that knows all the secrets
+    /// The prover must ensure that the commitments and witness opening data are consistent
+    pub fn prove_with_rng<R: CryptoRngCore>(
+        transcript_label: &'static str,
+        statement: &RangeStatement<P>,
+        witness: &RangeWitness,
+        rng: &mut R,
     ) -> Result<Self, ProofError> {
         // Useful lengths
         let bit_length = statement.generators.bit_length();
@@ -301,7 +315,6 @@ where
         }
 
         // Compute A by multi-scalar multiplication
-        let rng = &mut thread_rng();
         let mut alpha = Zeroizing::new(Vec::with_capacity(extension_degree));
         for k in 0..extension_degree {
             alpha.push(if let Some(seed_nonce) = statement.seed_nonce {
@@ -651,11 +664,23 @@ where
     }
 
     /// Wrapper function for batch verification in different modes: mask recovery, verification, or both
+    #[cfg(feature = "rand")]
     pub fn verify_batch(
         transcript_labels: &[&'static str],
         statements: &[RangeStatement<P>],
         proofs: &[RangeProof<P>],
         action: VerifyAction,
+    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
+        Self::verify_batch_with_rng(transcript_labels, statements, proofs, action, &mut thread_rng())
+    }
+
+    /// Wrapper function for batch verification in different modes: mask recovery, verification, or both
+    pub fn verify_batch_with_rng<R: CryptoRngCore>(
+        transcript_labels: &[&'static str],
+        statements: &[RangeStatement<P>],
+        proofs: &[RangeProof<P>],
+        action: VerifyAction,
+        rng: &mut R,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // By definition, an empty batch fails
         if statements.is_empty() || proofs.is_empty() || transcript_labels.is_empty() {
@@ -685,7 +710,7 @@ where
 
         // If the batch fails, propagate the error; otherwise, store the masks and keep going
         if let Some((batch_statements, batch_proofs)) = chunks.next() {
-            let mut result = RangeProof::verify(transcript_labels, batch_statements, batch_proofs, action)?;
+            let mut result = RangeProof::verify(transcript_labels, batch_statements, batch_proofs, action, rng)?;
 
             masks.append(&mut result);
         }
@@ -695,11 +720,12 @@ where
 
     // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
     // range proofs by a party that can supply the optional seed nonces
-    fn verify(
+    fn verify<R: CryptoRngCore>(
         transcript_labels: &[&'static str],
         statements: &[RangeStatement<P>],
         range_proofs: &[RangeProof<P>],
         extract_masks: VerifyAction,
+        rng: &mut R,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // Verify generators consistency & select largest aggregation factor
         let (max_mn, max_index) = RangeProof::verify_statements_and_generators_consistency(statements, range_proofs)?;
@@ -750,7 +776,6 @@ where
         let mut masks = Vec::with_capacity(range_proofs.len());
 
         // Process each proof and add it to the batch
-        let rng = &mut thread_rng();
         for (proof, statement, transcript_label) in izip!(range_proofs, statements, transcript_labels) {
             let commitments = statement.commitments.clone();
             let minimum_value_promises = statement.minimum_value_promises.clone();
@@ -1681,7 +1706,7 @@ mod tests {
 
         // Proof vector mismatches
         proof.li.pop();
-        assert!(RangeProof::verify(
+        assert!(RangeProof::verify_batch(
             &["test"],
             &[statement.clone()],
             &[proof.clone()],
@@ -1690,7 +1715,7 @@ mod tests {
         .is_err());
 
         proof.ri.pop();
-        assert!(RangeProof::verify(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly).is_err());
+        assert!(RangeProof::verify_batch(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly).is_err());
     }
 
     #[test]

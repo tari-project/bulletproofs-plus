@@ -3,7 +3,7 @@
 
 //! Bulletproofs+ error definitions
 
-use thiserror::Error;
+use thiserror_no_std::Error;
 
 /// Represents an error in proof creation, verification, or parsing.
 #[derive(Debug, Error)]

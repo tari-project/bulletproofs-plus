@@ -4,7 +4,7 @@
 #![allow(clippy::too_many_lines)]
 
 use curve25519_dalek::scalar::Scalar;
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
     errors::ProofError,
@@ -152,7 +152,7 @@ fn prove_and_verify(
     extension_degree: ExtensionDegree,
     promise_strategy: &ProofOfMinimumValueStrategy,
 ) {
-    let mut rng = rand::thread_rng();
+    let mut rng = thread_rng();
     let transcript_label: &'static str = "BatchedRangeProofTest";
 
     for bit_length in bit_lengths {

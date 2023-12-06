@@ -7,27 +7,28 @@ license = "BSD-3-Clause"
 description = "A smaller faster implementation of Bulletproofs"
 
 [dependencies]
-blake2 = "0.10"
+blake2 = { version = "0.10", default-features = false }
 byteorder = { version = "1", default-features = false }
 curve25519-dalek = { package = "tari-curve25519-dalek", version = "4.0.3", features = ["serde", "rand_core"] }
-derive_more = "0.99"
-derivative = "2.2"
 digest = { version = "0.10", default-features = false }
-itertools = "0.6"
+itertools = { version = "0.12", default-features = false, features = ["use_alloc"] }
 merlin = { version = "3", default-features = false }
 once_cell = { version = "1", default-features = false, features = ["critical-section"] }
-rand = "0.8"
-# Note: toolchain must be at v1.60+ to support serde v1.0.150+
-serde = "1.0"
+rand = { version = "0.8", optional = true }
+serde = { version = "1.0", default-features = false, features = ["alloc"] }
 sha3 = { version = "0.10", default-features = false }
-thiserror = { version = "1" }
-zeroize = "1"
-rand_core = "0.6"
+thiserror-no-std = { version = "2", default-features = false }
+zeroize = { version = "1", default-features = false, features = ["alloc", "derive"] }
+rand_core = { version = "0.6", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 bincode = "1"
 criterion = "0.5"
 quickcheck = "1"
+
+[features]
+default = ["rand"]
+rand = ["dep:rand"]
 
 [[bench]]
 name = "range_proof"

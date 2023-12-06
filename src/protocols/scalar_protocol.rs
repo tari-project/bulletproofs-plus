@@ -6,12 +6,12 @@
 use blake2::Blake2bMac512;
 use curve25519_dalek::scalar::Scalar;
 use digest::FixedOutput;
-use rand::{CryptoRng, RngCore};
+use rand_core::CryptoRngCore;
 
 /// Defines a `ScalarProtocol` trait for using a Scalar
 pub trait ScalarProtocol {
     /// Returns a non-zero random Scalar
-    fn random_not_zero<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar;
+    fn random_not_zero<R: CryptoRngCore>(rng: &mut R) -> Scalar;
 
     /// Construct a scalar from an existing Blake2b instance (helper function to implement `Scalar::from_hash<Blake2b>`)
     fn from_hasher_blake2b(hasher: Blake2bMac512) -> Scalar;
@@ -20,7 +20,7 @@ pub trait ScalarProtocol {
 impl ScalarProtocol for Scalar {
     // 'Scalar::random(rng)' in most cases will not return zero due to the intent of the implementation, but this is
     // not guaranteed. This function makes it clear that zero will never be returned
-    fn random_not_zero<R: RngCore + CryptoRng>(rng: &mut R) -> Scalar {
+    fn random_not_zero<R: CryptoRngCore>(rng: &mut R) -> Scalar {
         let mut value = Scalar::ZERO;
         while value == Scalar::ZERO {
             value = Scalar::random(rng);
@@ -39,12 +39,12 @@ impl ScalarProtocol for Scalar {
 #[cfg(test)]
 mod test {
     use curve25519_dalek::Scalar;
-    use rand_core::OsRng;
+    use rand::thread_rng;
 
     use super::*;
 
     #[test]
     fn test_nonzero() {
-        assert_ne!(Scalar::random_not_zero(&mut OsRng), Scalar::ZERO);
+        assert_ne!(Scalar::random_not_zero(&mut thread_rng()), Scalar::ZERO);
     }
 }

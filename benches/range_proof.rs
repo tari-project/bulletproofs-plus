@@ -11,7 +11,7 @@ extern crate criterion;
 
 use criterion::{Criterion, SamplingMode};
 use curve25519_dalek::scalar::Scalar;
-use rand::{self, Rng};
+use rand::{thread_rng, Rng};
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
     generators::pedersen_gens::ExtensionDegree,
@@ -63,7 +63,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let mut commitments = vec![];
             let mut minimum_values = vec![];
             let mut openings = vec![];
-            let mut rng = rand::thread_rng();
+            let mut rng = thread_rng();
             for _ in 0..aggregation_factor {
                 let value = rng.gen_range(value_min..=value_max);
                 minimum_values.push(Some(value / 3));
@@ -136,7 +136,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let mut commitments = vec![];
             let mut minimum_values = vec![];
             let mut openings = vec![];
-            let mut rng = rand::thread_rng();
+            let mut rng = thread_rng();
             for _ in 0..aggregation_factor {
                 let value = rng.gen_range(value_min..=value_max);
                 minimum_values.push(Some(value / 3));
@@ -209,7 +209,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
             let pc_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
             let generators = RangeParameters::init(bit_length, 1, pc_gens).unwrap();
 
-            let mut rng = rand::thread_rng();
+            let mut rng = thread_rng();
 
             group.bench_function(&label, move |b| {
                 // Batch data
