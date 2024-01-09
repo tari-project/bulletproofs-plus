@@ -5,7 +5,7 @@
 
 use std::convert::TryInto;
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::{commitment_opening::CommitmentOpening, errors::ProofError, generators::pedersen_gens::ExtensionDegree};
 
@@ -36,6 +36,21 @@ impl RangeWitness {
             openings,
             extension_degree: extension_degree.try_into()?,
         })
+    }
+
+    /// Produce a byte representation of the witness data for use in transcript RNG seeding
+    /// Note that this does _not_ need to be canonical!
+    pub(crate) fn to_bytes(&self) -> Zeroizing<Vec<u8>> {
+        let mut bytes = Zeroizing::new(Vec::<u8>::new());
+
+        for opening in &self.openings {
+            bytes.extend(opening.v.to_le_bytes());
+            for r in &opening.r {
+                bytes.extend(r.as_bytes());
+            }
+        }
+
+        bytes
     }
 }
 

@@ -2,7 +2,8 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 
 use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
-use merlin::Transcript;
+use merlin::{Transcript, TranscriptRng};
+use rand_core::CryptoRngCore;
 
 use crate::{
     errors::ProofError,
@@ -73,4 +74,16 @@ pub(crate) fn transcript_points_a1_b_challenge_e<P: FixedBytesRepr + IsIdentity>
     transcript.validate_and_append_point(b"A1", a1)?;
     transcript.validate_and_append_point(b"B", b)?;
     transcript.challenge_scalar(b"e")
+}
+
+/// Helper function to get a random number generator from a transcript
+pub(crate) fn transcript_make_rng<R: CryptoRngCore>(
+    transcript: &mut Transcript,
+    witness_bytes: &[u8],
+    rng: &mut R,
+) -> TranscriptRng {
+    transcript
+        .build_rng()
+        .rekey_with_witness_bytes("witness".as_bytes(), witness_bytes)
+        .finalize(rng)
 }

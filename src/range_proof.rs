@@ -36,7 +36,7 @@ use crate::{
     range_statement::RangeStatement,
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
-    transcripts,
+    transcripts::{self, transcript_make_rng},
     utils::generic::{nonce, split_at_checked},
 };
 
@@ -276,7 +276,7 @@ where
             }
         }
 
-        // Start the transcript
+        // Start the transcript and generate an RNG from it
         let mut transcript = Transcript::new(transcript_label.as_bytes());
         transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
         transcripts::transcript_initialize::<P>(
@@ -288,6 +288,7 @@ where
             aggregation_factor,
             statement,
         )?;
+        let mut transcript_rng = transcript_make_rng(&mut transcript, &witness.to_bytes(), rng);
 
         // Set bit arrays
         let mut a_li = Zeroizing::new(Vec::with_capacity(full_length));
@@ -321,7 +322,7 @@ where
                 nonce(&seed_nonce, "alpha", None, Some(k))?
             } else {
                 // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-                Scalar::random_not_zero(rng)
+                Scalar::random_not_zero(&mut transcript_rng)
             });
         }
         let a = statement.generators.precomp().vartime_mixed_multiscalar_mul(
@@ -406,6 +407,9 @@ where
             let a_lo_offset = a_lo.iter().map(|s| s * y_n_inverse).collect::<Vec<Scalar>>();
             let a_hi_offset = a_hi.iter().map(|s| s * y_powers[n]).collect::<Vec<Scalar>>();
 
+            // Get an updated transcript RNG
+            let mut transcript_rng = transcript_make_rng(&mut transcript, &witness.to_bytes(), rng);
+
             let d_l = if let Some(seed_nonce) = statement.seed_nonce {
                 Zeroizing::new(
                     (0..extension_degree)
@@ -414,7 +418,11 @@ where
                 )
             } else {
                 // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-                Zeroizing::new((0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect())
+                Zeroizing::new(
+                    (0..extension_degree)
+                        .map(|_| Scalar::random_not_zero(&mut transcript_rng))
+                        .collect(),
+                )
             };
             let d_r = if let Some(seed_nonce) = statement.seed_nonce {
                 Zeroizing::new(
@@ -424,7 +432,11 @@ where
                 )
             } else {
                 // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-                Zeroizing::new((0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect())
+                Zeroizing::new(
+                    (0..extension_degree)
+                        .map(|_| Scalar::random_not_zero(&mut transcript_rng))
+                        .collect(),
+                )
             };
 
             round += 1;
@@ -504,10 +516,13 @@ where
             }
         }
 
+        // Get an updated transcript RNG
+        let mut transcript_rng = transcript_make_rng(&mut transcript, &witness.to_bytes(), rng);
+
         // Random masks
         // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-        let r = Zeroizing::new(Scalar::random_not_zero(rng));
-        let s = Zeroizing::new(Scalar::random_not_zero(rng));
+        let r = Zeroizing::new(Scalar::random_not_zero(&mut transcript_rng));
+        let s = Zeroizing::new(Scalar::random_not_zero(&mut transcript_rng));
         let d = if let Some(seed_nonce) = statement.seed_nonce {
             Zeroizing::new(
                 (0..extension_degree)
@@ -516,7 +531,11 @@ where
             )
         } else {
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-            Zeroizing::new((0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect())
+            Zeroizing::new(
+                (0..extension_degree)
+                    .map(|_| Scalar::random_not_zero(&mut transcript_rng))
+                    .collect(),
+            )
         };
         let eta = if let Some(seed_nonce) = statement.seed_nonce {
             Zeroizing::new(
@@ -526,7 +545,11 @@ where
             )
         } else {
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-            Zeroizing::new((0..extension_degree).map(|_| Scalar::random_not_zero(rng)).collect())
+            Zeroizing::new(
+                (0..extension_degree)
+                    .map(|_| Scalar::random_not_zero(&mut transcript_rng))
+                    .collect(),
+            )
         };
 
         let mut a1 =
