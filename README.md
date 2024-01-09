@@ -27,6 +27,15 @@ As always, your mileage may vary.
 
 This library underwent a code audit by [Quarkslab](https://www.quarkslab.com/) at a [specific point](https://github.com/tari-project/bulletproofs-plus/releases/tag/pre-audit-commit) in the repository history. You can read the [report and issue responses](docs/quarkslab-audit/README.md) in this repository.
 
+## Features
+
+The library is `#![no_std]`-friendly when default features are disabled.
+
+The (default) `rand` feature adds prover and verifier functionality using the `OsRng` random number generator.
+If it is not enabled, you must supply your own cryptographically-secure random number generator.
+
+The (default) `std` feature enables corresponding functionality in dependencies.
+
 ## Testing
 
 Unit tests are available via `cargo test`. Basic fuzz testing can be run (on a nightly toolchain) via `cargo fuzz`.
