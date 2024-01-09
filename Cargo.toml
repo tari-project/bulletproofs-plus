@@ -9,26 +9,27 @@ description = "A smaller faster implementation of Bulletproofs"
 [dependencies]
 blake2 = { version = "0.10", default-features = false }
 byteorder = { version = "1", default-features = false }
-curve25519-dalek = { package = "tari-curve25519-dalek", version = "4.0.3", features = ["serde", "rand_core"] }
-digest = { version = "0.10", default-features = false }
+curve25519-dalek = { package = "tari-curve25519-dalek", version = "4.0.3", default-features = false, features = ["alloc", "rand_core", "serde", "zeroize"] }
+digest = { version = "0.10", default-features = false, features = ["alloc"] }
 itertools = { version = "0.12", default-features = false, features = ["use_alloc"] }
 merlin = { version = "3", default-features = false }
-once_cell = { version = "1", default-features = false, features = ["critical-section"] }
-rand = { version = "0.8", optional = true }
+once_cell = { version = "1", default-features = false, features = ["alloc", "critical-section"] }
+rand = { version = "0.8", optional = true, default-features = false }
+rand_core = { version = "0.6", default-features = false, features = ["alloc"] }
 serde = { version = "1.0", default-features = false, features = ["alloc"] }
 sha3 = { version = "0.10", default-features = false }
 thiserror-no-std = { version = "2", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["alloc", "derive"] }
-rand_core = { version = "0.6", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 bincode = "1"
 criterion = "0.5"
-quickcheck = "1"
+rand_chacha = "0.3.1"
 
 [features]
-default = ["rand"]
-rand = ["dep:rand"]
+default = ["rand", "std"]
+std = ["blake2/std", "byteorder/std", "digest/std", "itertools/use_std", "merlin/std", "once_cell/std", "rand?/std", "rand_core/std", "serde/std", "sha3/std", "zeroize/std"]
+rand = ["dep:rand", "rand/alloc", "rand/getrandom"]
 
 [[bench]]
 name = "range_proof"

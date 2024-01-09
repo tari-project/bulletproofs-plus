@@ -17,6 +17,8 @@ pub mod pedersen_gens;
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
+
     use curve25519_dalek::ristretto::RistrettoPoint;
 
     use crate::generators::bulletproof_gens::BulletproofGens;

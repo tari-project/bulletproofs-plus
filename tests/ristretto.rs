@@ -4,7 +4,8 @@
 #![allow(clippy::too_many_lines)]
 
 use curve25519_dalek::scalar::Scalar;
-use rand::{thread_rng, Rng};
+use rand_chacha::ChaCha12Rng;
+use rand_core::{CryptoRngCore, SeedableRng};
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
     errors::ProofError,
@@ -152,7 +153,7 @@ fn prove_and_verify(
     extension_degree: ExtensionDegree,
     promise_strategy: &ProofOfMinimumValueStrategy,
 ) {
-    let mut rng = thread_rng();
+    let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
     let transcript_label: &'static str = "BatchedRangeProofTest";
 
     for bit_length in bit_lengths {
@@ -165,7 +166,7 @@ fn prove_and_verify(
         let mut transcript_labels = vec![];
 
         #[allow(clippy::cast_possible_truncation)]
-        let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
+        let value_max = (1u128 << (bit_length - 1)) as u64;
         for aggregation_size in proof_batch {
             // 1. Generators
             let pc_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
@@ -176,7 +177,7 @@ fn prove_and_verify(
             let mut commitments = vec![];
             let mut minimum_values = vec![];
             for m in 0..*aggregation_size {
-                let value = rng.gen_range(value_min..=value_max);
+                let value = rng.as_rngcore().next_u64() % value_max; // introduces bias, but that's fine for this test
                 let minimum_value = match promise_strategy {
                     ProofOfMinimumValueStrategy::NoOffset => None,
                     ProofOfMinimumValueStrategy::Intermediate => Some(value / 3),
@@ -221,7 +222,7 @@ fn prove_and_verify(
                 RangeStatement::init(generators.clone(), commitments, minimum_values.clone(), None).unwrap();
 
             // 4. Create the proofs
-            let proof = RangeProof::prove(transcript_label, &private_statement.clone(), &witness);
+            let proof = RangeProof::prove_with_rng(transcript_label, &private_statement.clone(), &witness, &mut rng);
             match promise_strategy {
                 ProofOfMinimumValueStrategy::LargerThanValue => match proof {
                     Ok(_) => {
@@ -246,39 +247,43 @@ fn prove_and_verify(
         if !proofs.is_empty() {
             // 5. Verify the entire batch as the commitment owner, i.e. the prover self
             // --- Only recover the masks
-            let recovered_private_masks = RangeProof::verify_batch(
+            let recovered_private_masks = RangeProof::verify_batch_with_rng(
                 &transcript_labels,
                 &statements_private.clone(),
                 &proofs.clone(),
                 VerifyAction::RecoverOnly,
+                &mut rng,
             )
             .unwrap();
             assert_eq!(private_masks, recovered_private_masks);
             // --- Recover the masks and verify the proofs
-            let recovered_private_masks = RangeProof::verify_batch(
+            let recovered_private_masks = RangeProof::verify_batch_with_rng(
                 &transcript_labels,
                 &statements_private.clone(),
                 &proofs.clone(),
                 VerifyAction::RecoverAndVerify,
+                &mut rng,
             )
             .unwrap();
             assert_eq!(private_masks, recovered_private_masks);
             // --- Verify the proofs but do not recover the masks
-            let recovered_private_masks = RangeProof::verify_batch(
+            let recovered_private_masks = RangeProof::verify_batch_with_rng(
                 &transcript_labels,
                 &statements_private.clone(),
                 &proofs.clone(),
                 VerifyAction::VerifyOnly,
+                &mut rng,
             )
             .unwrap();
             assert_eq!(public_masks, recovered_private_masks);
 
             // 6. Verify the entire batch as public entity
-            let recovered_public_masks = RangeProof::verify_batch(
+            let recovered_public_masks = RangeProof::verify_batch_with_rng(
                 &transcript_labels,
                 &statements_public,
                 &proofs,
                 VerifyAction::VerifyOnly,
+                &mut rng,
             )
             .unwrap();
             assert_eq!(public_masks, recovered_public_masks);
@@ -302,11 +307,12 @@ fn prove_and_verify(
                         seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::ONE),
                     });
                 }
-                let recovered_private_masks_changed = RistrettoRangeProof::verify_batch(
+                let recovered_private_masks_changed = RistrettoRangeProof::verify_batch_with_rng(
                     &transcript_labels,
                     &statements_private_changed,
                     &proofs.clone(),
                     VerifyAction::RecoverAndVerify,
+                    &mut rng,
                 )
                 .unwrap();
                 assert_ne!(private_masks, recovered_private_masks_changed);
@@ -333,11 +339,12 @@ fn prove_and_verify(
                     seed_nonce: statement.seed_nonce,
                 });
             }
-            match RangeProof::verify_batch(
+            match RangeProof::verify_batch_with_rng(
                 &transcript_labels,
                 &statements_public_changed,
                 &proofs,
                 VerifyAction::VerifyOnly,
+                &mut rng,
             ) {
                 Ok(_) => {
                     panic!("Range proof should not verify")

@@ -3,6 +3,20 @@ on: [push, pull_request]
 name: Test
 
 jobs:
+  wasm:
+    name: cargo build (WASM)
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - name: build (WASM)
+        run: cargo build --target wasm32-unknown-unknown --no-default-features
+
   test:
     name: cargo test
     runs-on: ubuntu-latest
@@ -18,6 +32,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
+          targets: wasm32-unknown-unknown
       - name: check (no features)
         run: cargo +${{ matrix.rust }} check --no-default-features
       - name: check (all features)

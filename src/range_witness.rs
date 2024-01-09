@@ -3,7 +3,8 @@
 
 //! Bulletproofs+ commitment openings for the aggregated case
 
-use std::convert::TryInto;
+use alloc::{string::ToString, vec::Vec};
+use core::convert::TryInto;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -41,6 +42,8 @@ impl RangeWitness {
 
 #[cfg(test)]
 mod test {
+    use alloc::vec;
+
     use curve25519_dalek::Scalar;
 
     use super::*;

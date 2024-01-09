@@ -3,7 +3,7 @@
 
 //! Bulletproofs+ `CurvePointProtocol` trait provides the required interface for curves using BP+.
 
-use std::{
+use core::{
     borrow::Borrow,
     ops::{Add, AddAssign},
 };

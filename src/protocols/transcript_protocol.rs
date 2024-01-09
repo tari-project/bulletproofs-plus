@@ -6,6 +6,8 @@
 
 //! Bulletproofs+ `TranscriptProtocol` trait for using a Transcript
 
+use alloc::string::ToString;
+
 use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
 use merlin::Transcript;
 

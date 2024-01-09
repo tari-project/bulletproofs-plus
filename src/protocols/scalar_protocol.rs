@@ -39,12 +39,14 @@ impl ScalarProtocol for Scalar {
 #[cfg(test)]
 mod test {
     use curve25519_dalek::Scalar;
-    use rand::thread_rng;
+    use rand_chacha::ChaCha12Rng;
+    use rand_core::SeedableRng;
 
     use super::*;
 
     #[test]
     fn test_nonzero() {
-        assert_ne!(Scalar::random_not_zero(&mut thread_rng()), Scalar::ZERO);
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+        assert_ne!(Scalar::random_not_zero(&mut rng), Scalar::ZERO);
     }
 }

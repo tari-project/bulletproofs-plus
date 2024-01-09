@@ -11,7 +11,8 @@ extern crate criterion;
 
 use criterion::{Criterion, SamplingMode};
 use curve25519_dalek::scalar::Scalar;
-use rand::{thread_rng, Rng};
+use rand_chacha::ChaCha12Rng;
+use rand_core::{CryptoRngCore, SeedableRng};
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
     generators::pedersen_gens::ExtensionDegree,
@@ -41,16 +42,18 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
     let mut group = c.benchmark_group("range_proof_creation");
     group.sampling_mode(SamplingMode::Flat);
 
+    let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
     let transcript_label: &'static str = "BatchedRangeProofTest";
     #[allow(clippy::cast_possible_truncation)]
-    let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
+    let value_max = (1u128 << (bit_length - 1)) as u64;
 
     for aggregation_factor in AGGREGATION_SIZES {
         let label = format!(
             "Agg {}-bit BP+ create agg factor {} degree {:?}",
             bit_length, aggregation_factor, extension_degree
         );
-        group.bench_function(&label, move |b| {
+        group.bench_function(&label, |b| {
             // 1. Generators
             let generators = RangeParameters::init(
                 bit_length,
@@ -63,9 +66,8 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let mut commitments = vec![];
             let mut minimum_values = vec![];
             let mut openings = vec![];
-            let mut rng = thread_rng();
             for _ in 0..aggregation_factor {
-                let value = rng.gen_range(value_min..=value_max);
+                let value = rng.as_rngcore().next_u64() % value_max; // introduces bias, but that's fine for testing
                 minimum_values.push(Some(value / 3));
                 let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
                 commitments.push(
@@ -90,7 +92,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             // Benchmark this code
             b.iter(|| {
                 // 4. Create the aggregated proof
-                let _proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness);
+                let _proof = RistrettoRangeProof::prove_with_rng(transcript_label, &statement, &witness, &mut rng);
             })
         });
     }
@@ -113,9 +115,11 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
     let mut group = c.benchmark_group("range_proof_verification");
     group.sampling_mode(SamplingMode::Flat);
 
+    let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
     let transcript_label: &'static str = "BatchedRangeProofTest";
     #[allow(clippy::cast_possible_truncation)]
-    let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
+    let value_max = (1u128 << (bit_length - 1)) as u64;
 
     for aggregation_factor in AGGREGATION_SIZES {
         let pederson_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
@@ -123,7 +127,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             "Agg {}-bit BP+ verify agg factor {} degree {:?}",
             bit_length, aggregation_factor, extension_degree
         );
-        group.bench_function(&label, move |b| {
+        group.bench_function(&label, |b| {
             // 0. Batch data
             let mut statements = vec![];
             let mut proofs = vec![];
@@ -136,9 +140,8 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let mut commitments = vec![];
             let mut minimum_values = vec![];
             let mut openings = vec![];
-            let mut rng = thread_rng();
             for _ in 0..aggregation_factor {
-                let value = rng.gen_range(value_min..=value_max);
+                let value = rng.as_rngcore().next_u64() % value_max; // introduces bias, but that's fine for testing
                 minimum_values.push(Some(value / 3));
                 let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
                 commitments.push(
@@ -163,15 +166,20 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             transcript_labels.push(transcript_label);
 
             // 4. Create the proof
-            let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness).unwrap();
+            let proof = RistrettoRangeProof::prove_with_rng(transcript_label, &statement, &witness, &mut rng).unwrap();
             proofs.push(proof);
 
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the aggregated proof
-                let _masks =
-                    RangeProof::verify_batch(&transcript_labels, &statements, &proofs, VerifyAction::VerifyOnly)
-                        .unwrap();
+                let _masks = RangeProof::verify_batch_with_rng(
+                    &transcript_labels,
+                    &statements,
+                    &proofs,
+                    VerifyAction::VerifyOnly,
+                    &mut rng,
+                )
+                .unwrap();
             });
         });
     }
@@ -194,9 +202,11 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
     let mut group = c.benchmark_group("batched_range_proof_verification");
     group.sampling_mode(SamplingMode::Flat);
 
+    let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
     let transcript_label: &'static str = "BatchedRangeProofTest";
     #[allow(clippy::cast_possible_truncation)]
-    let (value_min, value_max) = (0u64, (1u128 << (bit_length - 1)) as u64);
+    let value_max = (1u128 << (bit_length - 1)) as u64;
 
     for extract_masks in EXTRACT_MASKS {
         for number_of_range_proofs in BATCHED_SIZES {
@@ -209,9 +219,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
             let pc_gens = ristretto::create_pedersen_gens_with_extension_degree(extension_degree);
             let generators = RangeParameters::init(bit_length, 1, pc_gens).unwrap();
 
-            let mut rng = thread_rng();
-
-            group.bench_function(&label, move |b| {
+            group.bench_function(&label, |b| {
                 // Batch data
                 let mut statements = vec![];
                 let mut proofs = vec![];
@@ -220,7 +228,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                 for _ in 0..number_of_range_proofs {
                     // Witness data
                     let mut openings = vec![];
-                    let value = rng.gen_range(value_min..=value_max);
+                    let value = rng.as_rngcore().next_u64() % value_max; // introduces bias, but that's fine for testing
                     let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
                     openings.push(CommitmentOpening::new(value, blindings.clone()));
                     let witness = RangeWitness::init(openings).unwrap();
@@ -241,7 +249,8 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                     transcript_labels.push(transcript_label);
 
                     // Proof
-                    let proof = RistrettoRangeProof::prove(transcript_label, &statement, &witness).unwrap();
+                    let proof =
+                        RistrettoRangeProof::prove_with_rng(transcript_label, &statement, &witness, &mut rng).unwrap();
                     proofs.push(proof);
                 }
 
@@ -250,20 +259,22 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                     // Verify the entire batch of proofs
                     match extract_masks {
                         VerifyAction::VerifyOnly => {
-                            let _masks = RangeProof::verify_batch(
+                            let _masks = RangeProof::verify_batch_with_rng(
                                 &transcript_labels,
                                 &statements,
                                 &proofs,
                                 VerifyAction::VerifyOnly,
+                                &mut rng,
                             )
                             .unwrap();
                         },
                         VerifyAction::RecoverOnly => {
-                            let _masks = RangeProof::verify_batch(
+                            let _masks = RangeProof::verify_batch_with_rng(
                                 &transcript_labels,
                                 &statements,
                                 &proofs,
                                 VerifyAction::RecoverOnly,
+                                &mut rng,
                             )
                             .unwrap();
                         },
