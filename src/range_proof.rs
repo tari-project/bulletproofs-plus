@@ -17,7 +17,6 @@ use curve25519_dalek::{
     traits::{Identity, IsIdentity, MultiscalarMul, VartimePrecomputedMultiscalarMul},
 };
 use itertools::{izip, Itertools};
-use merlin::Transcript;
 #[cfg(feature = "rand")]
 use rand::thread_rng;
 use rand_core::CryptoRngCore;
@@ -28,15 +27,11 @@ use crate::{
     errors::ProofError,
     extended_mask::ExtendedMask,
     generators::pedersen_gens::ExtensionDegree,
-    protocols::{
-        curve_point_protocol::CurvePointProtocol,
-        scalar_protocol::ScalarProtocol,
-        transcript_protocol::TranscriptProtocol,
-    },
+    protocols::{curve_point_protocol::CurvePointProtocol, scalar_protocol::ScalarProtocol},
     range_statement::RangeStatement,
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
-    transcripts::{self, transcript_make_rng},
+    transcripts::RangeProofTranscript,
     utils::generic::{nonce, split_at_checked},
 };
 
@@ -276,11 +271,9 @@ where
             }
         }
 
-        // Start the transcript and generate an RNG from it
-        let mut transcript = Transcript::new(transcript_label.as_bytes());
-        transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
-        transcripts::transcript_initialize::<P>(
-            &mut transcript,
+        // Start a new transcript and get an RNG
+        let mut transcript = RangeProofTranscript::<P>::new(
+            transcript_label,
             &statement.generators.h_base().compress(),
             statement.generators.g_bases_compressed(),
             bit_length,
@@ -288,7 +281,7 @@ where
             aggregation_factor,
             statement,
         )?;
-        let mut transcript_rng = transcript_make_rng(&mut transcript, &witness.to_bytes(), rng);
+        let mut transcript_rng = transcript.build_rng(witness, rng);
 
         // Set bit arrays
         let mut a_li = Zeroizing::new(Vec::with_capacity(full_length));
@@ -331,8 +324,10 @@ where
             statement.generators.g_bases().iter(),
         );
 
-        // Get challenges
-        let (y, z) = transcripts::transcript_point_a_challenges_y_z(&mut transcript, &a.compress())?;
+        // Update transcript, get challenges, and generate RNG
+        let (y, z) = transcript.challenges_y_z(&a.compress())?;
+        transcript_rng = transcript.build_rng(witness, rng);
+
         let z_square = z * z;
 
         // Compute powers of the challenge
@@ -407,9 +402,6 @@ where
             let a_lo_offset = a_lo.iter().map(|s| s * y_n_inverse).collect::<Vec<Scalar>>();
             let a_hi_offset = a_hi.iter().map(|s| s * y_powers[n]).collect::<Vec<Scalar>>();
 
-            // Get an updated transcript RNG
-            let mut transcript_rng = transcript_make_rng(&mut transcript, &witness.to_bytes(), rng);
-
             let d_l = if let Some(seed_nonce) = statement.seed_nonce {
                 Zeroizing::new(
                     (0..extension_degree)
@@ -472,9 +464,8 @@ where
                     .chain(hi_base_hi),
             ));
 
-            // Get the round challenge and associated values
-            let e = transcripts::transcript_points_l_r_challenge_e(
-                &mut transcript,
+            // Update transcript, get challenge, and generate RNG
+            let e = transcript.challenge_round_e(
                 &li.last()
                     .ok_or(ProofError::InvalidLength("Bad inner product vector length".to_string()))?
                     .compress(),
@@ -482,6 +473,7 @@ where
                     .ok_or(ProofError::InvalidLength("Bad inner product vector length".to_string()))?
                     .compress(),
             )?;
+            transcript_rng = transcript.build_rng(witness, rng);
             let e_square = e * e;
             let e_inverse = e.invert();
             let e_inverse_square = e_inverse * e_inverse;
@@ -515,9 +507,6 @@ where
                 *alpha += l * e_square + r * e_inverse_square;
             }
         }
-
-        // Get an updated transcript RNG
-        let mut transcript_rng = transcript_make_rng(&mut transcript, &witness.to_bytes(), rng);
 
         // Random masks
         // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
@@ -562,7 +551,8 @@ where
             b += g_base * eta;
         }
 
-        let e = transcripts::transcript_points_a1_b_challenge_e(&mut transcript, &a1.compress(), &b.compress())?;
+        // Update transcript and get challenge (no RNG needed)
+        let e = transcript.challenge_final_e(&a1.compress(), &b.compress())?;
         let e_square = e * e;
 
         let r1 = *r + a_li[0] * e;
@@ -837,10 +827,8 @@ where
             let weight = Scalar::random_not_zero(rng);
 
             // Start the transcript
-            let mut transcript = Transcript::new((*transcript_label).as_bytes());
-            transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
-            transcripts::transcript_initialize(
-                &mut transcript,
+            let mut transcript = RangeProofTranscript::new(
+                transcript_label,
                 &h_base_compressed,
                 g_bases_compressed,
                 bit_length,
@@ -850,14 +838,14 @@ where
             )?;
 
             // Reconstruct challenges
-            let (y, z) = transcripts::transcript_point_a_challenges_y_z(&mut transcript, &proof.a)?;
+            let (y, z) = transcript.challenges_y_z(&proof.a)?;
             let challenges = proof
                 .li
                 .iter()
                 .zip(proof.ri.iter())
-                .map(|(l, r)| transcripts::transcript_points_l_r_challenge_e(&mut transcript, l, r))
+                .map(|(l, r)| transcript.challenge_round_e(l, r))
                 .collect::<Result<Vec<Scalar>, ProofError>>()?;
-            let e = transcripts::transcript_points_a1_b_challenge_e(&mut transcript, &proof.a1, &proof.b)?;
+            let e = transcript.challenge_final_e(&proof.a1, &proof.b)?;
 
             // Compute challenge inverses in a batch
             let mut challenges_inv = challenges.clone();
