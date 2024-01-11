@@ -88,8 +88,11 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 /// ```
 /// use curve25519_dalek::scalar::Scalar;
 /// use merlin::Transcript;
+/// #[cfg(feature = "rand")]
 /// use rand::rngs::OsRng;
 /// # fn main() {
+/// #[cfg(feature = "rand")]
+/// # {
 /// use tari_bulletproofs_plus::{
 ///     commitment_opening::CommitmentOpening,
 ///     errors::ProofError,
@@ -196,6 +199,7 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 ///     RangeProof::verify_batch(&transcript_labels, &statements_public, &proofs, VerifyAction::VerifyOnly).unwrap();
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
+/// # }
 /// # }
 /// ```
 
@@ -1241,6 +1245,7 @@ mod tests {
     use core::convert::TryFrom;
 
     use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+    use quickcheck::QuickCheck;
     use rand_chacha::ChaCha12Rng;
     use rand_core::SeedableRng;
 
@@ -1252,6 +1257,28 @@ mod tests {
         ristretto::{create_pedersen_gens_with_extension_degree, RistrettoRangeProof},
         BulletproofGens,
     };
+
+    #[test]
+    #[allow(clippy::needless_pass_by_value)]
+    fn test_deserialization_fuzzing() {
+        fn internal(bytes: Vec<u8>) -> bool {
+            // Deserialization should either fail or serialize canonically
+            match RistrettoRangeProof::from_bytes(&bytes) {
+                Err(_) => true,
+                Ok(proof) => proof.to_bytes() == bytes,
+            }
+        }
+
+        // Number of fuzzing tests to run
+        const TESTS: u64 = 100_000;
+
+        // Run fuzzing tests
+        QuickCheck::new()
+            .min_tests_passed(TESTS)
+            .tests(TESTS)
+            .max_tests(TESTS)
+            .quickcheck(internal as fn(Vec<u8>) -> bool);
+    }
 
     #[test]
     fn test_from_bytes() {

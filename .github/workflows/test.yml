@@ -12,10 +12,10 @@ jobs:
       - name: toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
+          toolchain: nightly 
           targets: wasm32-unknown-unknown
       - name: build (WASM)
-        run: cargo build --target wasm32-unknown-unknown --no-default-features
+        run: cargo +nightly build --target wasm32-unknown-unknown --no-default-features -Zavoid-dev-deps
 
   test:
     name: cargo test
@@ -37,9 +37,13 @@ jobs:
         run: cargo +${{ matrix.rust }} check --no-default-features
       - name: check (all features)
         run: cargo +${{ matrix.rust }} check --all-features --all-targets
-      - name: test/debug
+      - name: test/debug (all features)
         run: cargo +${{ matrix.rust }} test --all-features
-      - name: test/release
+      - name: test/debug (no features)
+        run: cargo +${{ matrix.rust }} test --no-default-features
+      - name: test/release (all features)
         run: cargo +${{ matrix.rust }} test --release --all-features
+      - name: test/release (no features)
+        run: cargo +${{ matrix.rust }} test --release --no-default-features
       - name: Build documentation
         run: RUSTDOCFLAGS="-D warnings" cargo +${{ matrix.rust }} doc --no-deps
