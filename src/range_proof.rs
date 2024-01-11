@@ -271,8 +271,8 @@ where
             }
         }
 
-        // Start a new transcript and get an RNG
-        let mut transcript = RangeProofTranscript::<P>::new(
+        // Start a new transcript and generate the transcript RNG
+        let (mut transcript, mut transcript_rng) = RangeProofTranscript::<P>::new(
             transcript_label,
             &statement.generators.h_base().compress(),
             statement.generators.g_bases_compressed(),
@@ -280,8 +280,9 @@ where
             extension_degree,
             aggregation_factor,
             statement,
+            Some(witness),
+            rng,
         )?;
-        let mut transcript_rng = transcript.build_rng(witness, rng);
 
         // Set bit arrays
         let mut a_li = Zeroizing::new(Vec::with_capacity(full_length));
@@ -324,9 +325,8 @@ where
             statement.generators.g_bases().iter(),
         );
 
-        // Update transcript, get challenges, and generate RNG
-        let (y, z) = transcript.challenges_y_z(&a.compress())?;
-        transcript_rng = transcript.build_rng(witness, rng);
+        // Update transcript, get challenges, and update RNG
+        let (y, z) = transcript.challenges_y_z(&mut transcript_rng, rng, &a.compress())?;
 
         let z_square = z * z;
 
@@ -464,8 +464,10 @@ where
                     .chain(hi_base_hi),
             ));
 
-            // Update transcript, get challenge, and generate RNG
+            // Update transcript, get challenge, and update RNG
             let e = transcript.challenge_round_e(
+                &mut transcript_rng,
+                rng,
                 &li.last()
                     .ok_or(ProofError::InvalidLength("Bad inner product vector length".to_string()))?
                     .compress(),
@@ -473,7 +475,6 @@ where
                     .ok_or(ProofError::InvalidLength("Bad inner product vector length".to_string()))?
                     .compress(),
             )?;
-            transcript_rng = transcript.build_rng(witness, rng);
             let e_square = e * e;
             let e_inverse = e.invert();
             let e_inverse_square = e_inverse * e_inverse;
@@ -551,8 +552,8 @@ where
             b += g_base * eta;
         }
 
-        // Update transcript and get challenge (no RNG needed)
-        let e = transcript.challenge_final_e(&a1.compress(), &b.compress())?;
+        // Update transcript, get challenge, and update RNG
+        let e = transcript.challenge_final_e(&mut transcript_rng, rng, &a1.compress(), &b.compress())?;
         let e_square = e * e;
 
         let r1 = *r + a_li[0] * e;
@@ -823,11 +824,8 @@ where
                 return Err(ProofError::InvalidLength("Vector L/R length not adequate".to_string()));
             }
 
-            // Batch weight (may not be equal to a zero valued scalar) - this may not be zero ever
-            let weight = Scalar::random_not_zero(rng);
-
             // Start the transcript
-            let mut transcript = RangeProofTranscript::new(
+            let (mut transcript, mut transcript_rng) = RangeProofTranscript::new(
                 transcript_label,
                 &h_base_compressed,
                 g_bases_compressed,
@@ -835,17 +833,22 @@ where
                 extension_degree,
                 aggregation_factor,
                 statement,
+                None,
+                rng,
             )?;
 
             // Reconstruct challenges
-            let (y, z) = transcript.challenges_y_z(&proof.a)?;
+            let (y, z) = transcript.challenges_y_z(&mut transcript_rng, rng, &proof.a)?;
             let challenges = proof
                 .li
                 .iter()
                 .zip(proof.ri.iter())
-                .map(|(l, r)| transcript.challenge_round_e(l, r))
+                .map(|(l, r)| transcript.challenge_round_e(&mut transcript_rng, rng, l, r))
                 .collect::<Result<Vec<Scalar>, ProofError>>()?;
-            let e = transcript.challenge_final_e(&proof.a1, &proof.b)?;
+            let e = transcript.challenge_final_e(&mut transcript_rng, rng, &proof.a1, &proof.b)?;
+
+            // Batch weight (may not be equal to a zero valued scalar) - this may not be zero ever
+            let weight = Scalar::random_not_zero(&mut transcript_rng);
 
             // Compute challenge inverses in a batch
             let mut challenges_inv = challenges.clone();

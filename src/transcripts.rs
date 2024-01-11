@@ -17,13 +17,32 @@ use crate::{
     traits::{Compressable, FixedBytesRepr, Precomputable},
 };
 
-/// A wrapper around a Merlin transcript
+/// A wrapper around a Merlin transcript.
+///
+/// This does the usual Fiat-Shamir operations: initialize a transcript, add proof messages, and get challenges.
+///
+/// But it does more!
+/// Following the design from [Merlin](https://merlin.cool/transcript/rng.html), it provides a random number generator.
+/// It does this using the latest transcript state, (optional) secret data, and an external random number generator.
+/// This helps to guard against failure of the external random number generator.
+///
+/// When the prover initializes the wrapper, it includes the witness as the secret data.
+/// The verifier doesn't have any secret data to include, so it passes `None` instead.
+/// In either case, you get a `RangeProofTranscript` and a `TranscriptRng`.
+///
+/// When the transcript is updated using the challenge functions, you must provide the `TranscriptRng`, which is also
+/// updated.
+///
+/// When randomness is needed, just use the `TranscriptRng`.
+/// The prover uses this whenever it needs a random nonce.
+/// The batch verifier uses this to generate weights.
 pub(crate) struct RangeProofTranscript<P>
 where
     P: Compressable + Precomputable,
     P::Compressed: FixedBytesRepr + IsIdentity,
 {
     transcript: Transcript,
+    bytes: Option<Zeroizing<Vec<u8>>>,
     _phantom: PhantomData<P>,
 }
 
@@ -32,8 +51,11 @@ where
     P: Compressable + Precomputable,
     P::Compressed: FixedBytesRepr + IsIdentity,
 {
-    // Initialize a transcript
-    pub(crate) fn new(
+    /// Initialize a transcript.
+    ///
+    /// The prover should include its `witness` here; the verifier should pass `None`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new<R: CryptoRngCore>(
         label: &'static str,
         h_base_compressed: &P::Compressed,
         g_base_compressed: &[P::Compressed],
@@ -41,7 +63,9 @@ where
         extension_degree: usize,
         aggregation_factor: usize,
         statement: &RangeStatement<P>,
-    ) -> Result<Self, ProofError> {
+        witness: Option<&RangeWitness>,
+        external_rng: &mut R,
+    ) -> Result<(Self, TranscriptRng), ProofError> {
         // Initialize the transcript with parameters and statement
         let mut transcript = Transcript::new(label.as_bytes());
         transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
@@ -63,54 +87,113 @@ where
             }
         }
 
-        Ok(Self {
-            transcript,
-            _phantom: PhantomData,
-        })
+        // Serialize the witness if provided
+        let bytes = if let Some(witness) = witness {
+            let size: usize = witness
+                .openings
+                .iter()
+                .map(|o| size_of::<u64>() + o.r.len() * size_of::<Scalar>())
+                .sum();
+            let mut witness_bytes = Zeroizing::new(Vec::<u8>::with_capacity(size));
+            for opening in &witness.openings {
+                witness_bytes.extend(opening.v.to_le_bytes());
+                for r in &opening.r {
+                    witness_bytes.extend(r.as_bytes());
+                }
+            }
+
+            Some(witness_bytes)
+        } else {
+            None
+        };
+
+        // Set up the RNG
+        let transcript_rng = Self::build_rng(&transcript, bytes.as_ref(), external_rng);
+
+        Ok((
+            Self {
+                transcript,
+                bytes,
+                _phantom: PhantomData,
+            },
+            transcript_rng,
+        ))
     }
 
-    // Construct the `y` and `z` challenges
-    pub(crate) fn challenges_y_z(&mut self, a: &P::Compressed) -> Result<(Scalar, Scalar), ProofError> {
+    // Construct the `y` and `z` challenges and update the RNG
+    pub(crate) fn challenges_y_z<R: CryptoRngCore>(
+        &mut self,
+        transcript_rng: &mut TranscriptRng,
+        external_rng: &mut R,
+        a: &P::Compressed,
+    ) -> Result<(Scalar, Scalar), ProofError> {
+        // Update the transcript
         self.transcript.validate_and_append_point(b"A", a)?;
+
+        // Update the RNG
+        *transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), external_rng);
+
+        // Return the challenges
         Ok((
             self.transcript.challenge_scalar(b"y")?,
             self.transcript.challenge_scalar(b"z")?,
         ))
     }
 
-    /// Construct an inner-product round `e` challenge
-    pub(crate) fn challenge_round_e(&mut self, l: &P::Compressed, r: &P::Compressed) -> Result<Scalar, ProofError> {
+    /// Construct an inner-product round `e` challenge and update the RNG
+    pub(crate) fn challenge_round_e<R: CryptoRngCore>(
+        &mut self,
+        transcript_rng: &mut TranscriptRng,
+        external_rng: &mut R,
+        l: &P::Compressed,
+        r: &P::Compressed,
+    ) -> Result<Scalar, ProofError> {
+        // Update the transcript
         self.transcript.validate_and_append_point(b"L", l)?;
         self.transcript.validate_and_append_point(b"R", r)?;
+
+        // Update the RNG
+        *transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), external_rng);
+
+        // Return the challenge
         self.transcript.challenge_scalar(b"e")
     }
 
-    /// Construct the final `e` challenge
-    pub(crate) fn challenge_final_e(&mut self, a1: &P::Compressed, b: &P::Compressed) -> Result<Scalar, ProofError> {
+    /// Construct the final `e` challenge and update the RNG
+    pub(crate) fn challenge_final_e<R: CryptoRngCore>(
+        &mut self,
+        transcript_rng: &mut TranscriptRng,
+        external_rng: &mut R,
+        a1: &P::Compressed,
+        b: &P::Compressed,
+    ) -> Result<Scalar, ProofError> {
+        // Update the transcript
         self.transcript.validate_and_append_point(b"A1", a1)?;
         self.transcript.validate_and_append_point(b"B", b)?;
+
+        // Update the RNG
+        *transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), external_rng);
+
+        // Return the challenge
         self.transcript.challenge_scalar(b"e")
     }
 
     /// Construct a random number generator from the current transcript state
-    pub(crate) fn build_rng<R: CryptoRngCore>(&self, witness: &RangeWitness, rng: &mut R) -> TranscriptRng {
-        // Produce a (non-canonical) byte representation of the witness
-        let size: usize = witness
-            .openings
-            .iter()
-            .map(|o| size_of::<u64>() + o.r.len() * size_of::<Scalar>())
-            .sum();
-        let mut witness_bytes = Zeroizing::new(Vec::<u8>::with_capacity(size));
-        for opening in &witness.openings {
-            witness_bytes.extend(opening.v.to_le_bytes());
-            for r in &opening.r {
-                witness_bytes.extend(r.as_bytes());
-            }
+    ///
+    /// Internally, this builds the RNG using a clone of the transcript state, the secret bytes (if provided), and the
+    /// external RNG.
+    fn build_rng<R: CryptoRngCore>(
+        transcript: &Transcript,
+        bytes: Option<&Zeroizing<Vec<u8>>>,
+        external_rng: &mut R,
+    ) -> TranscriptRng {
+        if let Some(bytes) = bytes {
+            transcript
+                .build_rng()
+                .rekey_with_witness_bytes("witness".as_bytes(), bytes)
+                .finalize(external_rng)
+        } else {
+            transcript.build_rng().finalize(external_rng)
         }
-
-        self.transcript
-            .build_rng()
-            .rekey_with_witness_bytes("witness".as_bytes(), &witness_bytes)
-            .finalize(rng)
     }
 }
