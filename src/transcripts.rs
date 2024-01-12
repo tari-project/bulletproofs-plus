@@ -43,6 +43,7 @@ where
 {
     transcript: Transcript,
     bytes: Option<Zeroizing<Vec<u8>>>,
+    rng: TranscriptRng,
     _phantom: PhantomData<P>,
 }
 
@@ -65,7 +66,7 @@ where
         statement: &RangeStatement<P>,
         witness: Option<&RangeWitness>,
         external_rng: &mut R,
-    ) -> Result<(Self, TranscriptRng), ProofError> {
+    ) -> Result<Self, ProofError> {
         // Initialize the transcript with parameters and statement
         let mut transcript = Transcript::new(label.as_bytes());
         transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
@@ -108,22 +109,19 @@ where
         };
 
         // Set up the RNG
-        let transcript_rng = Self::build_rng(&transcript, bytes.as_ref(), external_rng);
+        let rng = Self::build_rng(&transcript, bytes.as_ref(), external_rng);
 
-        Ok((
-            Self {
-                transcript,
-                bytes,
-                _phantom: PhantomData,
-            },
-            transcript_rng,
-        ))
+        Ok(Self {
+            transcript,
+            bytes,
+            rng,
+            _phantom: PhantomData,
+        })
     }
 
     // Construct the `y` and `z` challenges and update the RNG
     pub(crate) fn challenges_y_z<R: CryptoRngCore>(
         &mut self,
-        transcript_rng: &mut TranscriptRng,
         external_rng: &mut R,
         a: &P::Compressed,
     ) -> Result<(Scalar, Scalar), ProofError> {
@@ -131,7 +129,7 @@ where
         self.transcript.validate_and_append_point(b"A", a)?;
 
         // Update the RNG
-        *transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), external_rng);
+        self.rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), external_rng);
 
         // Return the challenges
         Ok((
@@ -143,7 +141,6 @@ where
     /// Construct an inner-product round `e` challenge and update the RNG
     pub(crate) fn challenge_round_e<R: CryptoRngCore>(
         &mut self,
-        transcript_rng: &mut TranscriptRng,
         external_rng: &mut R,
         l: &P::Compressed,
         r: &P::Compressed,
@@ -153,7 +150,7 @@ where
         self.transcript.validate_and_append_point(b"R", r)?;
 
         // Update the RNG
-        *transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), external_rng);
+        self.rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), external_rng);
 
         // Return the challenge
         self.transcript.challenge_scalar(b"e")
@@ -162,7 +159,6 @@ where
     /// Construct the final `e` challenge and update the RNG
     pub(crate) fn challenge_final_e<R: CryptoRngCore>(
         &mut self,
-        transcript_rng: &mut TranscriptRng,
         external_rng: &mut R,
         a1: &P::Compressed,
         b: &P::Compressed,
@@ -172,7 +168,7 @@ where
         self.transcript.validate_and_append_point(b"B", b)?;
 
         // Update the RNG
-        *transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), external_rng);
+        self.rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), external_rng);
 
         // Return the challenge
         self.transcript.challenge_scalar(b"e")
@@ -195,5 +191,11 @@ where
         } else {
             transcript.build_rng().finalize(external_rng)
         }
+    }
+
+    /// Get a mutable reference to the transcript RNG.
+    /// This is suitable for passing into functions that use it to generate random data.
+    pub(crate) fn as_mut_rng(&mut self) -> &mut TranscriptRng {
+        &mut self.rng
     }
 }
