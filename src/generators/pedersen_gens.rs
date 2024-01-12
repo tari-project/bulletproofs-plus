@@ -4,7 +4,8 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
-use std::{borrow::Borrow, convert::TryFrom, iter::once};
+use alloc::{string::ToString, vec::Vec};
+use core::{borrow::Borrow, convert::TryFrom, iter::once};
 
 use curve25519_dalek::{scalar::Scalar, traits::MultiscalarMul};
 use zeroize::Zeroize;
@@ -124,7 +125,7 @@ where P: Compressable + MultiscalarMul<Point = P> + Clone
 
 #[cfg(test)]
 mod test {
-    use std::convert::TryFrom;
+    use core::convert::TryFrom;
 
     use super::ExtensionDegree;
 

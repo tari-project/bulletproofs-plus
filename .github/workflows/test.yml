@@ -3,6 +3,20 @@ on: [push, pull_request]
 name: Test
 
 jobs:
+  wasm:
+    name: cargo build (WASM)
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly 
+          targets: wasm32-unknown-unknown
+      - name: build (WASM)
+        run: cargo +nightly build --target wasm32-unknown-unknown --no-default-features -Zavoid-dev-deps
+
   test:
     name: cargo test
     runs-on: ubuntu-latest
@@ -18,13 +32,18 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
+          targets: wasm32-unknown-unknown
       - name: check (no features)
         run: cargo +${{ matrix.rust }} check --no-default-features
       - name: check (all features)
         run: cargo +${{ matrix.rust }} check --all-features --all-targets
-      - name: test/debug
+      - name: test/debug (all features)
         run: cargo +${{ matrix.rust }} test --all-features
-      - name: test/release
+      - name: test/debug (no features)
+        run: cargo +${{ matrix.rust }} test --no-default-features
+      - name: test/release (all features)
         run: cargo +${{ matrix.rust }} test --release --all-features
+      - name: test/release (no features)
+        run: cargo +${{ matrix.rust }} test --release --no-default-features
       - name: Build documentation
         run: RUSTDOCFLAGS="-D warnings" cargo +${{ matrix.rust }} doc --no-deps

@@ -6,14 +6,8 @@
 
 //! Bulletproofs+ utilities
 
-use core::{
-    option::{Option, Option::Some},
-    result::{
-        Result,
-        Result::{Err, Ok},
-    },
-};
-use std::convert::TryFrom;
+use alloc::{string::ToString, vec::Vec};
+use core::convert::TryFrom;
 
 use blake2::Blake2bMac512;
 use curve25519_dalek::scalar::Scalar;
@@ -76,8 +70,11 @@ pub fn split_at_checked<T>(vec: &[T], n: usize) -> Result<(&[T], &[T]), ProofErr
 
 #[cfg(test)]
 mod tests {
+    use alloc::{vec, vec::Vec};
+
     use curve25519_dalek::scalar::Scalar;
-    use rand::{distributions::Alphanumeric, thread_rng, Rng};
+    use rand_chacha::ChaCha12Rng;
+    use rand_core::SeedableRng;
 
     use crate::{
         protocols::scalar_protocol::ScalarProtocol,
@@ -89,7 +86,7 @@ mod tests {
         // Check valid splits
         let v = vec![0u8, 1u8, 2u8];
         let (l, r) = split_at_checked(&v, 0).unwrap();
-        assert_eq!(l, vec![]);
+        assert_eq!(l, Vec::<u8>::new());
         assert_eq!(r, vec![0u8, 1u8, 2u8]);
 
         let (l, r) = split_at_checked(&v, 1).unwrap();
@@ -102,7 +99,7 @@ mod tests {
 
         let (l, r) = split_at_checked(&v, 3).unwrap();
         assert_eq!(l, vec![0u8, 1u8, 2u8]);
-        assert_eq!(r, vec![]);
+        assert_eq!(r, Vec::<u8>::new());
 
         // Check invalid split
         assert!(split_at_checked(&v, 4).is_err());
@@ -116,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_nonce() {
-        let mut rng = thread_rng();
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
         let seed_nonce = Scalar::random_not_zero(&mut rng);
 
         // Create personalized nonces
@@ -181,7 +178,7 @@ mod tests {
 
         // Verify no unhandled exceptions occur with varying label parameter lengths
         for i in 0..32 {
-            let label: String = (&mut rng).sample_iter(Alphanumeric).take(i).map(char::from).collect();
+            let label = "a".repeat(i);
             match nonce(
                 &Scalar::random(&mut rng),
                 label.as_str(),

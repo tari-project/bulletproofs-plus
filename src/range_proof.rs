@@ -5,8 +5,10 @@
 
 #![allow(clippy::too_many_lines)]
 
-use std::{
+use alloc::{string::ToString, vec, vec::Vec};
+use core::{
     convert::{TryFrom, TryInto},
+    iter::once,
     marker::PhantomData,
     ops::{Add, Mul, Shr},
     slice::ChunksExact,
@@ -19,7 +21,7 @@ use curve25519_dalek::{
 use itertools::{izip, Itertools};
 use merlin::Transcript;
 #[cfg(feature = "rand")]
-use rand::thread_rng;
+use rand::rngs::OsRng;
 use rand_core::CryptoRngCore;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use zeroize::Zeroizing;
@@ -86,8 +88,11 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 /// ```
 /// use curve25519_dalek::scalar::Scalar;
 /// use merlin::Transcript;
-/// use rand::Rng;
+/// #[cfg(feature = "rand")]
+/// use rand::rngs::OsRng;
 /// # fn main() {
+/// #[cfg(feature = "rand")]
+/// # {
 /// use tari_bulletproofs_plus::{
 ///     commitment_opening::CommitmentOpening,
 ///     errors::ProofError,
@@ -101,7 +106,7 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 ///     ristretto,
 ///     ristretto::RistrettoRangeProof,
 /// };
-/// let mut rng = rand::thread_rng();
+/// let mut rng = OsRng;
 /// let transcript_label: &'static str = "BatchedRangeProofTest";
 /// let bit_length = 64; // Other powers of two are permissible up to 2^6 = 64
 ///
@@ -195,6 +200,7 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
 /// # }
+/// # }
 /// ```
 
 impl<P> RangeProof<P>
@@ -217,7 +223,7 @@ where
         statement: &RangeStatement<P>,
         witness: &RangeWitness,
     ) -> Result<Self, ProofError> {
-        Self::prove_with_rng(transcript_label, statement, witness, &mut thread_rng())
+        Self::prove_with_rng(transcript_label, statement, witness, &mut OsRng)
     }
 
     /// Create a single or aggregated range proof for a single party that knows all the secrets
@@ -440,24 +446,18 @@ where
 
             // Compute L and R by multi-scalar multiplication
             li.push(P::vartime_multiscalar_mul(
-                std::iter::once::<&Scalar>(&c_l)
+                once::<&Scalar>(&c_l)
                     .chain(d_l.iter())
                     .chain(a_lo_offset.iter())
                     .chain(b_hi.iter()),
-                std::iter::once(h_base)
-                    .chain(g_base.iter())
-                    .chain(gi_base_hi)
-                    .chain(hi_base_lo),
+                once(h_base).chain(g_base.iter()).chain(gi_base_hi).chain(hi_base_lo),
             ));
             ri.push(P::vartime_multiscalar_mul(
-                std::iter::once::<&Scalar>(&c_r)
+                once::<&Scalar>(&c_r)
                     .chain(d_r.iter())
                     .chain(a_hi_offset.iter())
                     .chain(b_lo.iter()),
-                std::iter::once(h_base)
-                    .chain(g_base.iter())
-                    .chain(gi_base_lo)
-                    .chain(hi_base_hi),
+                once(h_base).chain(g_base.iter()).chain(gi_base_lo).chain(hi_base_hi),
             ));
 
             // Get the round challenge and associated values
@@ -671,7 +671,7 @@ where
         proofs: &[RangeProof<P>],
         action: VerifyAction,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
-        Self::verify_batch_with_rng(transcript_labels, statements, proofs, action, &mut thread_rng())
+        Self::verify_batch_with_rng(transcript_labels, statements, proofs, action, &mut OsRng)
     }
 
     /// Wrapper function for batch verification in different modes: mask recovery, verification, or both
@@ -1242,10 +1242,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
+    use core::convert::TryFrom;
 
     use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
     use quickcheck::QuickCheck;
+    use rand_chacha::ChaCha12Rng;
+    use rand_core::SeedableRng;
 
     use super::*;
     use crate::{
@@ -1258,7 +1260,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::needless_pass_by_value)]
-    fn test_deserialization() {
+    fn test_deserialization_fuzzing() {
         fn internal(bytes: Vec<u8>) -> bool {
             // Deserialization should either fail or serialize canonically
             match RistrettoRangeProof::from_bytes(&bytes) {
@@ -1267,8 +1269,10 @@ mod tests {
             }
         }
 
+        // Number of fuzzing tests to run
         const TESTS: u64 = 100_000;
 
+        // Run fuzzing tests
         QuickCheck::new()
             .min_tests_passed(TESTS)
             .tests(TESTS)
@@ -1377,6 +1381,8 @@ mod tests {
 
     #[test]
     fn test_consistency_errors() {
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
         // Generate two proofs
         let params = RangeParameters::init(
             4,
@@ -1398,7 +1404,10 @@ mod tests {
                 )
                 .unwrap(),
             );
-            proofs.push(RangeProof::prove("test", statements.last().unwrap(), witnesses.last().unwrap()).unwrap());
+            proofs.push(
+                RangeProof::prove_with_rng("test", statements.last().unwrap(), witnesses.last().unwrap(), &mut rng)
+                    .unwrap(),
+            );
         }
 
         // Empty vectors
@@ -1552,6 +1561,8 @@ mod tests {
 
     #[test]
     fn test_getters() {
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
         // Generate a valid proof
         let params = RangeParameters::init(
             4,
@@ -1567,7 +1578,7 @@ mod tests {
             None,
         )
         .unwrap();
-        let mut proof = RangeProof::prove("test", &statement, &witness).unwrap();
+        let mut proof = RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).unwrap();
 
         // Mutate proof elements
         let mut bytes = [0u8; 32];
@@ -1598,6 +1609,8 @@ mod tests {
 
     #[test]
     fn test_prover_consistency_errors() {
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
         // Create range parameters to use for all tests
         let params = RangeParameters::init(
             4,
@@ -1622,7 +1635,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::prove("test", &statement, &witness).is_err());
+        assert!(RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).is_err());
 
         // Witness and statement extension degrees do not match
         let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE, Scalar::ONE])]).unwrap();
@@ -1636,7 +1649,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::prove("test", &statement, &witness).is_err());
+        assert!(RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).is_err());
 
         // Witness value overflows bit length
         let witness = RangeWitness::init(vec![CommitmentOpening::new(16u64, vec![Scalar::ONE])]).unwrap();
@@ -1650,7 +1663,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::prove("test", &statement, &witness).is_err());
+        assert!(RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).is_err());
 
         // Witness opening is invalid for statement commitment
         let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
@@ -1664,7 +1677,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::prove("test", &statement, &witness).is_err());
+        assert!(RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).is_err());
 
         // Witness value does not meet minimum value promise
         let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
@@ -1678,11 +1691,13 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::prove("test", &statement, &witness).is_err());
+        assert!(RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).is_err());
     }
 
     #[test]
     fn test_verify_errors() {
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
         // Generate a valid proof
         let params = RangeParameters::init(
             4,
@@ -1698,28 +1713,47 @@ mod tests {
             None,
         )
         .unwrap();
-        let mut proof = RangeProof::prove("test", &statement, &witness).unwrap();
+        let mut proof = RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).unwrap();
 
         // Empty statement and proof vectors
-        assert!(RangeProof::verify_batch(&[], &[], &[proof.clone()], VerifyAction::VerifyOnly).is_err());
-        assert!(RangeProof::verify_batch(&["test"], &[statement.clone()], &[], VerifyAction::VerifyOnly).is_err());
+        assert!(
+            RangeProof::verify_batch_with_rng(&[], &[], &[proof.clone()], VerifyAction::VerifyOnly, &mut rng).is_err()
+        );
+        assert!(RangeProof::verify_batch_with_rng(
+            &["test"],
+            &[statement.clone()],
+            &[],
+            VerifyAction::VerifyOnly,
+            &mut rng
+        )
+        .is_err());
 
         // Proof vector mismatches
         proof.li.pop();
-        assert!(RangeProof::verify_batch(
+        assert!(RangeProof::verify_batch_with_rng(
             &["test"],
             &[statement.clone()],
             &[proof.clone()],
-            VerifyAction::VerifyOnly
+            VerifyAction::VerifyOnly,
+            &mut rng,
         )
         .is_err());
 
         proof.ri.pop();
-        assert!(RangeProof::verify_batch(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly).is_err());
+        assert!(RangeProof::verify_batch_with_rng(
+            &["test"],
+            &[statement],
+            &[proof],
+            VerifyAction::VerifyOnly,
+            &mut rng
+        )
+        .is_err());
     }
 
     #[test]
     fn test_aggregation_lower_than_generators() {
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
         // Create range parameters
         let params = RangeParameters::init(
             4,
@@ -1740,10 +1774,11 @@ mod tests {
             None,
         )
         .unwrap();
-        let proof = RangeProof::prove("test", &statement, &witness).unwrap();
+        let proof = RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).unwrap();
 
         // The proof should verify
-        RangeProof::verify_batch(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly).unwrap();
+        RangeProof::verify_batch_with_rng(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly, &mut rng)
+            .unwrap();
     }
 
     #[test]

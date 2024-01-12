@@ -4,10 +4,10 @@
 //     Copyright (c) 2018 Chain, Inc.
 //     SPDX-License-Identifier: MIT
 
-use std::{
+use alloc::{sync::Arc, vec::Vec};
+use core::{
     convert::TryFrom,
     fmt::{Debug, Formatter},
-    sync::Arc,
 };
 
 use byteorder::{ByteOrder, LittleEndian};
@@ -139,7 +139,7 @@ where
     P: Compressable + Debug + Precomputable,
     P::Compressed: Debug,
 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("RangeParameters")
             .field("gens_capacity", &self.gens_capacity)
             .field("party_capacity", &self.party_capacity)

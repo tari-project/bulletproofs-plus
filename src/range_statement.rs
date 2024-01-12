@@ -4,6 +4,8 @@
 //! Bulletproofs+ generators, vector of commitments, vector of optional minimum promised
 //! values and a vector of optional seed nonces for mask recovery
 
+use alloc::{string::ToString, vec::Vec};
+
 use curve25519_dalek::scalar::Scalar;
 use zeroize::Zeroize;
 
@@ -80,6 +82,8 @@ impl<P: Compressable + Precomputable> Drop for RangeStatement<P> {
 
 #[cfg(test)]
 mod test {
+    use alloc::vec;
+
     use curve25519_dalek::RistrettoPoint;
 
     use super::*;

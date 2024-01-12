@@ -3,6 +3,8 @@
 
 //! Bulletproofs+
 
+extern crate alloc;
+
 /// Bulletproofs+ commitment opening
 pub mod commitment_opening;
 /// Bulletproofs+ error definitions

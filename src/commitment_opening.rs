@@ -3,6 +3,8 @@
 
 //! Bulletproofs+ commitment opening struct
 
+use alloc::{string::ToString, vec::Vec};
+
 use curve25519_dalek::scalar::Scalar;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

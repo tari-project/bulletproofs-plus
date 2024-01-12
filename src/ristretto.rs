@@ -5,6 +5,8 @@
 //!
 //! Implementation of BulletProofs for the Ristretto group for Curve25519.
 
+use alloc::{borrow::ToOwned, string::ToString, vec::Vec};
+
 use curve25519_dalek::{
     constants::{RISTRETTO_BASEPOINT_COMPRESSED, RISTRETTO_BASEPOINT_POINT},
     ristretto::{CompressedRistretto, RistrettoPoint, VartimeRistrettoPrecomputation},
@@ -110,7 +112,8 @@ fn ristretto_compressed_masking_basepoints() -> &'static [CompressedRistretto; E
 #[cfg(test)]
 mod tests {
     use curve25519_dalek::scalar::Scalar;
-    use rand::thread_rng;
+    use rand_chacha::ChaCha12Rng;
+    use rand_core::SeedableRng;
 
     use super::*;
     use crate::protocols::scalar_protocol::ScalarProtocol;
@@ -145,7 +148,7 @@ mod tests {
 
     #[test]
     fn test_commitments() {
-        let mut rng = thread_rng();
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
         let value = Scalar::random_not_zero(&mut rng);
         let blindings = [
             Scalar::random_not_zero(&mut rng),
