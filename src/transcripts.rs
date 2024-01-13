@@ -44,7 +44,7 @@ where
 {
     transcript: Transcript,
     bytes: Option<Zeroizing<Vec<u8>>>,
-    rng: TranscriptRng,
+    transcript_rng: TranscriptRng,
     external_rng: &'a mut R,
     _phantom: PhantomData<P>,
 }
@@ -117,7 +117,7 @@ where
         Ok(Self {
             transcript,
             bytes,
-            rng,
+            transcript_rng: rng,
             external_rng,
             _phantom: PhantomData,
         })
@@ -129,7 +129,7 @@ where
         self.transcript.validate_and_append_point(b"A", a)?;
 
         // Update the RNG
-        self.rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
+        self.transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
 
         // Return the challenges
         Ok((
@@ -145,7 +145,7 @@ where
         self.transcript.validate_and_append_point(b"R", r)?;
 
         // Update the RNG
-        self.rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
+        self.transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
 
         // Return the challenge
         self.transcript.challenge_scalar(b"e")
@@ -158,7 +158,7 @@ where
         self.transcript.validate_and_append_point(b"B", b)?;
 
         // Update the RNG
-        self.rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
+        self.transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
 
         // Return the challenge
         self.transcript.challenge_scalar(b"e")
@@ -182,6 +182,6 @@ where
     /// Get a mutable reference to the transcript RNG.
     /// This is suitable for passing into functions that use it to generate random data.
     pub(crate) fn as_mut_rng(&mut self) -> &mut TranscriptRng {
-        &mut self.rng
+        &mut self.transcript_rng
     }
 }
