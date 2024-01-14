@@ -28,12 +28,9 @@ use crate::{
 ///
 /// When the prover initializes the wrapper, it includes the witness as the secret data.
 /// The verifier doesn't have any secret data to include, so it passes `None` instead.
-/// In either case, you get a `RangeProofTranscript` and a `TranscriptRng`.
+/// In either case, you get a `RangeProofTranscript` that is updated when you use the challenge functions.
 ///
-/// When the transcript is updated using the challenge functions, you must provide the `TranscriptRng`, which is also
-/// updated.
-///
-/// When randomness is needed, just use the `TranscriptRng`.
+/// When you need randomness, use `as_mut_rng()` to get an `&mut TranscriptRng` for this purpose.
 /// The prover uses this whenever it needs a random nonce.
 /// The batch verifier uses this to generate weights.
 pub(crate) struct RangeProofTranscript<'a, P, R>
