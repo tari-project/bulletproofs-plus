@@ -12,10 +12,10 @@ jobs:
       - name: toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly 
+          toolchain: nightly-2024-02-01
           targets: wasm32-unknown-unknown
       - name: build (WASM)
-        run: cargo +nightly build --target wasm32-unknown-unknown --no-default-features -Zavoid-dev-deps
+        run: cargo +nightly-2024-02-01 build --target wasm32-unknown-unknown --no-default-features -Zavoid-dev-deps
 
   test:
     name: cargo test
@@ -24,7 +24,7 @@ jobs:
       matrix:
         rust:
           - stable
-          - nightly
+          - nightly-2024-02-01
     steps:
       - name: checkout
         uses: actions/checkout@v4
