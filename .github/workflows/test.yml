@@ -12,38 +12,32 @@ jobs:
       - name: toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2024-02-01
+          toolchain: stable
           targets: wasm32-unknown-unknown
       - name: build (WASM)
-        run: cargo +nightly-2024-02-01 build --target wasm32-unknown-unknown --no-default-features -Zavoid-dev-deps
+        run: cargo +stable build --target=wasm32-unknown-unknown --no-default-features
 
   test:
     name: cargo test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust:
-          - stable
-          - nightly-2024-02-01
     steps:
       - name: checkout
         uses: actions/checkout@v4
       - name: toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.rust }}
-          targets: wasm32-unknown-unknown
+          toolchain: stable
       - name: check (no features)
-        run: cargo +${{ matrix.rust }} check --no-default-features
+        run: cargo +stable check --no-default-features
       - name: check (all features)
-        run: cargo +${{ matrix.rust }} check --all-features --all-targets
+        run: cargo +stable check --all-features --all-targets
       - name: test/debug (all features)
-        run: cargo +${{ matrix.rust }} test --all-features
+        run: cargo +stable test --all-features
       - name: test/debug (no features)
-        run: cargo +${{ matrix.rust }} test --no-default-features
+        run: cargo +stable test --no-default-features
       - name: test/release (all features)
-        run: cargo +${{ matrix.rust }} test --release --all-features
+        run: cargo +stable test --release --all-features
       - name: test/release (no features)
-        run: cargo +${{ matrix.rust }} test --release --no-default-features
+        run: cargo +stable test --release --no-default-features
       - name: Build documentation
-        run: RUSTDOCFLAGS="-D warnings" cargo +${{ matrix.rust }} doc --no-deps
+        run: RUSTDOCFLAGS="-D warnings" cargo +stable doc --no-deps
