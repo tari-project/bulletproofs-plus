@@ -15,8 +15,8 @@ use crate::{errors::ProofError, traits::FixedBytesRepr};
 
 /// Defines a `TranscriptProtocol` trait for using a Merlin transcript.
 pub trait TranscriptProtocol {
-    /// Append a domain separator for the range proof with the given `label` and `message`.
-    fn domain_separator(&mut self, label: &'static [u8], message: &[u8]);
+    /// Append a domain separator for the range proof.
+    fn append_domain_separator(&mut self);
 
     /// Append a `point` with the given `label`.
     fn append_point<P: FixedBytesRepr>(&mut self, label: &'static [u8], point: &P);
@@ -37,8 +37,8 @@ pub trait TranscriptProtocol {
 }
 
 impl TranscriptProtocol for Transcript {
-    fn domain_separator(&mut self, label: &'static [u8], message: &[u8]) {
-        self.append_message(label, message);
+    fn append_domain_separator(&mut self) {
+        self.append_message(b"dom-sep", b"Bulletproofs+ Range Proof");
     }
 
     fn append_point<P: FixedBytesRepr>(&mut self, label: &'static [u8], point: &P) {

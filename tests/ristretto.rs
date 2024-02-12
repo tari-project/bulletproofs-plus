@@ -4,6 +4,7 @@
 #![allow(clippy::too_many_lines)]
 
 use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
 use rand_chacha::ChaCha12Rng;
 use rand_core::{CryptoRngCore, SeedableRng};
 use tari_bulletproofs_plus::{
@@ -163,7 +164,7 @@ fn prove_and_verify(
         let mut statements_private = vec![];
         let mut statements_public = vec![];
         let mut proofs = vec![];
-        let mut transcript_labels = vec![];
+        let mut transcripts = vec![];
 
         #[allow(clippy::cast_possible_truncation)]
         let value_max = (1u128 << (bit_length - 1)) as u64;
@@ -220,9 +221,11 @@ fn prove_and_verify(
             .unwrap();
             let public_statement =
                 RangeStatement::init(generators.clone(), commitments, minimum_values.clone(), None).unwrap();
+            let transcript = Transcript::new(transcript_label.as_bytes());
 
             // 4. Create the proofs
-            let proof = RangeProof::prove_with_rng(transcript_label, &private_statement.clone(), &witness, &mut rng);
+            let proof =
+                RangeProof::prove_with_rng(&mut transcript.clone(), &private_statement.clone(), &witness, &mut rng);
             match promise_strategy {
                 ProofOfMinimumValueStrategy::LargerThanValue => match proof {
                     Ok(_) => {
@@ -239,7 +242,7 @@ fn prove_and_verify(
                     statements_private.push(private_statement);
                     statements_public.push(public_statement);
                     proofs.push(proof.unwrap());
-                    transcript_labels.push(transcript_label);
+                    transcripts.push(transcript);
                 },
             };
         }
@@ -248,7 +251,7 @@ fn prove_and_verify(
             // 5. Verify the entire batch as the commitment owner, i.e. the prover self
             // --- Only recover the masks
             let recovered_private_masks = RangeProof::verify_batch(
-                &transcript_labels,
+                &mut transcripts.clone(),
                 &statements_private.clone(),
                 &proofs.clone(),
                 VerifyAction::RecoverOnly,
@@ -257,7 +260,7 @@ fn prove_and_verify(
             assert_eq!(private_masks, recovered_private_masks);
             // --- Recover the masks and verify the proofs
             let recovered_private_masks = RangeProof::verify_batch(
-                &transcript_labels,
+                &mut transcripts.clone(),
                 &statements_private.clone(),
                 &proofs.clone(),
                 VerifyAction::RecoverAndVerify,
@@ -266,7 +269,7 @@ fn prove_and_verify(
             assert_eq!(private_masks, recovered_private_masks);
             // --- Verify the proofs but do not recover the masks
             let recovered_private_masks = RangeProof::verify_batch(
-                &transcript_labels,
+                &mut transcripts.clone(),
                 &statements_private.clone(),
                 &proofs.clone(),
                 VerifyAction::VerifyOnly,
@@ -276,7 +279,7 @@ fn prove_and_verify(
 
             // 6. Verify the entire batch as public entity
             let recovered_public_masks = RangeProof::verify_batch(
-                &transcript_labels,
+                &mut transcripts.clone(),
                 &statements_public,
                 &proofs,
                 VerifyAction::VerifyOnly,
@@ -304,7 +307,7 @@ fn prove_and_verify(
                     });
                 }
                 let recovered_private_masks_changed = RistrettoRangeProof::verify_batch(
-                    &transcript_labels,
+                    &mut transcripts.clone(),
                     &statements_private_changed,
                     &proofs.clone(),
                     VerifyAction::RecoverAndVerify,
@@ -335,7 +338,7 @@ fn prove_and_verify(
                 });
             }
             match RangeProof::verify_batch(
-                &transcript_labels,
+                &mut transcripts,
                 &statements_public_changed,
                 &proofs,
                 VerifyAction::VerifyOnly,

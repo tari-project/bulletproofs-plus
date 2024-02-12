@@ -17,9 +17,9 @@ use crate::{
     traits::{Compressable, FixedBytesRepr, Precomputable},
 };
 
-/// A wrapper around a Merlin transcript.
+/// A wrapper that handles a Merlin transcript.
 ///
-/// This does the usual Fiat-Shamir operations: initialize a transcript, add proof messages, and get challenges.
+/// This does the usual Fiat-Shamir operations: apply domain separation, add proof messages, and get challenges.
 ///
 /// But it does more!
 /// Following the design from [Merlin](https://merlin.cool/transcript/rng.html), it provides a random number generator.
@@ -39,7 +39,7 @@ where
     P::Compressed: FixedBytesRepr + IsIdentity,
     R: CryptoRngCore,
 {
-    transcript: Transcript,
+    transcript: &'a mut Transcript,
     bytes: Option<Zeroizing<Vec<u8>>>,
     transcript_rng: TranscriptRng,
     external_rng: &'a mut R,
@@ -57,7 +57,7 @@ where
     /// The prover should include its `witness` here; the verifier should pass `None`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        label: &'static str,
+        transcript: &'a mut Transcript,
         h_base_compressed: &P::Compressed,
         g_base_compressed: &[P::Compressed],
         bit_length: usize,
@@ -68,8 +68,7 @@ where
         external_rng: &'a mut R,
     ) -> Result<Self, ProofError> {
         // Initialize the transcript with parameters and statement
-        let mut transcript = Transcript::new(label.as_bytes());
-        transcript.domain_separator(b"Bulletproofs+", b"Range Proof");
+        transcript.append_domain_separator();
         transcript.validate_and_append_point(b"H", h_base_compressed)?;
         for item in g_base_compressed {
             transcript.validate_and_append_point(b"G", item)?;
@@ -109,7 +108,7 @@ where
         };
 
         // Set up the RNG
-        let rng = Self::build_rng(&transcript, bytes.as_ref(), external_rng);
+        let rng = Self::build_rng(transcript, bytes.as_ref(), external_rng);
 
         Ok(Self {
             transcript,
@@ -126,7 +125,7 @@ where
         self.transcript.validate_and_append_point(b"A", a)?;
 
         // Update the RNG
-        self.transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
+        self.transcript_rng = Self::build_rng(self.transcript, self.bytes.as_ref(), self.external_rng);
 
         // Return the challenges
         Ok((
@@ -142,7 +141,7 @@ where
         self.transcript.validate_and_append_point(b"R", r)?;
 
         // Update the RNG
-        self.transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
+        self.transcript_rng = Self::build_rng(self.transcript, self.bytes.as_ref(), self.external_rng);
 
         // Return the challenge
         self.transcript.challenge_scalar(b"e")
@@ -155,7 +154,7 @@ where
         self.transcript.validate_and_append_point(b"B", b)?;
 
         // Update the RNG
-        self.transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
+        self.transcript_rng = Self::build_rng(self.transcript, self.bytes.as_ref(), self.external_rng);
 
         // Return the challenge
         self.transcript.challenge_scalar(b"e")
@@ -172,7 +171,7 @@ where
         }
 
         // Update the RNG
-        self.transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
+        self.transcript_rng = Self::build_rng(self.transcript, self.bytes.as_ref(), self.external_rng);
 
         // Return the transcript RNG
         self.transcript_rng

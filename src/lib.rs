@@ -34,5 +34,7 @@ mod utils;
 pub use generators::bulletproof_gens::BulletproofGens;
 /// Bulletproofs+ generators and base points needed for a batch of range proofs
 pub use generators::pedersen_gens::PedersenGens;
+/// Merlin transcripts
+pub use merlin::Transcript;
 
 pub mod ristretto;
