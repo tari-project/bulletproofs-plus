@@ -83,6 +83,7 @@ fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<Co
 }
 
 /// A static array of pre-generated points
+#[allow(clippy::arithmetic_side_effects)]
 fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::COUNT] {
     static INSTANCE: OnceCell<[RistrettoPoint; ExtensionDegree::COUNT]> = OnceCell::new();
     INSTANCE.get_or_init(|| {

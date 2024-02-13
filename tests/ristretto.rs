@@ -147,6 +147,7 @@ enum ProofOfMinimumValueStrategy {
     LargerThanValue,
 }
 
+#[allow(clippy::arithmetic_side_effects)]
 fn prove_and_verify(
     bit_lengths: &[usize],
     proof_batch: &[usize],
