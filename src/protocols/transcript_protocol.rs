@@ -29,6 +29,9 @@ pub trait TranscriptProtocol {
         point: &P,
     ) -> Result<(), ProofError>;
 
+    /// Append a `scalar` with a given `label`.
+    fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar);
+
     /// Compute a `label`ed challenge variable.
     fn challenge_scalar(&mut self, label: &'static [u8]) -> Result<Scalar, ProofError>;
 }
@@ -55,6 +58,10 @@ impl TranscriptProtocol for Transcript {
             self.append_message(label, point.as_fixed_bytes());
             Ok(())
         }
+    }
+
+    fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar) {
+        self.append_message(label, scalar.as_bytes());
     }
 
     fn challenge_scalar(&mut self, label: &'static [u8]) -> Result<Scalar, ProofError> {
