@@ -4,3 +4,4 @@
 //! Bulletproofs+ utilities
 
 pub mod generic;
+pub(crate) mod nullrng;

@@ -247,43 +247,39 @@ fn prove_and_verify(
         if !proofs.is_empty() {
             // 5. Verify the entire batch as the commitment owner, i.e. the prover self
             // --- Only recover the masks
-            let recovered_private_masks = RangeProof::verify_batch_with_rng(
+            let recovered_private_masks = RangeProof::verify_batch(
                 &transcript_labels,
                 &statements_private.clone(),
                 &proofs.clone(),
                 VerifyAction::RecoverOnly,
-                &mut rng,
             )
             .unwrap();
             assert_eq!(private_masks, recovered_private_masks);
             // --- Recover the masks and verify the proofs
-            let recovered_private_masks = RangeProof::verify_batch_with_rng(
+            let recovered_private_masks = RangeProof::verify_batch(
                 &transcript_labels,
                 &statements_private.clone(),
                 &proofs.clone(),
                 VerifyAction::RecoverAndVerify,
-                &mut rng,
             )
             .unwrap();
             assert_eq!(private_masks, recovered_private_masks);
             // --- Verify the proofs but do not recover the masks
-            let recovered_private_masks = RangeProof::verify_batch_with_rng(
+            let recovered_private_masks = RangeProof::verify_batch(
                 &transcript_labels,
                 &statements_private.clone(),
                 &proofs.clone(),
                 VerifyAction::VerifyOnly,
-                &mut rng,
             )
             .unwrap();
             assert_eq!(public_masks, recovered_private_masks);
 
             // 6. Verify the entire batch as public entity
-            let recovered_public_masks = RangeProof::verify_batch_with_rng(
+            let recovered_public_masks = RangeProof::verify_batch(
                 &transcript_labels,
                 &statements_public,
                 &proofs,
                 VerifyAction::VerifyOnly,
-                &mut rng,
             )
             .unwrap();
             assert_eq!(public_masks, recovered_public_masks);
@@ -307,12 +303,11 @@ fn prove_and_verify(
                         seed_nonce: statement.seed_nonce.map(|seed_nonce| seed_nonce + Scalar::ONE),
                     });
                 }
-                let recovered_private_masks_changed = RistrettoRangeProof::verify_batch_with_rng(
+                let recovered_private_masks_changed = RistrettoRangeProof::verify_batch(
                     &transcript_labels,
                     &statements_private_changed,
                     &proofs.clone(),
                     VerifyAction::RecoverAndVerify,
-                    &mut rng,
                 )
                 .unwrap();
                 assert_ne!(private_masks, recovered_private_masks_changed);
@@ -339,12 +334,11 @@ fn prove_and_verify(
                     seed_nonce: statement.seed_nonce,
                 });
             }
-            match RangeProof::verify_batch_with_rng(
+            match RangeProof::verify_batch(
                 &transcript_labels,
                 &statements_public_changed,
                 &proofs,
                 VerifyAction::VerifyOnly,
-                &mut rng,
             ) {
                 Ok(_) => {
                     panic!("Range proof should not verify")

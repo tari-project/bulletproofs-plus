@@ -19,6 +19,7 @@ use curve25519_dalek::{
     traits::{Identity, IsIdentity, MultiscalarMul, VartimePrecomputedMultiscalarMul},
 };
 use itertools::{izip, Itertools};
+use merlin::Transcript;
 #[cfg(feature = "rand")]
 use rand::rngs::OsRng;
 use rand_core::CryptoRngCore;
@@ -34,7 +35,10 @@ use crate::{
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
     transcripts::RangeProofTranscript,
-    utils::generic::{nonce, split_at_checked},
+    utils::{
+        generic::{nonce, split_at_checked},
+        nullrng::NullRng,
+    },
 };
 
 /// Optionally extract masks when verifying the proofs
@@ -676,23 +680,11 @@ where
     }
 
     /// Wrapper function for batch verification in different modes: mask recovery, verification, or both
-    #[cfg(feature = "rand")]
     pub fn verify_batch(
         transcript_labels: &[&'static str],
         statements: &[RangeStatement<P>],
         proofs: &[RangeProof<P>],
         action: VerifyAction,
-    ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
-        Self::verify_batch_with_rng(transcript_labels, statements, proofs, action, &mut OsRng)
-    }
-
-    /// Wrapper function for batch verification in different modes: mask recovery, verification, or both
-    pub fn verify_batch_with_rng<R: CryptoRngCore>(
-        transcript_labels: &[&'static str],
-        statements: &[RangeStatement<P>],
-        proofs: &[RangeProof<P>],
-        action: VerifyAction,
-        rng: &mut R,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // By definition, an empty batch fails
         if statements.is_empty() || proofs.is_empty() || transcript_labels.is_empty() {
@@ -722,7 +714,7 @@ where
 
         // If the batch fails, propagate the error; otherwise, store the masks and keep going
         if let Some((batch_statements, batch_proofs)) = chunks.next() {
-            let mut result = RangeProof::verify(transcript_labels, batch_statements, batch_proofs, action, rng)?;
+            let mut result = RangeProof::verify(transcript_labels, batch_statements, batch_proofs, action)?;
 
             masks.append(&mut result);
         }
@@ -732,12 +724,11 @@ where
 
     // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
     // range proofs by a party that can supply the optional seed nonces
-    fn verify<R: CryptoRngCore>(
+    fn verify(
         transcript_labels: &[&'static str],
         statements: &[RangeStatement<P>],
         range_proofs: &[RangeProof<P>],
         extract_masks: VerifyAction,
-        rng: &mut R,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // Verify generators consistency & select largest aggregation factor
         let (max_mn, max_index) = RangeProof::verify_statements_and_generators_consistency(statements, range_proofs)?;
@@ -787,8 +778,50 @@ where
         // Recovered masks
         let mut masks = Vec::with_capacity(range_proofs.len());
 
-        // Process each proof and add it to the batch
+        // Set up the weight transcript
+        let mut weight_transcript = Transcript::new(b"Bulletproofs+ verifier weights");
+
+        // Generate challenges from all proofs in the batch, using the final transcript RNG of each to obtain a new
+        // weight
+        let mut batch_challenges = Vec::with_capacity(range_proofs.len());
         for (proof, statement, transcript_label) in izip!(range_proofs, statements, transcript_labels) {
+            let mut null_rng = NullRng;
+
+            // Start the transcript, using `NullRng` since we don't need or want actual randomness there
+            let mut transcript = RangeProofTranscript::new(
+                transcript_label,
+                &h_base_compressed,
+                g_bases_compressed,
+                bit_length,
+                extension_degree,
+                statement.commitments.len(),
+                statement,
+                None,
+                &mut null_rng,
+            )?;
+
+            // Get the challenges and include them in the batch vectors
+            let (y, z) = transcript.challenges_y_z(&proof.a)?;
+            let round_e = proof
+                .li
+                .iter()
+                .zip(proof.ri.iter())
+                .map(|(l, r)| transcript.challenge_round_e(l, r))
+                .collect::<Result<Vec<Scalar>, ProofError>>()?;
+            let e = transcript.challenge_final_e(&proof.a1, &proof.b)?;
+
+            batch_challenges.push((y, z, round_e, e));
+
+            // Use the transcript RNG to bind this proof to the weight transcript
+            let mut transcript_rng = transcript.to_verifier_rng(&proof.r1, &proof.s1, &proof.d1);
+            weight_transcript.append_u64(b"proof", transcript_rng.as_rngcore().next_u64());
+        }
+
+        // Finalize the weight transcript so it can be used for pseudorandom weights
+        let mut weight_transcript_rng = weight_transcript.build_rng().finalize(&mut NullRng);
+
+        // Process each proof and add it to the batch
+        for (proof, statement, batch_challenge) in izip!(range_proofs, statements, batch_challenges) {
             let commitments = statement.commitments.clone();
             let minimum_value_promises = statement.minimum_value_promises.clone();
             let a = proof.a_decompressed()?;
@@ -822,31 +855,11 @@ where
                 return Err(ProofError::InvalidLength("Vector L/R length not adequate".to_string()));
             }
 
-            // Start the transcript
-            let mut transcript = RangeProofTranscript::new(
-                transcript_label,
-                &h_base_compressed,
-                g_bases_compressed,
-                bit_length,
-                extension_degree,
-                aggregation_factor,
-                statement,
-                None,
-                rng,
-            )?;
+            // Parse out the challenges
+            let (y, z, challenges, e) = batch_challenge;
 
-            // Reconstruct challenges
-            let (y, z) = transcript.challenges_y_z(&proof.a)?;
-            let challenges = proof
-                .li
-                .iter()
-                .zip(proof.ri.iter())
-                .map(|(l, r)| transcript.challenge_round_e(l, r))
-                .collect::<Result<Vec<Scalar>, ProofError>>()?;
-            let e = transcript.challenge_final_e(&proof.a1, &proof.b)?;
-
-            // Batch weight (may not be equal to a zero valued scalar) - this may not be zero ever
-            let weight = Scalar::random_not_zero(transcript.as_mut_rng());
+            // Nonzero batch weight
+            let weight = Scalar::random_not_zero(&mut weight_transcript_rng);
 
             // Compute challenge inverses in a batch
             let mut challenges_inv = challenges.clone();
@@ -1728,38 +1741,21 @@ mod tests {
         let mut proof = RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).unwrap();
 
         // Empty statement and proof vectors
-        assert!(
-            RangeProof::verify_batch_with_rng(&[], &[], &[proof.clone()], VerifyAction::VerifyOnly, &mut rng).is_err()
-        );
-        assert!(RangeProof::verify_batch_with_rng(
-            &["test"],
-            &[statement.clone()],
-            &[],
-            VerifyAction::VerifyOnly,
-            &mut rng
-        )
-        .is_err());
+        assert!(RangeProof::verify_batch(&[], &[], &[proof.clone()], VerifyAction::VerifyOnly).is_err());
+        assert!(RangeProof::verify_batch(&["test"], &[statement.clone()], &[], VerifyAction::VerifyOnly,).is_err());
 
         // Proof vector mismatches
         proof.li.pop();
-        assert!(RangeProof::verify_batch_with_rng(
+        assert!(RangeProof::verify_batch(
             &["test"],
             &[statement.clone()],
             &[proof.clone()],
             VerifyAction::VerifyOnly,
-            &mut rng,
         )
         .is_err());
 
         proof.ri.pop();
-        assert!(RangeProof::verify_batch_with_rng(
-            &["test"],
-            &[statement],
-            &[proof],
-            VerifyAction::VerifyOnly,
-            &mut rng
-        )
-        .is_err());
+        assert!(RangeProof::verify_batch(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly,).is_err());
     }
 
     #[test]
@@ -1789,8 +1785,7 @@ mod tests {
         let proof = RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).unwrap();
 
         // The proof should verify
-        RangeProof::verify_batch_with_rng(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly, &mut rng)
-            .unwrap();
+        RangeProof::verify_batch(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly).unwrap();
     }
 
     #[test]

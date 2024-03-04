@@ -161,6 +161,23 @@ where
         self.transcript.challenge_scalar(b"e")
     }
 
+    /// Update the RNG with the prover's reponses and return it, consuming the transcript
+    #[allow(clippy::wrong_self_convention)]
+    pub(crate) fn to_verifier_rng(mut self, r1: &Scalar, s1: &Scalar, d1: &[Scalar]) -> TranscriptRng {
+        // Update the transcript
+        self.transcript.append_scalar(b"r1", r1);
+        self.transcript.append_scalar(b"s1", s1);
+        for item in d1 {
+            self.transcript.append_scalar(b"d1", item);
+        }
+
+        // Update the RNG
+        self.transcript_rng = Self::build_rng(&self.transcript, self.bytes.as_ref(), self.external_rng);
+
+        // Return the transcript RNG
+        self.transcript_rng
+    }
+
     /// Construct a random number generator from the current transcript state
     ///
     /// Internally, this builds the RNG using a clone of the transcript state, the secret bytes (if provided), and the

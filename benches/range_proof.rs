@@ -172,14 +172,9 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the aggregated proof
-                let _masks = RangeProof::verify_batch_with_rng(
-                    &transcript_labels,
-                    &statements,
-                    &proofs,
-                    VerifyAction::VerifyOnly,
-                    &mut rng,
-                )
-                .unwrap();
+                let _masks =
+                    RangeProof::verify_batch(&transcript_labels, &statements, &proofs, VerifyAction::VerifyOnly)
+                        .unwrap();
             });
         });
     }
@@ -259,22 +254,20 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                     // Verify the entire batch of proofs
                     match extract_masks {
                         VerifyAction::VerifyOnly => {
-                            let _masks = RangeProof::verify_batch_with_rng(
+                            let _masks = RangeProof::verify_batch(
                                 &transcript_labels,
                                 &statements,
                                 &proofs,
                                 VerifyAction::VerifyOnly,
-                                &mut rng,
                             )
                             .unwrap();
                         },
                         VerifyAction::RecoverOnly => {
-                            let _masks = RangeProof::verify_batch_with_rng(
+                            let _masks = RangeProof::verify_batch(
                                 &transcript_labels,
                                 &statements,
                                 &proofs,
                                 VerifyAction::RecoverOnly,
-                                &mut rng,
                             )
                             .unwrap();
                         },
