@@ -116,7 +116,7 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 /// let mut statements_private = vec![];
 /// let mut statements_public = vec![];
 /// let mut proofs = vec![];
-/// let mut transcript_labels = vec![];
+/// let mut transcripts = vec![];
 ///
 /// for aggregation_size in proof_batch {
 ///     // 1. Generators
@@ -176,16 +176,17 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 ///     let public_statement =
 ///         RangeStatement::init(generators.clone(), commitments, minimum_values.clone(), None).unwrap();
 ///     statements_public.push(public_statement.clone());
-///     transcript_labels.push(transcript_label);
+///     let mut transcript = Transcript::new(transcript_label.as_bytes());
+///     transcripts.push(transcript.clone());
 ///
 ///     // 4. Create the proofs
-///     let proof = RistrettoRangeProof::prove(transcript_label, &private_statement.clone(), &witness);
+///     let proof = RistrettoRangeProof::prove(&mut transcript, &private_statement.clone(), &witness);
 ///     proofs.push(proof.unwrap());
 /// }
 ///
 /// // 5. Verify the entire batch as the commitment owner, i.e. the prover self
 /// let recovered_private_masks = RangeProof::verify_batch(
-///     &transcript_labels,
+///     &mut transcripts.clone(),
 ///     &statements_private,
 ///     &proofs,
 ///     VerifyAction::RecoverAndVerify,
@@ -195,7 +196,7 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 ///
 /// // 6. Verify the entire batch as public entity
 /// let recovered_public_masks =
-///     RangeProof::verify_batch(&transcript_labels, &statements_public, &proofs, VerifyAction::VerifyOnly).unwrap();
+///     RangeProof::verify_batch(&mut transcripts, &statements_public, &proofs, VerifyAction::VerifyOnly).unwrap();
 /// assert_eq!(public_masks, recovered_public_masks);
 ///
 /// # }
@@ -218,17 +219,17 @@ where
     /// The prover must ensure that the commitments and witness opening data are consistent
     #[cfg(feature = "rand")]
     pub fn prove(
-        transcript_label: &'static str,
+        transcript: &mut Transcript,
         statement: &RangeStatement<P>,
         witness: &RangeWitness,
     ) -> Result<Self, ProofError> {
-        Self::prove_with_rng(transcript_label, statement, witness, &mut OsRng)
+        Self::prove_with_rng(transcript, statement, witness, &mut OsRng)
     }
 
     /// Create a single or aggregated range proof for a single party that knows all the secrets
     /// The prover must ensure that the commitments and witness opening data are consistent
     pub fn prove_with_rng<R: CryptoRngCore>(
-        transcript_label: &'static str,
+        transcript: &mut Transcript,
         statement: &RangeStatement<P>,
         witness: &RangeWitness,
         rng: &mut R,
@@ -282,8 +283,8 @@ where
         }
 
         // Start a new transcript and generate the transcript RNG
-        let mut transcript = RangeProofTranscript::<P, R>::new(
-            transcript_label,
+        let mut range_proof_transcript = RangeProofTranscript::<P, R>::new(
+            transcript,
             &statement.generators.h_base().compress(),
             statement.generators.g_bases_compressed(),
             bit_length,
@@ -326,7 +327,7 @@ where
                 nonce(&seed_nonce, "alpha", None, Some(k))?
             } else {
                 // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-                Scalar::random_not_zero(transcript.as_mut_rng())
+                Scalar::random_not_zero(range_proof_transcript.as_mut_rng())
             });
         }
         let a = statement.generators.precomp().vartime_mixed_multiscalar_mul(
@@ -336,7 +337,7 @@ where
         );
 
         // Update transcript, get challenges, and update RNG
-        let (y, z) = transcript.challenges_y_z(&a.compress())?;
+        let (y, z) = range_proof_transcript.challenges_y_z(&a.compress())?;
 
         let z_square = z * z;
 
@@ -427,7 +428,7 @@ where
                 // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
                 Zeroizing::new(
                     (0..extension_degree)
-                        .map(|_| Scalar::random_not_zero(transcript.as_mut_rng()))
+                        .map(|_| Scalar::random_not_zero(range_proof_transcript.as_mut_rng()))
                         .collect(),
                 )
             };
@@ -441,7 +442,7 @@ where
                 // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
                 Zeroizing::new(
                     (0..extension_degree)
-                        .map(|_| Scalar::random_not_zero(transcript.as_mut_rng()))
+                        .map(|_| Scalar::random_not_zero(range_proof_transcript.as_mut_rng()))
                         .collect(),
                 )
             };
@@ -478,7 +479,7 @@ where
             ));
 
             // Update transcript, get challenge, and update RNG
-            let e = transcript.challenge_round_e(
+            let e = range_proof_transcript.challenge_round_e(
                 &li.last()
                     .ok_or(ProofError::InvalidLength("Bad inner product vector length".to_string()))?
                     .compress(),
@@ -522,8 +523,8 @@ where
 
         // Random masks
         // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
-        let r = Zeroizing::new(Scalar::random_not_zero(transcript.as_mut_rng()));
-        let s = Zeroizing::new(Scalar::random_not_zero(transcript.as_mut_rng()));
+        let r = Zeroizing::new(Scalar::random_not_zero(range_proof_transcript.as_mut_rng()));
+        let s = Zeroizing::new(Scalar::random_not_zero(range_proof_transcript.as_mut_rng()));
         let d = if let Some(seed_nonce) = statement.seed_nonce {
             Zeroizing::new(
                 (0..extension_degree)
@@ -534,7 +535,7 @@ where
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
             Zeroizing::new(
                 (0..extension_degree)
-                    .map(|_| Scalar::random_not_zero(transcript.as_mut_rng()))
+                    .map(|_| Scalar::random_not_zero(range_proof_transcript.as_mut_rng()))
                     .collect(),
             )
         };
@@ -548,7 +549,7 @@ where
             // Zero is allowed by the protocol, but excluded by the implementation to be unambiguous
             Zeroizing::new(
                 (0..extension_degree)
-                    .map(|_| Scalar::random_not_zero(transcript.as_mut_rng()))
+                    .map(|_| Scalar::random_not_zero(range_proof_transcript.as_mut_rng()))
                     .collect(),
             )
         };
@@ -567,7 +568,7 @@ where
         }
 
         // Update transcript, get challenge, and update RNG
-        let e = transcript.challenge_final_e(&a1.compress(), &b.compress())?;
+        let e = range_proof_transcript.challenge_final_e(&a1.compress(), &b.compress())?;
         let e_square = e * e;
 
         let r1 = *r + a_li[0] * e;
@@ -693,13 +694,13 @@ where
 
     /// Wrapper function for batch verification in different modes: mask recovery, verification, or both
     pub fn verify_batch(
-        transcript_labels: &[&'static str],
+        transcripts: &mut [Transcript],
         statements: &[RangeStatement<P>],
         proofs: &[RangeProof<P>],
         action: VerifyAction,
     ) -> Result<Vec<Option<ExtendedMask>>, ProofError> {
         // By definition, an empty batch fails
-        if statements.is_empty() || proofs.is_empty() || transcript_labels.is_empty() {
+        if statements.is_empty() || proofs.is_empty() || transcripts.is_empty() {
             return Err(ProofError::InvalidArgument(
                 "Range statements or proofs length empty".to_string(),
             ));
@@ -710,9 +711,9 @@ where
                 "Range statements and proofs length mismatch".to_string(),
             ));
         }
-        if transcript_labels.len() != statements.len() {
+        if transcripts.len() != statements.len() {
             return Err(ProofError::InvalidArgument(
-                "Range statements and transcript labels length mismatch".to_string(),
+                "Range statements and transcripts length mismatch".to_string(),
             ));
         }
 
@@ -726,7 +727,7 @@ where
 
         // If the batch fails, propagate the error; otherwise, store the masks and keep going
         if let Some((batch_statements, batch_proofs)) = chunks.next() {
-            let mut result = RangeProof::verify(transcript_labels, batch_statements, batch_proofs, action)?;
+            let mut result = RangeProof::verify(transcripts, batch_statements, batch_proofs, action)?;
 
             masks.append(&mut result);
         }
@@ -737,7 +738,7 @@ where
     // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
     // range proofs by a party that can supply the optional seed nonces
     fn verify(
-        transcript_labels: &[&'static str],
+        transcripts: &mut [Transcript],
         statements: &[RangeStatement<P>],
         range_proofs: &[RangeProof<P>],
         extract_masks: VerifyAction,
@@ -796,12 +797,12 @@ where
         // Generate challenges from all proofs in the batch, using the final transcript RNG of each to obtain a new
         // weight
         let mut batch_challenges = Vec::with_capacity(range_proofs.len());
-        for (proof, statement, transcript_label) in izip!(range_proofs, statements, transcript_labels) {
+        for (proof, statement, transcript) in izip!(range_proofs, statements, transcripts) {
             let mut null_rng = NullRng;
 
             // Start the transcript, using `NullRng` since we don't need or want actual randomness there
             let mut transcript = RangeProofTranscript::new(
-                transcript_label,
+                transcript,
                 &h_base_compressed,
                 g_bases_compressed,
                 bit_length,
@@ -1445,8 +1446,13 @@ mod tests {
                 .unwrap(),
             );
             proofs.push(
-                RangeProof::prove_with_rng("test", statements.last().unwrap(), witnesses.last().unwrap(), &mut rng)
-                    .unwrap(),
+                RangeProof::prove_with_rng(
+                    &mut Transcript::new(b"Test"),
+                    statements.last().unwrap(),
+                    witnesses.last().unwrap(),
+                    &mut rng,
+                )
+                .unwrap(),
             );
         }
 
@@ -1618,7 +1624,8 @@ mod tests {
             None,
         )
         .unwrap();
-        let mut proof = RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).unwrap();
+        let mut proof =
+            RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).unwrap();
 
         // Mutate proof elements
         let mut bytes = [0u8; 32];
@@ -1675,7 +1682,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).is_err());
+        assert!(RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).is_err());
 
         // Witness and statement extension degrees do not match
         let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE, Scalar::ONE])]).unwrap();
@@ -1689,7 +1696,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).is_err());
+        assert!(RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).is_err());
 
         // Witness value overflows bit length
         let witness = RangeWitness::init(vec![CommitmentOpening::new(16u64, vec![Scalar::ONE])]).unwrap();
@@ -1703,7 +1710,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).is_err());
+        assert!(RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).is_err());
 
         // Witness opening is invalid for statement commitment
         let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
@@ -1717,7 +1724,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).is_err());
+        assert!(RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).is_err());
 
         // Witness value does not meet minimum value promise
         let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
@@ -1731,7 +1738,7 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).is_err());
+        assert!(RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).is_err());
     }
 
     #[test]
@@ -1753,16 +1760,23 @@ mod tests {
             None,
         )
         .unwrap();
-        let mut proof = RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).unwrap();
+        let mut proof =
+            RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).unwrap();
 
         // Empty statement and proof vectors
-        assert!(RangeProof::verify_batch(&[], &[], &[proof.clone()], VerifyAction::VerifyOnly).is_err());
-        assert!(RangeProof::verify_batch(&["test"], &[statement.clone()], &[], VerifyAction::VerifyOnly,).is_err());
+        assert!(RangeProof::verify_batch(&mut [], &[], &[proof.clone()], VerifyAction::VerifyOnly).is_err());
+        assert!(RangeProof::verify_batch(
+            &mut [Transcript::new(b"Test")],
+            &[statement.clone()],
+            &[],
+            VerifyAction::VerifyOnly,
+        )
+        .is_err());
 
         // Proof vector mismatches
         proof.li.pop();
         assert!(RangeProof::verify_batch(
-            &["test"],
+            &mut [Transcript::new(b"Test")],
             &[statement.clone()],
             &[proof.clone()],
             VerifyAction::VerifyOnly,
@@ -1770,7 +1784,13 @@ mod tests {
         .is_err());
 
         proof.ri.pop();
-        assert!(RangeProof::verify_batch(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly,).is_err());
+        assert!(RangeProof::verify_batch(
+            &mut [Transcript::new(b"Test")],
+            &[statement],
+            &[proof],
+            VerifyAction::VerifyOnly,
+        )
+        .is_err());
     }
 
     #[test]
@@ -1797,10 +1817,16 @@ mod tests {
             None,
         )
         .unwrap();
-        let proof = RangeProof::prove_with_rng("test", &statement, &witness, &mut rng).unwrap();
+        let proof = RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).unwrap();
 
         // The proof should verify
-        RangeProof::verify_batch(&["test"], &[statement], &[proof], VerifyAction::VerifyOnly).unwrap();
+        RangeProof::verify_batch(
+            &mut [Transcript::new(b"Test")],
+            &[statement],
+            &[proof],
+            VerifyAction::VerifyOnly,
+        )
+        .unwrap();
     }
 
     #[test]

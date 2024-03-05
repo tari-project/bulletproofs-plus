@@ -11,6 +11,7 @@ extern crate criterion;
 
 use criterion::{Criterion, SamplingMode};
 use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
 use rand_chacha::ChaCha12Rng;
 use rand_core::{CryptoRngCore, SeedableRng};
 use tari_bulletproofs_plus::{
@@ -93,7 +94,12 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             // Benchmark this code
             b.iter(|| {
                 // 4. Create the aggregated proof
-                let _proof = RistrettoRangeProof::prove_with_rng(transcript_label, &statement, &witness, &mut rng);
+                let _proof = RistrettoRangeProof::prove_with_rng(
+                    &mut Transcript::new(transcript_label.as_bytes()),
+                    &statement,
+                    &witness,
+                    &mut rng,
+                );
             })
         });
     }
@@ -133,7 +139,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             // 0. Batch data
             let mut statements = vec![];
             let mut proofs = vec![];
-            let mut transcript_labels = vec![];
+            let mut transcripts = vec![];
 
             // 1. Generators
             let generators = RangeParameters::init(bit_length, aggregation_factor, pederson_gens.clone()).unwrap();
@@ -165,17 +171,18 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let statement =
                 RangeStatement::init(generators, commitments.clone(), minimum_values.clone(), seed_nonce).unwrap();
             statements.push(statement.clone());
-            transcript_labels.push(transcript_label);
+            let mut transcript = Transcript::new(transcript_label.as_bytes());
+            transcripts.push(transcript.clone());
 
             // 4. Create the proof
-            let proof = RistrettoRangeProof::prove_with_rng(transcript_label, &statement, &witness, &mut rng).unwrap();
+            let proof = RistrettoRangeProof::prove_with_rng(&mut transcript, &statement, &witness, &mut rng).unwrap();
             proofs.push(proof);
 
             // Benchmark this code
             b.iter(|| {
                 // 5. Verify the aggregated proof
                 let _masks =
-                    RangeProof::verify_batch(&transcript_labels, &statements, &proofs, VerifyAction::VerifyOnly)
+                    RangeProof::verify_batch(&mut transcripts.clone(), &statements, &proofs, VerifyAction::VerifyOnly)
                         .unwrap();
             });
         });
@@ -221,7 +228,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                 // Batch data
                 let mut statements = vec![];
                 let mut proofs = vec![];
-                let mut transcript_labels = vec![];
+                let mut transcripts = vec![];
 
                 for _ in 0..number_of_range_proofs {
                     // Witness data
@@ -244,11 +251,12 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                     )
                     .unwrap();
                     statements.push(statement.clone());
-                    transcript_labels.push(transcript_label);
+                    let mut transcript = Transcript::new(transcript_label.as_bytes());
+                    transcripts.push(transcript.clone());
 
                     // Proof
                     let proof =
-                        RistrettoRangeProof::prove_with_rng(transcript_label, &statement, &witness, &mut rng).unwrap();
+                        RistrettoRangeProof::prove_with_rng(&mut transcript, &statement, &witness, &mut rng).unwrap();
                     proofs.push(proof);
                 }
 
@@ -258,7 +266,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                     match extract_masks {
                         VerifyAction::VerifyOnly => {
                             let _masks = RangeProof::verify_batch(
-                                &transcript_labels,
+                                &mut transcripts.clone(),
                                 &statements,
                                 &proofs,
                                 VerifyAction::VerifyOnly,
@@ -267,7 +275,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                         },
                         VerifyAction::RecoverOnly => {
                             let _masks = RangeProof::verify_batch(
-                                &transcript_labels,
+                                &mut transcripts.clone(),
                                 &statements,
                                 &proofs,
                                 VerifyAction::RecoverOnly,
