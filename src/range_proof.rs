@@ -358,6 +358,7 @@ where
         }
         for j in 1..aggregation_factor {
             for i in 0..bit_length {
+                #[allow(clippy::arithmetic_side_effects)]
                 d.push(d.get((j - 1) * bit_length + i).ok_or(ProofError::SizeOverflow)? * z_square);
             }
         }
@@ -373,7 +374,11 @@ where
         for opening in &witness.openings {
             z_even_powers *= z_square;
             for (r, alpha1_val) in opening.r.iter().zip(alpha.iter_mut()) {
-                *alpha1_val += z_even_powers * r * y_powers.get(full_length + 1).ok_or(ProofError::SizeOverflow)?;
+                *alpha1_val += z_even_powers *
+                    r *
+                    y_powers
+                        .get(full_length.checked_add(1).ok_or(ProofError::SizeOverflow)?)
+                        .ok_or(ProofError::SizeOverflow)?;
             }
         }
 
@@ -441,15 +446,19 @@ where
                 )
             };
 
-            round += 1;
+            round = round.checked_add(1).ok_or(ProofError::SizeOverflow)?;
 
             let c_l = Zeroizing::new(
                 izip!(a_lo, y_powers.iter().skip(1), b_hi)
                     .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b),
             );
             let c_r = Zeroizing::new(
-                izip!(a_hi, y_powers.iter().skip(n + 1), b_lo)
-                    .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b),
+                izip!(
+                    a_hi,
+                    y_powers.iter().skip(n.checked_add(1).ok_or(ProofError::SizeOverflow)?),
+                    b_lo
+                )
+                .fold(Scalar::ZERO, |acc, (a, y_power, b)| acc + a * y_power * b),
             );
 
             // Compute L and R by multi-scalar multiplication
@@ -544,12 +553,15 @@ where
             )
         };
 
+        #[allow(clippy::arithmetic_side_effects)]
         let mut a1 =
             &gi_base[0] * *r + &hi_base[0] * *s + h_base * (*r * y_powers[1] * a_ri[0] + *s * y_powers[1] * a_li[0]);
         let mut b = h_base * (*r * y_powers[1] * *s);
+        #[allow(clippy::arithmetic_side_effects)]
         for (g_base, &d) in g_base.iter().zip(d.iter()) {
             a1 += g_base * d;
         }
+        #[allow(clippy::arithmetic_side_effects)]
         for (g_base, &eta) in g_base.iter().zip(eta.iter()) {
             b += g_base * eta;
         }
@@ -889,6 +901,7 @@ where
             for _ in 1..bit_length {
                 d.push(two * d.last().ok_or(ProofError::SizeOverflow)?);
             }
+            #[allow(clippy::arithmetic_side_effects)]
             for j in 1..aggregation_factor {
                 for i in 0..bit_length {
                     d.push(d.get((j - 1) * bit_length + i).ok_or(ProofError::SizeOverflow)? * z_square);
@@ -945,6 +958,7 @@ where
                 let log_i = usize::try_from(i.checked_ilog2().ok_or(ProofError::SizeOverflow)?)
                     .map_err(|_| ProofError::SizeOverflow)?;
                 let j = 1 << log_i;
+                #[allow(clippy::arithmetic_side_effects)]
                 s.push(
                     s.get(i - j).ok_or(ProofError::SizeOverflow)? *
                         challenges_sq.get(rounds - log_i - 1).ok_or(ProofError::SizeOverflow)?,
@@ -1077,6 +1091,7 @@ where
     /// Then we serialize the rest of the proof elements as canonical byte encodings
     pub fn to_bytes(&self) -> Vec<u8> {
         // The total proof size: extension degree encoding, fixed elements, vectors
+        #[allow(clippy::arithmetic_side_effects)]
         let mut buf = Vec::with_capacity(
             ENCODED_EXTENSION_SIZE +
                 (self.li.len() + self.ri.len() + FIXED_PROOF_ELEMENTS + self.d1.len()) * SERIALIZED_ELEMENT_SIZE,

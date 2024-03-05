@@ -90,6 +90,7 @@ where
 
         // Serialize the witness if provided
         let bytes = if let Some(witness) = witness {
+            #[allow(clippy::arithmetic_side_effects)]
             let size: usize = witness
                 .openings
                 .iter()

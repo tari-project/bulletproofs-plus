@@ -38,6 +38,7 @@ static EXTRACT_MASKS: [VerifyAction; 1] = [VerifyAction::VerifyOnly];
 // static EXTENSION_DEGREE: [ExtensionDegree; 3] = [ExtensionDegree::Zero, ExtensionDegree::Two, ExtensionDegree::Four];
 // static EXTRACT_MASKS: [VerifyAction; 2] =  [VerifyAction::VerifyOnly, VerifyAction::RecoverOnly];
 
+#[allow(clippy::arithmetic_side_effects)]
 fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: ExtensionDegree, c: &mut Criterion) {
     let mut group = c.benchmark_group("range_proof_creation");
     group.sampling_mode(SamplingMode::Flat);
@@ -111,6 +112,7 @@ fn create_aggregated_rangeproof_n_64(c: &mut Criterion) {
     }
 }
 
+#[allow(clippy::arithmetic_side_effects)]
 fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: ExtensionDegree, c: &mut Criterion) {
     let mut group = c.benchmark_group("range_proof_verification");
     group.sampling_mode(SamplingMode::Flat);
@@ -193,6 +195,7 @@ fn verify_aggregated_rangeproof_n_64(c: &mut Criterion) {
     }
 }
 
+#[allow(clippy::arithmetic_side_effects)]
 fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: ExtensionDegree, c: &mut Criterion) {
     let mut group = c.benchmark_group("batched_range_proof_verification");
     group.sampling_mode(SamplingMode::Flat);
