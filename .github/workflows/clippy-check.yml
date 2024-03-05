@@ -22,4 +22,4 @@ jobs:
       - name: Install linter
         run: cargo install cargo-lints
       - name: Lints
-        run: cargo +stable lints clippy --all-targets
+        run: cargo +stable lints clippy --all-targets --all-features
