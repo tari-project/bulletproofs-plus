@@ -40,3 +40,39 @@ impl RngCore for NullRng {
 // This is not actually cryptographically secure!
 // We do this so we can use `NullRng` with `TranscriptRng`.
 impl CryptoRng for NullRng {}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_fill_bytes() {
+        let mut rng = NullRng;
+        let mut bytes = [1u8; 32];
+
+        // The buffer should always be set to zero
+        rng.fill_bytes(&mut bytes);
+        assert_eq!(bytes, [0u8; 32]);
+    }
+
+    #[test]
+    fn test_try_fill_bytes() {
+        let mut rng = NullRng;
+        let mut bytes = [1u8; 32];
+
+        // The buffer should always be set to zero
+        rng.try_fill_bytes(&mut bytes).unwrap();
+        assert_eq!(bytes, [0u8; 32]);
+    }
+
+    #[test]
+    fn test_next() {
+        let mut rng = NullRng;
+
+        // We should always get zero
+        assert_eq!(rng.next_u32(), 0);
+        assert_eq!(rng.next_u32(), 0);
+        assert_eq!(rng.next_u64(), 0);
+        assert_eq!(rng.next_u64(), 0);
+    }
+}
