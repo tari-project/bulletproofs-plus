@@ -16,9 +16,8 @@ jobs:
           targets: wasm32-unknown-unknown
       - name: build (WASM)
         run: cargo +stable build --target=wasm32-unknown-unknown --no-default-features
-
-  test:
-    name: cargo test
+  check:
+    name: cargo check
     runs-on: ubuntu-latest
     steps:
       - name: checkout
@@ -31,13 +30,43 @@ jobs:
         run: cargo +stable check --no-default-features
       - name: check (all features)
         run: cargo +stable check --all-features --all-targets
-      - name: test/debug (all features)
-        run: cargo +stable test --all-features
-      - name: test/debug (no features)
-        run: cargo +stable test --no-default-features
+  docs:
+    name: cargo doc
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Build documentation
+        run: RUSTDOCFLAGS="-D warnings" cargo +stable doc --no-deps
+  test-release:
+    name: cargo test (release)
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
       - name: test/release (all features)
         run: cargo +stable test --release --all-features
       - name: test/release (no features)
         run: cargo +stable test --release --no-default-features
-      - name: Build documentation
-        run: RUSTDOCFLAGS="-D warnings" cargo +stable doc --no-deps
+  test-debug:
+    name: cargo test (debug)
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: test/debug (all features)
+        run: cargo +stable test --all-features
+      - name: test/debug (no features)
+        run: cargo +stable test --no-default-features
