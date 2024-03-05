@@ -11,10 +11,12 @@
 # $ sudo apt install lcov
 
 RUSTFLAGS="-C instrument-coverage"
+RUSTUP_TOOLCHAIN=${RUSTUP_TOOLCHAIN:-nightly}
+echo "Using ${RUSTUP_TOOLCHAIN} toolchain"
 LLVM_PROFILE_FILE="./cov_raw/bulletproofs-plus-%m.profraw"
 
 get_binaries() {
-  files=$( RUSTFLAGS=$RUSTFLAGS cargo +nightly test --tests --no-run --message-format=json \
+  files=$( RUSTFLAGS=$RUSTFLAGS cargo +${RUSTUP_TOOLCHAIN} test --tests --no-run --message-format=json \
               | jq -r "select(.profile.test == true) | .filenames[]" \
               | grep -v dSYM - \
         );
@@ -23,38 +25,42 @@ get_binaries() {
 
 get_binaries
 
+echo "** Generating ..."
+echo ${files}
 # Remove old coverage files
-rm cov_raw/*profraw cov_raw/bulletproofs-plus.profdata cov_raw/bulletproofs-plus.lcov cov_raw/bulletproofs-plus.txt
+rm -fr cov_raw coverage_report default*.profraw
 
-RUSTFLAGS=$RUSTFLAGS LLVM_PROFILE_FILE=$LLVM_PROFILE_FILE cargo +nightly test --tests
+RUSTFLAGS=$RUSTFLAGS LLVM_PROFILE_FILE=${LLVM_PROFILE_FILE} cargo +${RUSTUP_TOOLCHAIN} test --tests
 
-cargo +nightly profdata -- \
+cargo profdata -- \
   merge -sparse ./cov_raw/bulletproofs-plus-*.profraw -o ./cov_raw/bulletproofs-plus.profdata
 
-cargo +nightly cov -- \
+cargo cov -- \
   export \
     --Xdemangler=rustfilt \
     --format=lcov \
     --show-branch-summary \
     --show-instantiation-summary \
     --show-region-summary \
-    --ignore-filename-regex='/.cargo/registry' \
-    --ignore-filename-regex="^/rustc" \
+    --ignore-filename-regex='\.cargo' \
+    --ignore-filename-regex="rustc" \
+    --ignore-filename-regex="\.git" \
     --ignore-filename-regex="curve25519-dalek" \
     --instr-profile=cov_raw/bulletproofs-plus.profdata \
     $files \
     > cov_raw/bulletproofs-plus.lcov
 
-cargo +nightly cov -- \
+cargo cov -- \
   show \
     --Xdemangler=rustfilt \
     --show-branch-summary \
     --show-instantiation-summary \
     --show-region-summary \
-    --ignore-filename-regex='/.cargo/registry' \
-    --ignore-filename-regex="^/rustc" \
+    --ignore-filename-regex='\.cargo' \
+    --ignore-filename-regex="rustc" \
+    --ignore-filename-regex="\.git" \
     --ignore-filename-regex="curve25519-dalek" \
-  --instr-profile=cov_raw/bulletproofs-plus.profdata \
+    --instr-profile=cov_raw/bulletproofs-plus.profdata \
     $files \
     > cov_raw/bulletproofs-plus.txt
 
