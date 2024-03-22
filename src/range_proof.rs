@@ -8,7 +8,7 @@
 use alloc::{string::ToString, vec, vec::Vec};
 use core::{
     convert::{TryFrom, TryInto},
-    iter::once,
+    iter::{once, repeat},
     marker::PhantomData,
     ops::{Add, Mul, Shr},
     slice::ChunksExact,
@@ -330,8 +330,19 @@ where
                 Scalar::random_not_zero(range_proof_transcript.as_mut_rng())
             });
         }
+        let padding = 2usize
+            .checked_mul(statement.generators.bit_length())
+            .ok_or(ProofError::SizeOverflow)?
+            .checked_mul(statement.generators.aggregation_factor())
+            .ok_or(ProofError::SizeOverflow)?
+            .checked_sub(a_li.len())
+            .ok_or(ProofError::SizeOverflow)?
+            .checked_sub(a_ri.len())
+            .ok_or(ProofError::SizeOverflow)?;
         let a = statement.generators.precomp().vartime_mixed_multiscalar_mul(
-            a_li.iter().interleave(a_ri.iter()),
+            a_li.iter()
+                .interleave(a_ri.iter())
+                .chain(repeat(&Scalar::ZERO).take(padding)),
             alpha.iter(),
             statement.generators.g_bases().iter(),
         );
@@ -1023,8 +1034,20 @@ where
         dynamic_points.push(h_base.clone());
 
         // Perform the final check using precomputation
+        let padding = 2usize
+            .checked_mul(max_statement.generators.bit_length())
+            .ok_or(ProofError::SizeOverflow)?
+            .checked_mul(max_statement.generators.aggregation_factor())
+            .ok_or(ProofError::SizeOverflow)?
+            .checked_sub(max_mn)
+            .ok_or(ProofError::SizeOverflow)?
+            .checked_sub(max_mn)
+            .ok_or(ProofError::SizeOverflow)?;
         if precomp.vartime_mixed_multiscalar_mul(
-            gi_base_scalars.iter().interleave(hi_base_scalars.iter()),
+            gi_base_scalars
+                .iter()
+                .interleave(hi_base_scalars.iter())
+                .chain(repeat(&Scalar::ZERO).take(padding)),
             dynamic_scalars.iter(),
             dynamic_points.iter(),
         ) != P::identity()

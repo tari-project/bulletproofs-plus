@@ -1,1 +1,1 @@
-arithmetic-side-effects-allowed = [ "tari_curve25519_dalek::Scalar" ]
+arithmetic-side-effects-allowed = [ "curve25519_dalek::Scalar" ]
