@@ -18,6 +18,7 @@ use curve25519_dalek::{
     scalar::Scalar,
     traits::{Identity, IsIdentity, MultiscalarMul, VartimePrecomputedMultiscalarMul},
 };
+use ff::Field;
 use itertools::{izip, Itertools};
 use merlin::Transcript;
 use rand_core::CryptoRngCore;
@@ -774,7 +775,7 @@ where
 
         // Compute 2**n-1 for later use
         let two = Scalar::from(2u8);
-        let two_n_minus_one = (0..bit_length.ilog2()).fold(two, |acc, _| acc * acc) - Scalar::ONE;
+        let two_n_minus_one = two.pow_vartime([bit_length as u64]) - Scalar::ONE;
 
         // Weighted coefficients for common generators
         let mut g_base_scalars = vec![Scalar::ZERO; extension_degree];
@@ -901,7 +902,7 @@ where
             let e_square = e * e;
             let challenges_sq: Vec<Scalar> = challenges.iter().map(|c| c * c).collect();
             let challenges_sq_inv: Vec<Scalar> = challenges_inv.iter().map(|c| c * c).collect();
-            let y_nm = (0..rounds).fold(y, |y_nm, _| y_nm * y_nm);
+            let y_nm = y.pow_vartime([full_length as u64]);
             let y_nm_1 = y_nm * y;
 
             // Compute the sum of powers of the challenge as a partial sum of a geometric series
