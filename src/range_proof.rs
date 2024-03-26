@@ -37,7 +37,7 @@ use crate::{
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
     transcripts::RangeProofTranscript,
     utils::{
-        generic::{nonce, split_at_checked},
+        generic::{compute_generator_padding, nonce, split_at_checked},
         nullrng::NullRng,
     },
 };
@@ -331,15 +331,11 @@ where
                 Scalar::random_not_zero(range_proof_transcript.as_mut_rng())
             });
         }
-        let padding = 2usize
-            .checked_mul(statement.generators.bit_length())
-            .ok_or(ProofError::SizeOverflow)?
-            .checked_mul(statement.generators.aggregation_factor())
-            .ok_or(ProofError::SizeOverflow)?
-            .checked_sub(a_li.len())
-            .ok_or(ProofError::SizeOverflow)?
-            .checked_sub(a_ri.len())
-            .ok_or(ProofError::SizeOverflow)?;
+        let padding = compute_generator_padding(
+            statement.generators.bit_length(),
+            statement.commitments.len(),
+            statement.generators.aggregation_factor(),
+        )?;
         let a = statement.generators.precomp().vartime_mixed_multiscalar_mul(
             a_li.iter()
                 .interleave(a_ri.iter())
@@ -1035,15 +1031,11 @@ where
         dynamic_points.push(h_base.clone());
 
         // Perform the final check using precomputation
-        let padding = 2usize
-            .checked_mul(max_statement.generators.bit_length())
-            .ok_or(ProofError::SizeOverflow)?
-            .checked_mul(max_statement.generators.aggregation_factor())
-            .ok_or(ProofError::SizeOverflow)?
-            .checked_sub(max_mn)
-            .ok_or(ProofError::SizeOverflow)?
-            .checked_sub(max_mn)
-            .ok_or(ProofError::SizeOverflow)?;
+        let padding = compute_generator_padding(
+            max_statement.generators.bit_length(),
+            max_statement.commitments.len(),
+            max_statement.generators.aggregation_factor(),
+        )?;
         if precomp.vartime_mixed_multiscalar_mul(
             gi_base_scalars
                 .iter()
