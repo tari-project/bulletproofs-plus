@@ -16,12 +16,10 @@ use zeroize::Zeroize;
 pub(crate) struct NullRng;
 
 impl RngCore for NullRng {
-    #[allow(unused_variables)]
     fn fill_bytes(&mut self, dest: &mut [u8]) {
         dest.zeroize();
     }
 
-    #[allow(unused_variables)]
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
         self.fill_bytes(dest);
 
