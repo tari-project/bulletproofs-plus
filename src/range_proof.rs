@@ -778,7 +778,7 @@ where
         let mut msm_dynamic_len = extension_degree.checked_add(1).ok_or(ProofError::SizeOverflow)?;
         for (statement, proof) in statements.iter().zip(range_proofs.iter()) {
             msm_dynamic_len = msm_dynamic_len
-                .checked_add(statement.generators.aggregation_factor())
+                .checked_add(statement.commitments.len())
                 .ok_or(ProofError::SizeOverflow)?;
             msm_dynamic_len = msm_dynamic_len.checked_add(3).ok_or(ProofError::SizeOverflow)?;
             msm_dynamic_len = msm_dynamic_len
