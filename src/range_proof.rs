@@ -8,7 +8,7 @@
 use alloc::{string::ToString, vec, vec::Vec};
 use core::{
     convert::{TryFrom, TryInto},
-    iter::once,
+    iter::{once, repeat},
     marker::PhantomData,
     ops::{Add, Mul, Shr},
     slice::ChunksExact,
@@ -18,6 +18,7 @@ use curve25519_dalek::{
     scalar::Scalar,
     traits::{Identity, IsIdentity, MultiscalarMul, VartimePrecomputedMultiscalarMul},
 };
+use ff::Field;
 use itertools::{izip, Itertools};
 use merlin::Transcript;
 use rand_core::CryptoRngCore;
@@ -36,7 +37,7 @@ use crate::{
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
     transcripts::RangeProofTranscript,
     utils::{
-        generic::{nonce, split_at_checked},
+        generic::{compute_generator_padding, nonce, split_at_checked},
         nullrng::NullRng,
     },
 };
@@ -330,8 +331,15 @@ where
                 Scalar::random_not_zero(range_proof_transcript.as_mut_rng())
             });
         }
+        let padding = compute_generator_padding(
+            statement.generators.bit_length(),
+            statement.commitments.len(),
+            statement.generators.aggregation_factor(),
+        )?;
         let a = statement.generators.precomp().vartime_mixed_multiscalar_mul(
-            a_li.iter().interleave(a_ri.iter()),
+            a_li.iter()
+                .interleave(a_ri.iter())
+                .chain(repeat(&Scalar::ZERO).take(padding)),
             alpha.iter(),
             statement.generators.g_bases().iter(),
         );
@@ -763,7 +771,7 @@ where
 
         // Compute 2**n-1 for later use
         let two = Scalar::from(2u8);
-        let two_n_minus_one = (0..bit_length.ilog2()).fold(two, |acc, _| acc * acc) - Scalar::ONE;
+        let two_n_minus_one = two.pow_vartime([bit_length as u64]) - Scalar::ONE;
 
         // Weighted coefficients for common generators
         let mut g_base_scalars = vec![Scalar::ZERO; extension_degree];
@@ -890,7 +898,7 @@ where
             let e_square = e * e;
             let challenges_sq: Vec<Scalar> = challenges.iter().map(|c| c * c).collect();
             let challenges_sq_inv: Vec<Scalar> = challenges_inv.iter().map(|c| c * c).collect();
-            let y_nm = (0..rounds).fold(y, |y_nm, _| y_nm * y_nm);
+            let y_nm = y.pow_vartime([full_length as u64]);
             let y_nm_1 = y_nm * y;
 
             // Compute the sum of powers of the challenge as a partial sum of a geometric series
@@ -1023,8 +1031,16 @@ where
         dynamic_points.push(h_base.clone());
 
         // Perform the final check using precomputation
+        let padding = compute_generator_padding(
+            max_statement.generators.bit_length(),
+            max_statement.commitments.len(),
+            max_statement.generators.aggregation_factor(),
+        )?;
         if precomp.vartime_mixed_multiscalar_mul(
-            gi_base_scalars.iter().interleave(hi_base_scalars.iter()),
+            gi_base_scalars
+                .iter()
+                .interleave(hi_base_scalars.iter())
+                .chain(repeat(&Scalar::ZERO).take(padding)),
             dynamic_scalars.iter(),
             dynamic_points.iter(),
         ) != P::identity()

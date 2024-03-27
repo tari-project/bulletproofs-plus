@@ -68,6 +68,28 @@ pub fn split_at_checked<T>(vec: &[T], n: usize) -> Result<(&[T], &[T]), ProofErr
     }
 }
 
+/// Compute the padding needed for generator vectors
+pub fn compute_generator_padding(
+    bit_length: usize,
+    aggregation_factor: usize,
+    max_aggregation_factor: usize,
+) -> Result<usize, ProofError> {
+    let padded_capacity = 2usize
+        .checked_mul(bit_length)
+        .ok_or(ProofError::SizeOverflow)?
+        .checked_mul(max_aggregation_factor)
+        .ok_or(ProofError::SizeOverflow)?;
+    let actual_capacity = 2usize
+        .checked_mul(bit_length)
+        .ok_or(ProofError::SizeOverflow)?
+        .checked_mul(aggregation_factor)
+        .ok_or(ProofError::SizeOverflow)?;
+
+    padded_capacity
+        .checked_sub(actual_capacity)
+        .ok_or(ProofError::SizeOverflow)
+}
+
 #[cfg(test)]
 mod tests {
     use alloc::{vec, vec::Vec};
@@ -76,10 +98,20 @@ mod tests {
     use rand_chacha::ChaCha12Rng;
     use rand_core::SeedableRng;
 
-    use crate::{
-        protocols::scalar_protocol::ScalarProtocol,
-        utils::generic::{nonce, split_at_checked, BLAKE2B_PERSONA_LIMIT},
-    };
+    use crate::{protocols::scalar_protocol::ScalarProtocol, utils::generic::*};
+
+    #[test]
+    fn test_padding() {
+        // No padding
+        assert_eq!(compute_generator_padding(64, 1, 1).unwrap(), 0);
+
+        // Padding
+        assert_eq!(compute_generator_padding(64, 1, 2).unwrap(), 128);
+
+        // Invalid
+        assert!(compute_generator_padding(64, 2, 1).is_err());
+        assert!(compute_generator_padding(64, usize::MAX - 1, usize::MAX).is_err());
+    }
 
     #[test]
     fn test_split() {
