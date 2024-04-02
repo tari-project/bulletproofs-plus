@@ -29,8 +29,12 @@ impl<P> RangeParameters<P>
 where P: FromUniformBytes + Compressable + Clone + Precomputable
 {
     /// Initialize a new 'RangeParameters' with sanity checks
-    pub fn init(bit_length: usize, aggregation_factor: usize, pc_gens: PedersenGens<P>) -> Result<Self, ProofError> {
-        if !aggregation_factor.is_power_of_two() {
+    pub fn init(
+        bit_length: usize,
+        max_aggregation_factor: usize,
+        pc_gens: PedersenGens<P>,
+    ) -> Result<Self, ProofError> {
+        if !max_aggregation_factor.is_power_of_two() {
             return Err(ProofError::InvalidArgument(
                 "Aggregation factor size must be a power of two".to_string(),
             ));
@@ -48,7 +52,7 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
         }
 
         Ok(Self {
-            bp_gens: BulletproofGens::new(bit_length, aggregation_factor)?,
+            bp_gens: BulletproofGens::new(bit_length, max_aggregation_factor)?,
             pc_gens,
         })
     }
@@ -58,8 +62,8 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
         &self.pc_gens
     }
 
-    /// Returns the aggregation factor
-    pub fn aggregation_factor(&self) -> usize {
+    /// Returns the maximum aggregation factor
+    pub fn max_aggregation_factor(&self) -> usize {
         self.bp_gens.party_capacity
     }
 
@@ -95,12 +99,12 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
 
     /// Return the non-public value iterator to the bulletproof generators
     pub fn hi_base_iter(&self) -> impl Iterator<Item = &P> {
-        self.bp_gens.h_iter(self.bit_length(), self.aggregation_factor())
+        self.bp_gens.h_iter(self.bit_length(), self.max_aggregation_factor())
     }
 
     /// Return the non-public mask iterator to the bulletproof generators
     pub fn gi_base_iter(&self) -> impl Iterator<Item = &P> {
-        self.bp_gens.g_iter(self.bit_length(), self.aggregation_factor())
+        self.bp_gens.g_iter(self.bit_length(), self.max_aggregation_factor())
     }
 
     /// Return the interleaved precomputation tables

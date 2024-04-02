@@ -49,7 +49,7 @@ impl<P: Compressable + FromUniformBytes + Clone + Precomputable> RangeStatement<
                 "Incorrect number of minimum value promises".to_string(),
             ));
         }
-        if generators.aggregation_factor() < commitments.len() {
+        if generators.max_aggregation_factor() < commitments.len() {
             return Err(ProofError::InvalidArgument(
                 "Not enough generators for this statement".to_string(),
             ));

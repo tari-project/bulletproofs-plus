@@ -334,7 +334,7 @@ where
         let padding = compute_generator_padding(
             statement.generators.bit_length(),
             statement.commitments.len(),
-            statement.generators.aggregation_factor(),
+            statement.generators.max_aggregation_factor(),
         )?;
         let a = statement.generators.precomp().vartime_mixed_multiscalar_mul(
             a_li.iter()
@@ -1034,7 +1034,7 @@ where
         let padding = compute_generator_padding(
             max_statement.generators.bit_length(),
             max_statement.commitments.len(),
-            max_statement.generators.aggregation_factor(),
+            max_statement.generators.max_aggregation_factor(),
         )?;
         if precomp.vartime_mixed_multiscalar_mul(
             gi_base_scalars
