@@ -1315,6 +1315,16 @@ mod tests {
     };
 
     #[test]
+    fn test_serialized_element_size() {
+        // Check that the serialized proof element size constant is correct (at least for Ristretto)
+        assert_eq!(
+            RistrettoPoint::identity().compress().as_bytes().len(),
+            SERIALIZED_ELEMENT_SIZE
+        );
+        assert_eq!(Scalar::ZERO.as_bytes().len(), SERIALIZED_ELEMENT_SIZE);
+    }
+
+    #[test]
     fn test_from_bytes() {
         assert!((RistrettoRangeProof::from_bytes(&[])).is_err());
         assert!((RistrettoRangeProof::from_bytes(Scalar::ZERO.as_bytes().as_slice())).is_err());
