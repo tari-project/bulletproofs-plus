@@ -2,6 +2,59 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.4.0](https://github.com/tari-project/bulletproofs-plus/compare/v0.3.2...v0.4.0) (2024-05-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* Changes the prover and verifier APIs to replace
+transcript labels with Merlin transcripts. Changes how domain separation
+is applied internally.
+* Removes `verify_batch_with_rng` from the public API. No
+longer requires that `verify_batch` have the `rand` feature enabled.
+* Removes unused methods that were public, which is
+technically a breaking change.
+* Introduces a change to the `ExtensionDegree` public
+API.
+* Modifies the construction of commitment generators.
+* Changes the batch verification API.
+* Modifies the structure of serialized proofs.
+
+### Features
+
+* clean up serialization ([#66](https://github.com/tari-project/bulletproofs-plus/issues/66)) ([d45e062](https://github.com/tari-project/bulletproofs-plus/commit/d45e062f10cca07ea81054d0d41eb5ae0eaf5a3f)), closes [#65](https://github.com/tari-project/bulletproofs-plus/issues/65)
+* compute verifier challenge sum more efficiently ([#59](https://github.com/tari-project/bulletproofs-plus/issues/59)) ([7315a61](https://github.com/tari-project/bulletproofs-plus/commit/7315a61bacab0f70013cbfb58358f27375e68a2c))
+* generalize batch transcript labels ([#70](https://github.com/tari-project/bulletproofs-plus/issues/70)) ([4102dea](https://github.com/tari-project/bulletproofs-plus/commit/4102deaabecb5231133cffc0fa6784bb86697819)), closes [/github.com/tari-project/bulletproofs-plus/blob/d9d0cc9063f85684179908569227dda251981751/src/range_proof.rs#L432](https://github.com/tari-project//github.com/tari-project/bulletproofs-plus/blob/d9d0cc9063f85684179908569227dda251981751/src/range_proof.rs/issues/L432) [#64](https://github.com/tari-project/bulletproofs-plus/issues/64)
+* improve zeroizing support ([#72](https://github.com/tari-project/bulletproofs-plus/issues/72)) ([c7b076f](https://github.com/tari-project/bulletproofs-plus/commit/c7b076fd11f1c79c1fc14402d636743ec7d27d1e)), closes [#71](https://github.com/tari-project/bulletproofs-plus/issues/71)
+* move RNGs into `RangeProofTranscript` ([#111](https://github.com/tari-project/bulletproofs-plus/issues/111)) ([854dd88](https://github.com/tari-project/bulletproofs-plus/commit/854dd885859c5ef772e731d34dfe4de7f9cbe636)), closes [#109](https://github.com/tari-project/bulletproofs-plus/issues/109) [/github.com/tari-project/bulletproofs-plus/pull/109#discussion_r1449861417](https://github.com/tari-project//github.com/tari-project/bulletproofs-plus/pull/109/issues/discussion_r1449861417)
+* refactor inner-product prover ([#57](https://github.com/tari-project/bulletproofs-plus/issues/57)) ([aa7593f](https://github.com/tari-project/bulletproofs-plus/commit/aa7593f5e25a9770bf82f9a922864648afb93f5e)), closes [/github.com/tari-project/bulletproofs-plus/blob/d9d0cc9063f85684179908569227dda251981751/src/inner_product_round.rs#L111-L112](https://github.com/tari-project//github.com/tari-project/bulletproofs-plus/blob/d9d0cc9063f85684179908569227dda251981751/src/inner_product_round.rs/issues/L111-L112) [#61](https://github.com/tari-project/bulletproofs-plus/issues/61) [#55](https://github.com/tari-project/bulletproofs-plus/issues/55) [#56](https://github.com/tari-project/bulletproofs-plus/issues/56)
+* remove partial precomputation ([#129](https://github.com/tari-project/bulletproofs-plus/issues/129)) ([58409fa](https://github.com/tari-project/bulletproofs-plus/commit/58409fae76b9fcc17761b51052a2b200b6939127)), closes [#128](https://github.com/tari-project/bulletproofs-plus/issues/128) [#93](https://github.com/tari-project/bulletproofs-plus/issues/93) [#96](https://github.com/tari-project/bulletproofs-plus/issues/96)
+* remove verifier RNG requirement ([#116](https://github.com/tari-project/bulletproofs-plus/issues/116)) ([8759a59](https://github.com/tari-project/bulletproofs-plus/commit/8759a59a1feaa9b4ae99475e107e49f7a0ca8ff5)), closes [#110](https://github.com/tari-project/bulletproofs-plus/issues/110)
+* replace `lazy_static` with `once_cell` ([#69](https://github.com/tari-project/bulletproofs-plus/issues/69)) ([e01c380](https://github.com/tari-project/bulletproofs-plus/commit/e01c380186111c1fbe3fba213d1b492beff11b9d)), closes [/github.com/tari-project/bulletproofs-plus/blob/502ae9fa35a39afc5793210e4301023a7ca7ea60/src/ristretto.rs#L154-L179](https://github.com/tari-project//github.com/tari-project/bulletproofs-plus/blob/502ae9fa35a39afc5793210e4301023a7ca7ea60/src/ristretto.rs/issues/L154-L179) [#67](https://github.com/tari-project/bulletproofs-plus/issues/67)
+* simplify dependencies ([#105](https://github.com/tari-project/bulletproofs-plus/issues/105)) ([21601db](https://github.com/tari-project/bulletproofs-plus/commit/21601dbffce6b4d46c0fcd926034c21dff659b62)), closes [#104](https://github.com/tari-project/bulletproofs-plus/issues/104) [#104](https://github.com/tari-project/bulletproofs-plus/issues/104)
+* support `no-std` environments ([#107](https://github.com/tari-project/bulletproofs-plus/issues/107)) ([bce16c4](https://github.com/tari-project/bulletproofs-plus/commit/bce16c4f8a7dbdc5cb7792ad2d99df495ad2e95c))
+* use Merlin's `TranscriptRng` for random number generation ([6f1aab6](https://github.com/tari-project/bulletproofs-plus/commit/6f1aab69942f04ec6c81263d9e173fe06eb009e6))
+* use transcript composition ([#115](https://github.com/tari-project/bulletproofs-plus/issues/115)) ([6be2bda](https://github.com/tari-project/bulletproofs-plus/commit/6be2bda1dfe13b6e14ea14ac58e28250051640ef)), closes [/github.com/tari-project/bulletproofs-plus/blob/da71f7872f02a0e9d3000c316bb083181daa9942/src/transcripts.rs#L72](https://github.com/tari-project//github.com/tari-project/bulletproofs-plus/blob/da71f7872f02a0e9d3000c316bb083181daa9942/src/transcripts.rs/issues/L72) [#114](https://github.com/tari-project/bulletproofs-plus/issues/114)
+
+
+### Bug Fixes
+
+* add check for unused deserialization data ([#83](https://github.com/tari-project/bulletproofs-plus/issues/83)) ([55191b8](https://github.com/tari-project/bulletproofs-plus/commit/55191b83fddfca46f55205b49b7b90768d884392)), closes [/github.com/tari-project/bulletproofs-plus/blob/e01c380186111c1fbe3fba213d1b492beff11b9d/src/range_proof.rs#L1017-L1020](https://github.com/tari-project//github.com/tari-project/bulletproofs-plus/blob/e01c380186111c1fbe3fba213d1b492beff11b9d/src/range_proof.rs/issues/L1017-L1020) [#82](https://github.com/tari-project/bulletproofs-plus/issues/82)
+* add missing dollar sign ([#121](https://github.com/tari-project/bulletproofs-plus/issues/121)) ([f9fec4d](https://github.com/tari-project/bulletproofs-plus/commit/f9fec4d99ee377d9decde1360b0608e6d8a7ec7b))
+* audit updates ([#87](https://github.com/tari-project/bulletproofs-plus/issues/87)) ([5b87644](https://github.com/tari-project/bulletproofs-plus/commit/5b8764421447a935416b2336915740e866d514cf))
+* clean up getter functions and remove clones ([#63](https://github.com/tari-project/bulletproofs-plus/issues/63)) ([502ae9f](https://github.com/tari-project/bulletproofs-plus/commit/502ae9fa35a39afc5793210e4301023a7ca7ea60))
+* don't panic on inconsistent generators ([#100](https://github.com/tari-project/bulletproofs-plus/issues/100)) ([1f5c8a0](https://github.com/tari-project/bulletproofs-plus/commit/1f5c8a0cd1de5ec5c4322b5bbee11e1dd51fcf25)), closes [#99](https://github.com/tari-project/bulletproofs-plus/issues/99)
+* improve prover consistency checks ([#98](https://github.com/tari-project/bulletproofs-plus/issues/98)) ([09ac06c](https://github.com/tari-project/bulletproofs-plus/commit/09ac06c1ca06a4000186ad3e4ce8cae996adb2bc)), closes [#97](https://github.com/tari-project/bulletproofs-plus/issues/97)
+* pin nightly version on source cov workflow ([#120](https://github.com/tari-project/bulletproofs-plus/issues/120)) ([1aa7694](https://github.com/tari-project/bulletproofs-plus/commit/1aa769490ba96ba8d56e102b5cf079ba091134a9))
+* prover cleanup ([#89](https://github.com/tari-project/bulletproofs-plus/issues/89)) ([7da7bbc](https://github.com/tari-project/bulletproofs-plus/commit/7da7bbc8fb0a5f7e1f6e023012a1a425822cbd83)), closes [#88](https://github.com/tari-project/bulletproofs-plus/issues/88)
+* reduce verification vector allocation ([#127](https://github.com/tari-project/bulletproofs-plus/issues/127)) ([6c4bfe0](https://github.com/tari-project/bulletproofs-plus/commit/6c4bfe01b1f835a669d8e58790c8e01051290294)), closes [#126](https://github.com/tari-project/bulletproofs-plus/issues/126)
+* update source coverage script ([#122](https://github.com/tari-project/bulletproofs-plus/issues/122)) ([e902989](https://github.com/tari-project/bulletproofs-plus/commit/e90298906f7709aa1ce913d8e4abb605d3279ed8))
+* verifier overflow checks ([#62](https://github.com/tari-project/bulletproofs-plus/issues/62)) ([e71a275](https://github.com/tari-project/bulletproofs-plus/commit/e71a27505b7e0c7e288456bbf37e8a5997c86c18)), closes [#60](https://github.com/tari-project/bulletproofs-plus/issues/60) [#60](https://github.com/tari-project/bulletproofs-plus/issues/60)
+
+
+* clean up `ExtensionDegree` ([#85](https://github.com/tari-project/bulletproofs-plus/issues/85)) ([da57859](https://github.com/tari-project/bulletproofs-plus/commit/da57859f8eac1596fb025223ab1897d2814e90ff))
+* unused method cleanup ([#90](https://github.com/tari-project/bulletproofs-plus/issues/90)) ([48da00a](https://github.com/tari-project/bulletproofs-plus/commit/48da00aa3430af61b3f72ed15554e7638ac411d0)), closes [#87](https://github.com/tari-project/bulletproofs-plus/issues/87)
+
 ### [0.3.2](https://github.com/tari-project/bulletproofs-plus/compare/v0.3.1...v0.3.2) (2023-08-07)
 
 
