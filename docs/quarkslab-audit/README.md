@@ -66,3 +66,5 @@ As the implementation is updated, existing and future such warnings will be care
 Additionally, the implementation's CI workflow already included a [list](https://github.com/tari-project/bulletproofs-plus/blob/main/lints.toml) of lints that are automatically flagged during the development process.
 This list has been expanded in order to better identify coding practices that could introduce problems.
 We note that the arithmetic side-effect lint in question has not been added to this list, as it flags curve-related operations that are not at risk of unintended behavior.
+
+*Update*: The arithmetic side-effect lint has been added.
