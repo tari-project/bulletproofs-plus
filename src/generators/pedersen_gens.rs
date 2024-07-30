@@ -21,7 +21,6 @@ use crate::{errors::ProofError, traits::Compressable};
 ///
 /// * `h_base`: the curve basepoint;
 /// * `g_base_vec`: the result of domain separated SHA3-512 (hash of unique indexed strings)
-/// hash-to-group on input `B_bytes`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PedersenGens<P: Compressable> {
     /// Base for the committed value

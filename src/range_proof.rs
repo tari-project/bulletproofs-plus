@@ -37,7 +37,7 @@ use crate::{
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
     transcripts::RangeProofTranscript,
     utils::{
-        generic::{compute_generator_padding, nonce, split_at_checked},
+        generic::{compute_generator_padding, nonce},
         nullrng::NullRng,
     },
 };
@@ -410,10 +410,18 @@ where
             n /= 2;
 
             // Split the vectors for folding
-            let (a_lo, a_hi) = split_at_checked(&a_li, n)?;
-            let (b_lo, b_hi) = split_at_checked(&a_ri, n)?;
-            let (gi_base_lo, gi_base_hi) = split_at_checked(&gi_base, n)?;
-            let (hi_base_lo, hi_base_hi) = split_at_checked(&hi_base, n)?;
+            let (a_lo, a_hi) = a_li
+                .split_at_checked(n)
+                .ok_or(ProofError::InvalidLength("Invalid vector split index".to_string()))?;
+            let (b_lo, b_hi) = a_ri
+                .split_at_checked(n)
+                .ok_or(ProofError::InvalidLength("Invalid vector split index".to_string()))?;
+            let (gi_base_lo, gi_base_hi) = gi_base
+                .split_at_checked(n)
+                .ok_or(ProofError::InvalidLength("Invalid vector split index".to_string()))?;
+            let (hi_base_lo, hi_base_hi) = hi_base
+                .split_at_checked(n)
+                .ok_or(ProofError::InvalidLength("Invalid vector split index".to_string()))?;
 
             let y_n_inverse = if y_powers[n] == Scalar::ZERO {
                 return Err(ProofError::InvalidArgument(
