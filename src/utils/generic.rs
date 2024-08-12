@@ -59,15 +59,6 @@ pub fn nonce(
     Ok(Scalar::from_hasher_blake2b(hasher))
 }
 
-/// Split a vector, checking the bound to avoid a panic
-pub fn split_at_checked<T>(vec: &[T], n: usize) -> Result<(&[T], &[T]), ProofError> {
-    if n <= vec.len() {
-        Ok(vec.split_at(n))
-    } else {
-        Err(ProofError::InvalidLength("Invalid vector split index".to_string()))
-    }
-}
-
 /// Compute the padding needed for generator vectors
 pub fn compute_generator_padding(
     bit_length: usize,
@@ -92,7 +83,7 @@ pub fn compute_generator_padding(
 
 #[cfg(test)]
 mod tests {
-    use alloc::{vec, vec::Vec};
+    use alloc::vec;
 
     use curve25519_dalek::scalar::Scalar;
     use rand_chacha::ChaCha12Rng;
@@ -111,36 +102,6 @@ mod tests {
         // Invalid
         assert!(compute_generator_padding(64, 2, 1).is_err());
         assert!(compute_generator_padding(64, usize::MAX - 1, usize::MAX).is_err());
-    }
-
-    #[test]
-    fn test_split() {
-        // Check valid splits
-        let v = vec![0u8, 1u8, 2u8];
-        let (l, r) = split_at_checked(&v, 0).unwrap();
-        assert_eq!(l, Vec::<u8>::new());
-        assert_eq!(r, vec![0u8, 1u8, 2u8]);
-
-        let (l, r) = split_at_checked(&v, 1).unwrap();
-        assert_eq!(l, vec![0u8]);
-        assert_eq!(r, vec![1u8, 2u8]);
-
-        let (l, r) = split_at_checked(&v, 2).unwrap();
-        assert_eq!(l, vec![0u8, 1u8]);
-        assert_eq!(r, vec![2u8]);
-
-        let (l, r) = split_at_checked(&v, 3).unwrap();
-        assert_eq!(l, vec![0u8, 1u8, 2u8]);
-        assert_eq!(r, Vec::<u8>::new());
-
-        // Check invalid split
-        assert!(split_at_checked(&v, 4).is_err());
-
-        // Split an empty vector
-        let v = Vec::<u8>::new();
-        let (l, r) = split_at_checked(&v, 0).unwrap();
-        assert_eq!(l, Vec::<u8>::new());
-        assert_eq!(r, Vec::<u8>::new());
     }
 
     #[test]
