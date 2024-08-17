@@ -36,10 +36,7 @@ use crate::{
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
     transcripts::RangeProofTranscript,
-    utils::{
-        generic::nonce,
-        nullrng::NullRng,
-    },
+    utils::{generic::nonce, nullrng::NullRng},
 };
 
 /// Optionally extract masks when verifying the proofs
