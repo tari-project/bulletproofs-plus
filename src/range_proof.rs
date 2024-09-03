@@ -1337,11 +1337,11 @@ mod tests {
         assert!((RistrettoRangeProof::from_bytes(&[])).is_err());
         assert!((RistrettoRangeProof::from_bytes(Scalar::ZERO.as_bytes().as_slice())).is_err());
         let proof = RistrettoRangeProof {
-            a: Default::default(),
-            a1: Default::default(),
-            b: Default::default(),
-            r1: Default::default(),
-            s1: Default::default(),
+            a: CompressedRistretto::identity(),
+            a1: CompressedRistretto::identity(),
+            b: CompressedRistretto::identity(),
+            r1: Scalar::ZERO,
+            s1: Scalar::ZERO,
             d1: vec![],
             li: vec![],
             ri: vec![],
@@ -1351,14 +1351,14 @@ mod tests {
         assert!(RistrettoRangeProof::from_bytes(&proof_bytes).is_err());
 
         let proof = RistrettoRangeProof {
-            a: Default::default(),
-            a1: Default::default(),
-            b: Default::default(),
-            r1: Default::default(),
-            s1: Default::default(),
-            d1: vec![Scalar::default()],
-            li: vec![CompressedRistretto::default()],
-            ri: vec![CompressedRistretto::default()],
+            a: CompressedRistretto::identity(),
+            a1: CompressedRistretto::identity(),
+            b: CompressedRistretto::identity(),
+            r1: Scalar::ZERO,
+            s1: Scalar::ZERO,
+            d1: vec![Scalar::ZERO],
+            li: vec![CompressedRistretto::identity()],
+            ri: vec![CompressedRistretto::identity()],
             extension_degree: ExtensionDegree::DefaultPedersen,
         };
         let proof_bytes = proof.to_bytes();
@@ -1370,21 +1370,21 @@ mod tests {
         );
 
         let proof = RistrettoRangeProof {
-            a: Default::default(),
-            a1: Default::default(),
-            b: Default::default(),
-            r1: Default::default(),
-            s1: Default::default(),
+            a: CompressedRistretto::identity(),
+            a1: CompressedRistretto::identity(),
+            b: CompressedRistretto::identity(),
+            r1: Scalar::ZERO,
+            s1: Scalar::ZERO,
             d1: vec![
-                Scalar::default(),
-                Scalar::default(),
-                Scalar::default(),
-                Scalar::default(),
-                Scalar::default(),
-                Scalar::default(),
+                Scalar::ZERO,
+                Scalar::ZERO,
+                Scalar::ZERO,
+                Scalar::ZERO,
+                Scalar::ZERO,
+                Scalar::ZERO,
             ],
-            li: vec![CompressedRistretto::default()],
-            ri: vec![CompressedRistretto::default()],
+            li: vec![CompressedRistretto::identity()],
+            ri: vec![CompressedRistretto::identity()],
             extension_degree: ExtensionDegree::AddFiveBasePoints,
         };
         let proof_bytes = proof.to_bytes();
@@ -1492,7 +1492,7 @@ mod tests {
 
         // Make the second statement's `g_base_vec` mismatch against the first statement
         let mut gens_mismatch = create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen);
-        gens_mismatch.g_base_vec[0] = RistrettoPoint::default();
+        gens_mismatch.g_base_vec[0] = RistrettoPoint::identity();
         let params_mismatch = RangeParameters::init(4, 1, gens_mismatch).unwrap();
         let statement_mismatch = RangeStatement::init(
             params_mismatch.clone(),
@@ -1509,7 +1509,7 @@ mod tests {
 
         // Make the second statement's `h_base` mismatch against the first statement
         let mut gens_mismatch = create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen);
-        gens_mismatch.h_base = RistrettoPoint::default();
+        gens_mismatch.h_base = RistrettoPoint::identity();
         let params_mismatch = RangeParameters::init(4, 1, gens_mismatch).unwrap();
         let statement_mismatch = RangeStatement::init(
             params_mismatch.clone(),
@@ -1577,7 +1577,7 @@ mod tests {
 
         // Make the second statement's `gi_base` mismatch against the first statement
         let mut gens_mismatch = BulletproofGens::new(4, 1).unwrap();
-        gens_mismatch.g_vec[0][0] = RistrettoPoint::default();
+        gens_mismatch.g_vec[0][0] = RistrettoPoint::identity();
         let params_mismatch = RangeParameters {
             bp_gens: gens_mismatch,
             pc_gens: create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
@@ -1597,7 +1597,7 @@ mod tests {
 
         // Make the second statement's `hi_base` mismatch against the first statement
         let mut gens_mismatch = BulletproofGens::new(4, 1).unwrap();
-        gens_mismatch.h_vec[0][0] = RistrettoPoint::default();
+        gens_mismatch.h_vec[0][0] = RistrettoPoint::identity();
         let params_mismatch = RangeParameters {
             bp_gens: gens_mismatch,
             pc_gens: create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),

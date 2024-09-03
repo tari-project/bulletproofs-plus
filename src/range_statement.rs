@@ -84,7 +84,7 @@ impl<P: Compressable + Precomputable> Drop for RangeStatement<P> {
 mod test {
     use alloc::vec;
 
-    use curve25519_dalek::RistrettoPoint;
+    use curve25519_dalek::{traits::Identity, RistrettoPoint};
 
     use super::*;
     use crate::{
@@ -95,7 +95,7 @@ mod test {
 
     #[test]
     fn test_init_errors() {
-        let p = RistrettoPoint::default();
+        let p = RistrettoPoint::identity();
 
         // Set up parameters
         let params = RangeParameters::init(
