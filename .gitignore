@@ -5,3 +5,6 @@ Cargo.lock
 cov_raw/
 coverage_report/
 *.profraw
+
+# OSX files
+.DS_Store
