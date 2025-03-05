@@ -1,0 +1,33 @@
+
+# cargo-vet audits file
+
+[[audits.serde]]
+who = "stringhandler <stringhandler@protonmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.217 -> 1.0.218"
+notes = "This was only documentation updates"
+
+[[audits.serde_derive]]
+who = "stringhandler <stringhandler@protonmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.217 -> 1.0.218"
+
+
+[[audits.tari_bulletproofs_plus]]
+who = "stringhandler <stringhandler@protonmail.com>"
+criteria = "safe-to-deploy"
+version = "0.3.2"
+notes = "Audit done by [Quarkslab](https://www.quarkslab.com/), included in source under /docs/quarkslab-audit"
+
+
+[[audits.tari_bulletproofs_plus]]
+who = "stringhandler <stringhandler@protonmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.3.2 -> 0.4.0"
+notes = "I can't audit the cryptographic correctness, but the code was primarily done by cryptograher Aaron Feickert"
+
+[[audits.unicode-ident]]
+who = "stringhandler <stringhandler@protonmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.16 -> 1.0.18"
+notes = "Documentation updates"
