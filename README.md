@@ -20,7 +20,7 @@ Compared to an [updated fork](https://github.com/tari-project/bulletproofs) of t
 - **Smaller**. Regardless of the aggregation factor, a Bulletproofs+ proof is 96 bytes shorter.
 - **Faster to generate proofs**. This implementation generates a non-aggregated 64-bit range proof about 10% faster, with similar speedups for aggregated proofs.
 - **Faster to verify single proofs**. This implementation verifies a single 64-bit range proof about 15% faster.
-- **Slower to verify aggregated proofs**. This implementaiton verifies aggregated proofs more slowly.
+- **Slower to verify aggregated proofs**. This implementation verifies aggregated proofs more slowly.
 - **Faster to verify batched proofs**. Because this implementation supports batching, its marginal verification time for a single 64-bit range proof can be reduced to under half the corresponding non-batched time.
 
 As always, your mileage may vary.
