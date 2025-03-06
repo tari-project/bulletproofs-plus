@@ -10,6 +10,7 @@ use alloc::{borrow::ToOwned, string::ToString, vec::Vec};
 use curve25519_dalek::{
     constants::{RISTRETTO_BASEPOINT_COMPRESSED, RISTRETTO_BASEPOINT_POINT},
     ristretto::{CompressedRistretto, RistrettoPoint, VartimeRistrettoPrecomputation},
+    traits::Identity,
 };
 use once_cell::sync::OnceCell;
 
@@ -87,7 +88,7 @@ fn get_g_base(extension_degree: ExtensionDegree) -> (Vec<RistrettoPoint>, Vec<Co
 fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::COUNT] {
     static INSTANCE: OnceCell<[RistrettoPoint; ExtensionDegree::COUNT]> = OnceCell::new();
     INSTANCE.get_or_init(|| {
-        let mut arr = [RistrettoPoint::default(); ExtensionDegree::COUNT];
+        let mut arr = [RistrettoPoint::identity(); ExtensionDegree::COUNT];
         for (i, point) in (ExtensionDegree::MINIMUM..).zip(arr.iter_mut()) {
             let label = "RISTRETTO_MASKING_BASEPOINT_".to_owned() + &i.to_string();
             *point = RistrettoPoint::hash_from_bytes_sha3_512(label.as_bytes());
@@ -101,7 +102,7 @@ fn ristretto_masking_basepoints() -> &'static [RistrettoPoint; ExtensionDegree::
 fn ristretto_compressed_masking_basepoints() -> &'static [CompressedRistretto; ExtensionDegree::COUNT] {
     static INSTANCE: OnceCell<[CompressedRistretto; ExtensionDegree::COUNT]> = OnceCell::new();
     INSTANCE.get_or_init(|| {
-        let mut arr = [CompressedRistretto::default(); ExtensionDegree::COUNT];
+        let mut arr = [CompressedRistretto::identity(); ExtensionDegree::COUNT];
         for (i, point) in ristretto_masking_basepoints().iter().enumerate() {
             arr[i] = point.compress();
         }
