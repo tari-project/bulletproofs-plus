@@ -11,6 +11,7 @@ use core::{
     iter::{once, repeat},
     marker::PhantomData,
     ops::{Add, Mul, Shr},
+    slice,
     slice::ChunksExact,
 };
 
@@ -749,6 +750,122 @@ where
         }
 
         Ok(masks)
+    }
+
+    /// Verify a batch of proofs.
+    /// If verification fails, this performs a binary search to identify the first failing proof in the batch and
+    /// returns an error containing its index. If something goes wrong internally, returns `Err(None)`.
+    ///
+    /// If initial verification of the entire batch fails, this performs a number of subsequent batch verifications that
+    /// is logarithmic in the number of proofs. Note that this cannot tell if a batch contains multiple failing
+    /// proofs, or just one!
+    pub fn verify_batch_with_first_blame(
+        transcripts: &mut [Transcript],
+        statements: &[RangeStatement<P>],
+        proofs: &[RangeProof<P>],
+        action: VerifyAction,
+    ) -> Result<Vec<Option<ExtendedMask>>, Option<usize>> {
+        // Try to verify the entire batch
+        if let Ok(masks) = Self::verify_batch(&mut transcripts.to_vec(), statements, proofs, action) {
+            return Ok(masks);
+        }
+
+        // The batch failed, so perform a binary search to identify the first failing proof
+        let mut left = 0;
+        let mut right = proofs.len();
+
+        while left < right {
+            #[allow(clippy::arithmetic_side_effects)]
+            let average = left
+                .checked_add(
+                    // This cannot underflow since `left < right`
+                    (right - left) / 2,
+                )
+                .ok_or(None)?;
+
+            #[allow(clippy::arithmetic_side_effects)]
+            // This cannot underflow since `left < right`
+            let mid = if (right - left) % 2 == 0 {
+                average
+            } else {
+                average.checked_add(1).ok_or(None)?
+            };
+
+            // Which side is the failure on?
+            let failure_on_left = Self::verify_batch(
+                &mut transcripts.to_vec()[left..mid],
+                &statements[left..mid],
+                &proofs[left..mid],
+                action,
+            )
+            .is_err();
+
+            if failure_on_left {
+                let left_check = mid.checked_sub(1).ok_or(None)?;
+
+                // Are we done?
+                if left == left_check {
+                    return Err(Some(left));
+                }
+
+                // Discard the right side and continue
+                right = mid;
+            } else {
+                let right_check = mid.checked_add(1).ok_or(None)?;
+
+                // Are we done?
+                if right == right_check {
+                    return Err(Some(right));
+                }
+
+                // Discard the left side and continue
+                left = mid;
+            }
+        }
+
+        // We should never get here! If we do, something has gone wrong unexpectedly
+        Err(None)
+    }
+
+    /// Verify a batch of proofs.
+    /// If verification fails, this verifies each proof in the batch separately and returns an error containing the
+    /// indexes of all failing proofs. If something goes wrong internally, returns `Err(None)`.
+    ///
+    /// If initial verification of the entire batch fails, this performs a subsequent number of verifications that is
+    /// linear in the number of proofs.
+    pub fn verify_batch_with_full_blame(
+        transcripts: &mut [Transcript],
+        statements: &[RangeStatement<P>],
+        proofs: &[RangeProof<P>],
+        action: VerifyAction,
+    ) -> Result<Vec<Option<ExtendedMask>>, Option<Vec<usize>>> {
+        // Try to verify the entire batch
+        if let Ok(masks) = Self::verify_batch(&mut transcripts.to_vec(), statements, proofs, action) {
+            return Ok(masks);
+        }
+
+        let mut failures = Vec::with_capacity(proofs.len());
+
+        // If the batch fails, verify all proofs and identify failures
+        for (index, (transcript, proof, statement)) in izip!(transcripts.iter_mut(), proofs, statements).enumerate() {
+            if Self::verify_batch(
+                slice::from_mut(transcript),
+                slice::from_ref(statement),
+                slice::from_ref(proof),
+                action,
+            )
+            .is_err()
+            {
+                failures.push(index);
+            }
+        }
+
+        // Ensure that we have found at least one failed proof; otherwise, something has gone wrong unexpectedly
+        if failures.is_empty() {
+            return Err(None);
+        }
+
+        Err(Some(failures))
     }
 
     // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
