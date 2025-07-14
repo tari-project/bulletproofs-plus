@@ -843,7 +843,10 @@ where
 
             // Use the transcript RNG to bind this proof to the weight transcript
             let mut transcript_rng = transcript.to_verifier_rng(&proof.r1, &proof.s1, &proof.d1);
-            weight_transcript.append_u64(b"proof", transcript_rng.as_rngcore().next_u64());
+            let mut bytes = vec![0u8; 32];
+            let transcript_rng = transcript_rng.as_rngcore();
+            transcript_rng.fill_bytes(&mut bytes);
+            weight_transcript.append_message(b"proof", &bytes);
         }
 
         // Finalize the weight transcript so it can be used for pseudorandom weights
