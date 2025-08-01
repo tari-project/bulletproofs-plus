@@ -9,7 +9,8 @@ description = "A smaller faster implementation of Bulletproofs"
 [dependencies]
 blake2 = { version = "0.10", default-features = false }
 byteorder = { version = "1", default-features = false }
-curve25519-dalek = { version = "4.1", default-features = false, features = ["alloc", "group", "rand_core", "serde", "zeroize"] }
+# TODO: switch this to a tagged version when released
+curve25519-dalek = { git = "https://github.com/dalek-cryptography/curve25519-dalek", default-features = false, features = ["alloc", "group", "rand_core", "serde", "zeroize"] }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
 ff = { version = "0.13.0", default-features = false }
 itertools = { version = "0.12", default-features = false, features = ["use_alloc"] }

@@ -8,7 +8,7 @@
 use alloc::{string::ToString, vec, vec::Vec};
 use core::{
     convert::{TryFrom, TryInto},
-    iter::{once, repeat},
+    iter::once,
     marker::PhantomData,
     ops::{Add, Mul, Shr},
     slice::ChunksExact,
@@ -36,10 +36,7 @@ use crate::{
     range_witness::RangeWitness,
     traits::{Compressable, Decompressable, FixedBytesRepr, Precomputable},
     transcripts::RangeProofTranscript,
-    utils::{
-        generic::{compute_generator_padding, nonce},
-        nullrng::NullRng,
-    },
+    utils::{generic::nonce, nullrng::NullRng},
 };
 
 /// Optionally extract masks when verifying the proofs
@@ -331,15 +328,8 @@ where
                 Scalar::random_not_zero(range_proof_transcript.as_mut_rng())
             });
         }
-        let padding = compute_generator_padding(
-            statement.generators.bit_length(),
-            statement.commitments.len(),
-            statement.generators.max_aggregation_factor(),
-        )?;
         let a = statement.generators.precomp().vartime_mixed_multiscalar_mul(
-            a_li.iter()
-                .interleave(a_ri.iter())
-                .chain(repeat(&Scalar::ZERO).take(padding)),
+            a_li.iter().interleave(a_ri.iter()),
             alpha.iter(),
             statement.generators.g_bases().iter(),
         );
@@ -1042,16 +1032,8 @@ where
         dynamic_points.push(h_base.clone());
 
         // Perform the final check using precomputation
-        let padding = compute_generator_padding(
-            max_statement.generators.bit_length(),
-            max_statement.commitments.len(),
-            max_statement.generators.max_aggregation_factor(),
-        )?;
         if precomp.vartime_mixed_multiscalar_mul(
-            gi_base_scalars
-                .iter()
-                .interleave(hi_base_scalars.iter())
-                .chain(repeat(&Scalar::ZERO).take(padding)),
+            gi_base_scalars.iter().interleave(hi_base_scalars.iter()),
             dynamic_scalars.iter(),
             dynamic_points.iter(),
         ) != P::identity()
