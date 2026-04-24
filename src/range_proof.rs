@@ -8,7 +8,7 @@
 use alloc::{string::ToString, vec, vec::Vec};
 use core::{
     convert::{TryFrom, TryInto},
-    iter::{once, repeat},
+    iter::{once, repeat_n},
     marker::PhantomData,
     ops::{Add, Mul, Shr},
     slice::ChunksExact,
@@ -19,12 +19,14 @@ use curve25519_dalek::{
     traits::{Identity, IsIdentity, MultiscalarMul, VartimePrecomputedMultiscalarMul},
 };
 use ff::Field;
-use itertools::{izip, Itertools};
-use merlin::Transcript;
-use rand_core::CryptoRngCore;
 #[cfg(feature = "rand")]
-use rand_core::OsRng;
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+use getrandom::SysRng;
+use itertools::{Itertools, izip};
+#[cfg(feature = "rand")]
+use rand_core::UnwrapErr;
+use rand_core::{CryptoRng, Rng};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
+use tari_merlin::Transcript;
 use zeroize::Zeroizing;
 
 use crate::{
@@ -87,9 +89,9 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 /// # Example
 /// ```
 /// use curve25519_dalek::scalar::Scalar;
-/// use merlin::Transcript;
+/// use tari_merlin::Transcript;
 /// #[cfg(feature = "rand")]
-/// use rand_core::OsRng;
+/// use getrandom::{rand_core::UnwrapErr, SysRng};
 /// # fn main() {
 /// #[cfg(feature = "rand")]
 /// # {
@@ -106,7 +108,7 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 ///     ristretto,
 ///     ristretto::RistrettoRangeProof,
 /// };
-/// let mut rng = OsRng;
+/// let mut rng = UnwrapErr(SysRng);
 /// let transcript_label: &'static str = "BatchedRangeProofTest";
 /// let bit_length = 64; // Other powers of two are permissible up to 2^6 = 64
 ///
@@ -203,7 +205,6 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 /// # }
 /// # }
 /// ```
-
 impl<P> RangeProof<P>
 where
     for<'p> &'p P: Mul<Scalar, Output = P>,
@@ -224,12 +225,12 @@ where
         statement: &RangeStatement<P>,
         witness: &RangeWitness,
     ) -> Result<Self, ProofError> {
-        Self::prove_with_rng(transcript, statement, witness, &mut OsRng)
+        Self::prove_with_rng(transcript, statement, witness, &mut UnwrapErr(SysRng))
     }
 
     /// Create a single or aggregated range proof for a single party that knows all the secrets
     /// The prover must ensure that the commitments and witness opening data are consistent
-    pub fn prove_with_rng<R: CryptoRngCore>(
+    pub fn prove_with_rng<R: CryptoRng>(
         transcript: &mut Transcript,
         statement: &RangeStatement<P>,
         witness: &RangeWitness,
@@ -339,7 +340,7 @@ where
         let a = statement.generators.precomp().vartime_mixed_multiscalar_mul(
             a_li.iter()
                 .interleave(a_ri.iter())
-                .chain(repeat(&Scalar::ZERO).take(padding)),
+                .chain(repeat_n(&Scalar::ZERO, padding)),
             alpha.iter(),
             statement.generators.g_bases().iter(),
         );
@@ -844,7 +845,6 @@ where
             // Use the transcript RNG to bind this proof to the weight transcript
             let mut transcript_rng = transcript.to_verifier_rng(&proof.r1, &proof.s1, &proof.d1);
             let mut bytes = vec![0u8; 32];
-            let transcript_rng = transcript_rng.as_rngcore();
             transcript_rng.fill_bytes(&mut bytes);
             weight_transcript.append_message(b"proof", &bytes);
         }
@@ -896,7 +896,7 @@ where
             // Compute challenge inverses in a batch
             let mut challenges_inv = challenges.clone();
             challenges_inv.extend_from_slice(&[y, y - Scalar::ONE]);
-            let challenges_inv_prod = Scalar::batch_invert(&mut challenges_inv) * y * (y - Scalar::ONE);
+            let challenges_inv_prod = Scalar::invert_batch_alloc(&mut challenges_inv) * y * (y - Scalar::ONE);
             let y_1_inverse = challenges_inv
                 .pop()
                 .ok_or(ProofError::VerificationFailed("Unexpected vector error".to_string()))?;
@@ -1051,7 +1051,7 @@ where
             gi_base_scalars
                 .iter()
                 .interleave(hi_base_scalars.iter())
-                .chain(repeat(&Scalar::ZERO).take(padding)),
+                .chain(repeat_n(&Scalar::ZERO, padding)),
             dynamic_scalars.iter(),
             dynamic_points.iter(),
         ) != P::identity()
@@ -1318,11 +1318,11 @@ mod tests {
 
     use super::*;
     use crate::{
+        BulletproofGens,
         commitment_opening::CommitmentOpening,
         generators::pedersen_gens::ExtensionDegree,
         range_parameters::RangeParameters,
-        ristretto::{create_pedersen_gens_with_extension_degree, RistrettoRangeProof},
-        BulletproofGens,
+        ristretto::{RistrettoRangeProof, create_pedersen_gens_with_extension_degree},
     };
 
     #[test]
@@ -1504,11 +1504,13 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::verify_statements_and_generators_consistency(
-            &[statements[0].clone(), statement_mismatch],
-            &proofs
-        )
-        .is_err());
+        assert!(
+            RangeProof::verify_statements_and_generators_consistency(
+                &[statements[0].clone(), statement_mismatch],
+                &proofs
+            )
+            .is_err()
+        );
 
         // Make the second statement's `h_base` mismatch against the first statement
         let mut gens_mismatch = create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen);
@@ -1521,11 +1523,13 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::verify_statements_and_generators_consistency(
-            &[statements[0].clone(), statement_mismatch],
-            &proofs
-        )
-        .is_err());
+        assert!(
+            RangeProof::verify_statements_and_generators_consistency(
+                &[statements[0].clone(), statement_mismatch],
+                &proofs
+            )
+            .is_err()
+        );
 
         // Make the second statement's bit length mismatch against the first statement
         let params_mismatch = RangeParameters::init(
@@ -1541,11 +1545,13 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::verify_statements_and_generators_consistency(
-            &[statements[0].clone(), statement_mismatch],
-            &proofs
-        )
-        .is_err());
+        assert!(
+            RangeProof::verify_statements_and_generators_consistency(
+                &[statements[0].clone(), statement_mismatch],
+                &proofs
+            )
+            .is_err()
+        );
 
         // Make the second statement's extension degree mismatch against the first statement
         let mut gens_mismatch = create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen);
@@ -1558,11 +1564,13 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::verify_statements_and_generators_consistency(
-            &[statements[0].clone(), statement_mismatch],
-            &proofs
-        )
-        .is_err());
+        assert!(
+            RangeProof::verify_statements_and_generators_consistency(
+                &[statements[0].clone(), statement_mismatch],
+                &proofs
+            )
+            .is_err()
+        );
 
         // Use a minimum value promise exceeding the bit length
         let statement_invalid = RangeStatement::init(
@@ -1572,11 +1580,13 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::verify_statements_and_generators_consistency(
-            &[statements[0].clone(), statement_invalid],
-            &proofs
-        )
-        .is_err());
+        assert!(
+            RangeProof::verify_statements_and_generators_consistency(
+                &[statements[0].clone(), statement_invalid],
+                &proofs
+            )
+            .is_err()
+        );
 
         // Make the second statement's `gi_base` mismatch against the first statement
         let mut gens_mismatch = BulletproofGens::new(4, 1).unwrap();
@@ -1592,11 +1602,13 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::verify_statements_and_generators_consistency(
-            &[statements[0].clone(), statement_mismatch],
-            &proofs
-        )
-        .is_err());
+        assert!(
+            RangeProof::verify_statements_and_generators_consistency(
+                &[statements[0].clone(), statement_mismatch],
+                &proofs
+            )
+            .is_err()
+        );
 
         // Make the second statement's `hi_base` mismatch against the first statement
         let mut gens_mismatch = BulletproofGens::new(4, 1).unwrap();
@@ -1612,11 +1624,13 @@ mod tests {
             None,
         )
         .unwrap();
-        assert!(RangeProof::verify_statements_and_generators_consistency(
-            &[statements[0].clone(), statement_mismatch],
-            &proofs
-        )
-        .is_err());
+        assert!(
+            RangeProof::verify_statements_and_generators_consistency(
+                &[statements[0].clone(), statement_mismatch],
+                &proofs
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -1702,10 +1716,12 @@ mod tests {
         let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE, Scalar::ONE])]).unwrap();
         let statement = RangeStatement::init(
             params.clone(),
-            vec![params
-                .pc_gens
-                .commit(&Scalar::from(1u64), &witness.openings[0].r[..1])
-                .unwrap()],
+            vec![
+                params
+                    .pc_gens
+                    .commit(&Scalar::from(1u64), &witness.openings[0].r[..1])
+                    .unwrap(),
+            ],
             vec![None],
             None,
         )
@@ -1716,10 +1732,12 @@ mod tests {
         let witness = RangeWitness::init(vec![CommitmentOpening::new(16u64, vec![Scalar::ONE])]).unwrap();
         let statement = RangeStatement::init(
             params.clone(),
-            vec![params
-                .pc_gens
-                .commit(&Scalar::from(16u64), &witness.openings[0].r)
-                .unwrap()],
+            vec![
+                params
+                    .pc_gens
+                    .commit(&Scalar::from(16u64), &witness.openings[0].r)
+                    .unwrap(),
+            ],
             vec![None],
             None,
         )
@@ -1730,10 +1748,12 @@ mod tests {
         let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
         let statement = RangeStatement::init(
             params.clone(),
-            vec![params
-                .pc_gens
-                .commit(&Scalar::from(2u64), &(witness.openings[0].r))
-                .unwrap()],
+            vec![
+                params
+                    .pc_gens
+                    .commit(&Scalar::from(2u64), &(witness.openings[0].r))
+                    .unwrap(),
+            ],
             vec![None],
             None,
         )
@@ -1744,10 +1764,12 @@ mod tests {
         let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
         let statement = RangeStatement::init(
             params.clone(),
-            vec![params
-                .pc_gens
-                .commit(&Scalar::from(1u64), &(witness.openings[0].r))
-                .unwrap()],
+            vec![
+                params
+                    .pc_gens
+                    .commit(&Scalar::from(1u64), &(witness.openings[0].r))
+                    .unwrap(),
+            ],
             vec![Some(2u64)],
             None,
         )
@@ -1779,32 +1801,38 @@ mod tests {
 
         // Empty statement and proof vectors
         assert!(RangeProof::verify_batch(&mut [], &[], &[proof.clone()], VerifyAction::VerifyOnly).is_err());
-        assert!(RangeProof::verify_batch(
-            &mut [Transcript::new(b"Test")],
-            &[statement.clone()],
-            &[],
-            VerifyAction::VerifyOnly,
-        )
-        .is_err());
+        assert!(
+            RangeProof::verify_batch(
+                &mut [Transcript::new(b"Test")],
+                core::slice::from_ref(&statement),
+                &[],
+                VerifyAction::VerifyOnly,
+            )
+            .is_err()
+        );
 
         // Proof vector mismatches
         proof.li.pop();
-        assert!(RangeProof::verify_batch(
-            &mut [Transcript::new(b"Test")],
-            &[statement.clone()],
-            &[proof.clone()],
-            VerifyAction::VerifyOnly,
-        )
-        .is_err());
+        assert!(
+            RangeProof::verify_batch(
+                &mut [Transcript::new(b"Test")],
+                core::slice::from_ref(&statement),
+                &[proof.clone()],
+                VerifyAction::VerifyOnly,
+            )
+            .is_err()
+        );
 
         proof.ri.pop();
-        assert!(RangeProof::verify_batch(
-            &mut [Transcript::new(b"Test")],
-            &[statement],
-            &[proof],
-            VerifyAction::VerifyOnly,
-        )
-        .is_err());
+        assert!(
+            RangeProof::verify_batch(
+                &mut [Transcript::new(b"Test")],
+                &[statement],
+                &[proof],
+                VerifyAction::VerifyOnly,
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -1823,10 +1851,12 @@ mod tests {
         let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
         let statement = RangeStatement::init(
             params.clone(),
-            vec![params
-                .pc_gens
-                .commit(&Scalar::from(1u64), &witness.openings[0].r)
-                .unwrap()],
+            vec![
+                params
+                    .pc_gens
+                    .commit(&Scalar::from(1u64), &witness.openings[0].r)
+                    .unwrap(),
+            ],
             vec![None],
             None,
         )

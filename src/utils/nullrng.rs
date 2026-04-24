@@ -3,11 +3,9 @@
 
 //! A null random number generator useful for batch verification.
 
-use rand_core::{
-    impls::{next_u32_via_fill, next_u64_via_fill},
-    CryptoRng,
-    RngCore,
-};
+use core::convert::Infallible;
+
+use rand_core::{TryCryptoRng, TryRng};
 use zeroize::Zeroize;
 
 /// This is a null random number generator that exists only for deterministic transcript-based weight generation.
@@ -15,32 +13,31 @@ use zeroize::Zeroize;
 /// This is DANGEROUS in general; don't use this for any other purpose!
 pub(crate) struct NullRng;
 
-impl RngCore for NullRng {
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        dest.zeroize();
+impl TryRng for NullRng {
+    type Error = Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(0)
     }
 
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        self.fill_bytes(dest);
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(0)
+    }
 
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        dst.zeroize();
         Ok(())
-    }
-
-    fn next_u32(&mut self) -> u32 {
-        next_u32_via_fill(self)
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        next_u64_via_fill(self)
     }
 }
 
 // This is not actually cryptographically secure!
 // We do this so we can use `NullRng` with `TranscriptRng`.
-impl CryptoRng for NullRng {}
+impl TryCryptoRng for NullRng {}
 
 #[cfg(test)]
 mod test {
+    use rand_core::Rng;
+
     use super::*;
 
     #[test]

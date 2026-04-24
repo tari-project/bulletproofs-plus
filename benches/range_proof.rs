@@ -11,9 +11,8 @@ extern crate criterion;
 
 use criterion::{Criterion, SamplingMode};
 use curve25519_dalek::scalar::Scalar;
-use merlin::Transcript;
 use rand_chacha::ChaCha12Rng;
-use rand_core::{CryptoRngCore, SeedableRng};
+use rand_core::{Rng, SeedableRng};
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
     generators::pedersen_gens::ExtensionDegree,
@@ -25,6 +24,7 @@ use tari_bulletproofs_plus::{
     ristretto,
     ristretto::RistrettoRangeProof,
 };
+use tari_merlin::Transcript;
 
 // Reduced spectrum of tests for the sake of CI bench tests
 static AGGREGATION_SIZES: [usize; 4] = [1, 2, 4, 8];
@@ -69,7 +69,7 @@ fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let mut minimum_values = vec![];
             let mut openings = vec![];
             for _ in 0..aggregation_factor {
-                let value = rng.as_rngcore().next_u64() % value_max; // introduces bias, but that's fine for testing
+                let value = rng.next_u64() % value_max; // introduces bias, but that's fine for testing
                 minimum_values.push(Some(value / 3));
                 let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
                 commitments.push(
@@ -149,7 +149,7 @@ fn verify_aggregated_rangeproof_helper(bit_length: usize, extension_degree: Exte
             let mut minimum_values = vec![];
             let mut openings = vec![];
             for _ in 0..aggregation_factor {
-                let value = rng.as_rngcore().next_u64() % value_max; // introduces bias, but that's fine for testing
+                let value = rng.next_u64() % value_max; // introduces bias, but that's fine for testing
                 minimum_values.push(Some(value / 3));
                 let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
                 commitments.push(
@@ -233,7 +233,7 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                 for _ in 0..number_of_range_proofs {
                     // Witness data
                     let mut openings = vec![];
-                    let value = rng.as_rngcore().next_u64() % value_max; // introduces bias, but that's fine for testing
+                    let value = rng.next_u64() % value_max; // introduces bias, but that's fine for testing
                     let blindings = vec![Scalar::random_not_zero(&mut rng); extension_degree as usize];
                     openings.push(CommitmentOpening::new(value, blindings.clone()));
                     let witness = RangeWitness::init(openings).unwrap();
@@ -242,10 +242,12 @@ fn verify_batched_rangeproofs_helper(bit_length: usize, extension_degree: Extens
                     let seed_nonce = Some(Scalar::random_not_zero(&mut rng));
                     let statement = RangeStatement::init(
                         generators.clone(),
-                        vec![generators
-                            .pc_gens()
-                            .commit(&Scalar::from(value), blindings.as_slice())
-                            .unwrap()],
+                        vec![
+                            generators
+                                .pc_gens()
+                                .commit(&Scalar::from(value), blindings.as_slice())
+                                .unwrap(),
+                        ],
                         vec![Some(value / 3)],
                         seed_nonce,
                     )

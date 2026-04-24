@@ -6,7 +6,7 @@
 
 use core::marker::PhantomData;
 
-use digest::{core_api::XofReaderCoreWrapper, ExtendableOutput, Update, XofReader};
+use digest::{ExtendableOutput, Update, XofReader, core_api::XofReaderCoreWrapper};
 use sha3::{Shake256, Shake256ReaderCore};
 
 use crate::traits::FromUniformBytes;

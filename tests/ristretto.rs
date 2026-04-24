@@ -1,12 +1,13 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
+//! Integration tests for Ristretto range proofs.
+
 #![allow(clippy::too_many_lines)]
 
 use curve25519_dalek::scalar::Scalar;
-use merlin::Transcript;
 use rand_chacha::ChaCha12Rng;
-use rand_core::{CryptoRngCore, SeedableRng};
+use rand_core::{Rng, SeedableRng};
 use tari_bulletproofs_plus::{
     commitment_opening::CommitmentOpening,
     errors::ProofError,
@@ -20,6 +21,7 @@ use tari_bulletproofs_plus::{
     ristretto,
     ristretto::RistrettoRangeProof,
 };
+use tari_merlin::Transcript;
 
 #[test]
 fn test_non_aggregated_single_proof_multiple_bit_lengths() {
@@ -179,7 +181,7 @@ fn prove_and_verify(
             let mut commitments = vec![];
             let mut minimum_values = vec![];
             for m in 0..*aggregation_size {
-                let value = rng.as_rngcore().next_u64() % value_max; // introduces bias, but that's fine for this test
+                let value = rng.next_u64() % value_max; // introduces bias, but that's fine for this test
                 let minimum_value = match promise_strategy {
                     ProofOfMinimumValueStrategy::NoOffset => None,
                     ProofOfMinimumValueStrategy::Intermediate => Some(value / 3),

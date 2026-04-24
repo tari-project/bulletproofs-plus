@@ -5,8 +5,8 @@ use core::mem::size_of;
 use std::marker::PhantomData;
 
 use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
-use merlin::{Transcript, TranscriptRng};
-use rand_core::CryptoRngCore;
+use rand_core::CryptoRng;
+use tari_merlin::{Transcript, TranscriptRng};
 use zeroize::Zeroizing;
 
 use crate::{
@@ -37,7 +37,7 @@ pub(crate) struct RangeProofTranscript<'a, P, R>
 where
     P: Compressable + Precomputable,
     P::Compressed: FixedBytesRepr + IsIdentity,
-    R: CryptoRngCore,
+    R: CryptoRng,
 {
     transcript: &'a mut Transcript,
     bytes: Option<Zeroizing<Vec<u8>>>,
@@ -50,7 +50,7 @@ impl<'a, P, R> RangeProofTranscript<'a, P, R>
 where
     P: Compressable + Precomputable,
     P::Compressed: FixedBytesRepr + IsIdentity,
-    R: CryptoRngCore,
+    R: CryptoRng,
 {
     /// Initialize a transcript.
     ///
