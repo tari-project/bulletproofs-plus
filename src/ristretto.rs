@@ -15,11 +15,11 @@ use curve25519_dalek::{
 use once_cell::sync::OnceCell;
 
 use crate::{
+    PedersenGens,
     generators::pedersen_gens::ExtensionDegree,
     protocols::curve_point_protocol::CurvePointProtocol,
     range_proof::RangeProof,
     traits::{Compressable, Decompressable, FixedBytesRepr, FromUniformBytes, Precomputable},
-    PedersenGens,
 };
 
 /// A Bullet proof implentation using the Ristretto group.

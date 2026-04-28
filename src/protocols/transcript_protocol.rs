@@ -9,7 +9,7 @@
 use alloc::string::ToString;
 
 use curve25519_dalek::{scalar::Scalar, traits::IsIdentity};
-use merlin::Transcript;
+use tari_merlin::Transcript;
 
 use crate::{errors::ProofError, traits::FixedBytesRepr};
 
@@ -80,16 +80,18 @@ impl TranscriptProtocol for Transcript {
 
 #[cfg(test)]
 mod test {
-    use curve25519_dalek::{traits::Identity, RistrettoPoint};
-    use merlin::Transcript;
+    use curve25519_dalek::{RistrettoPoint, traits::Identity};
+    use tari_merlin::Transcript;
 
     use super::*;
 
     #[test]
     fn test_identity_point() {
         let mut transcript = Transcript::new(b"test");
-        assert!(transcript
-            .validate_and_append_point(b"identity", &RistrettoPoint::identity().compress())
-            .is_err());
+        assert!(
+            transcript
+                .validate_and_append_point(b"identity", &RistrettoPoint::identity().compress())
+                .is_err()
+        );
     }
 }

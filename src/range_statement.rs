@@ -84,7 +84,7 @@ impl<P: Compressable + Precomputable> Drop for RangeStatement<P> {
 mod test {
     use alloc::vec;
 
-    use curve25519_dalek::{traits::Identity, RistrettoPoint};
+    use curve25519_dalek::{RistrettoPoint, traits::Identity};
 
     use super::*;
     use crate::{
