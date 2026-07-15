@@ -111,6 +111,15 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
     pub fn precomp(&self) -> Arc<P::Precomputation> {
         self.bp_gens.precomp.clone()
     }
+
+    /// Returns `true` if `self` and `other` are known to share the same underlying generator data.
+    ///
+    /// The precomputation table is only ever created in `BulletproofGens::new`, alongside the generator vectors it is
+    /// built from, and cloning shares it; so pointer equality of the tables guarantees the generator vectors are
+    /// identical without an element-wise comparison. A `false` result is inconclusive.
+    pub(crate) fn shares_generator_data(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.bp_gens.precomp, &other.bp_gens.precomp)
+    }
 }
 
 impl<P> Debug for RangeParameters<P>

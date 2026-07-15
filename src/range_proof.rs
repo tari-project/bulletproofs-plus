@@ -684,6 +684,11 @@ where
             if i == max_index {
                 continue;
             }
+            // Statements cloned from the same generators share their precomputation tables, in which case the
+            // expensive element-wise comparisons can be skipped
+            if statement.generators.shares_generator_data(&max_statement.generators) {
+                continue;
+            }
             if statement
                 .generators
                 .gi_base_iter()
@@ -858,25 +863,18 @@ where
 
         // Process each proof and add it to the batch
         for (proof, statement, batch_challenge) in izip!(range_proofs, statements, batch_challenges) {
-            let commitments = statement.commitments.clone();
-            let minimum_value_promises = statement.minimum_value_promises.clone();
-            let a = proof.a_decompressed()?;
-            let a1 = proof.a1_decompressed()?;
-            let b = proof.b_decompressed()?;
             let r1 = proof.r1;
             let s1 = proof.s1;
-            let d1 = proof.d1.clone();
-            let li = proof.li_decompressed()?;
-            let ri = proof.ri_decompressed()?;
+            let d1 = &proof.d1;
 
             // Useful lengths
-            let aggregation_factor = commitments.len();
+            let aggregation_factor = statement.commitments.len();
             let full_length = aggregation_factor
                 .checked_mul(bit_length)
                 .ok_or(ProofError::SizeOverflow)?;
-            let rounds = li.len();
+            let rounds = proof.li.len();
 
-            if li.len() != ri.len() {
+            if proof.li.len() != proof.ri.len() {
                 return Err(ProofError::InvalidLength(
                     "Vector L length not equal to vector R length".to_string(),
                 ));
@@ -893,9 +891,6 @@ where
 
             // Parse out the challenges
             let (y, z, challenges, e) = batch_challenge;
-
-            // Nonzero batch weight
-            let weight = Scalar::random_not_zero(&mut weight_transcript_rng);
 
             // Compute challenge inverses in a batch
             let mut challenges_inv = challenges.clone();
@@ -916,50 +911,28 @@ where
             let y_nm = y.pow_vartime([full_length as u64]);
             let y_nm_1 = y_nm * y;
 
-            // Compute the sum of powers of the challenge as a partial sum of a geometric series
-            let y_sum = y * (y_nm - Scalar::ONE) * y_1_inverse;
-
-            // Compute d efficiently
-            let mut d = Vec::with_capacity(full_length);
-            d.push(z_square);
-            for _ in 1..bit_length {
-                d.push(two * d.last().ok_or(ProofError::SizeOverflow)?);
-            }
-            #[allow(clippy::arithmetic_side_effects)]
-            for j in 1..aggregation_factor {
-                for i in 0..bit_length {
-                    d.push(d.get((j - 1) * bit_length + i).ok_or(ProofError::SizeOverflow)? * z_square);
-                }
-            }
-
-            // Compute d's sum efficiently
-            let mut d_sum = z_square;
-            let mut d_sum_temp_z = z_square;
-            for _ in 0..aggregation_factor.ilog2() {
-                d_sum = d_sum + d_sum * d_sum_temp_z;
-                d_sum_temp_z = d_sum_temp_z * d_sum_temp_z;
-            }
-            d_sum *= two_n_minus_one;
-
             // Recover the mask if possible (only for non-aggregated proofs)
             match extract_masks {
                 VerifyAction::VerifyOnly => masks.push(None),
                 _ => {
                     if let Some(seed_nonce) = statement.seed_nonce {
+                        // Divisions by `e_square` and by `z_square * y_nm_1` are folded into a single inversion,
+                        // hoisted out of the loop since it does not depend on `k`
+                        let denominator_inverse = (e_square * z_square * y_nm_1).invert();
                         let mut temp_masks = Vec::with_capacity(extension_degree);
                         for (k, d1_val) in d1.iter().enumerate().take(extension_degree) {
-                            let mut this_mask = (*d1_val -
-                                nonce(&seed_nonce, "eta", None, Some(k))? -
-                                e * nonce(&seed_nonce, "d", None, Some(k))?) *
-                                e_square.invert();
-                            this_mask -= nonce(&seed_nonce, "alpha", None, Some(k))?;
+                            let mut residue = nonce(&seed_nonce, "alpha", None, Some(k))?;
                             for (j, (challenge_sq, challenge_sq_inv)) in
                                 challenges_sq.iter().zip(challenges_sq_inv.iter()).enumerate()
                             {
-                                this_mask -= challenge_sq * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
-                                this_mask -= challenge_sq_inv * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
+                                residue += challenge_sq * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
+                                residue += challenge_sq_inv * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
                             }
-                            this_mask *= (z_square * y_nm_1).invert();
+                            let this_mask = (*d1_val -
+                                nonce(&seed_nonce, "eta", None, Some(k))? -
+                                e * nonce(&seed_nonce, "d", None, Some(k))? -
+                                residue * e_square) *
+                                denominator_inverse;
                             temp_masks.push(this_mask);
                         }
                         masks.push(Some(ExtendedMask::assign(extension_degree.try_into()?, temp_masks)?));
@@ -972,10 +945,32 @@ where
                 },
             }
 
-            // Aggregate the generator scalars
-            let mut y_inv_i = Scalar::ONE;
-            let mut y_nm_i = y_nm;
+            // Everything hereafter is only needed for verification, so mask-only recovery skips it entirely,
+            // including the point decompressions
 
+            // Decompress the proof elements
+            let a = proof.a_decompressed()?;
+            let a1 = proof.a1_decompressed()?;
+            let b = proof.b_decompressed()?;
+            let li = proof.li_decompressed()?;
+            let ri = proof.ri_decompressed()?;
+
+            // Nonzero batch weight
+            let weight = Scalar::random_not_zero(&mut weight_transcript_rng);
+
+            // Compute the sum of powers of the challenge as a partial sum of a geometric series
+            let y_sum = y * (y_nm - Scalar::ONE) * y_1_inverse;
+
+            // Compute d's sum efficiently
+            let mut d_sum = z_square;
+            let mut d_sum_temp_z = z_square;
+            for _ in 0..aggregation_factor.ilog2() {
+                d_sum = d_sum + d_sum * d_sum_temp_z;
+                d_sum_temp_z = d_sum_temp_z * d_sum_temp_z;
+            }
+            d_sum *= two_n_minus_one;
+
+            // Aggregate the generator scalars
             let mut s = Vec::with_capacity(full_length);
             s.push(challenges_inv_prod);
             for i in 1..full_length {
@@ -988,35 +983,55 @@ where
                         challenges_sq.get(rounds - log_i - 1).ok_or(ProofError::SizeOverflow)?,
                 );
             }
-            let r1_e = r1 * e;
-            let s1_e = s1 * e;
-            let e_square_z = e_square * z;
-            for (s, s_rev, gi_base_scalar, hi_base_scalar, d) in izip!(
+
+            // The batch weight is folded into the per-proof constants so that each term costs one fewer
+            // multiplication, and `d[i] * y**(nm - i)` is tracked incrementally rather than materializing `d`:
+            // - within a bit block, `d` doubles while the power of `y` decrements: multiply by `2 * y**(-1)`
+            // - crossing into the next aggregation block multiplies `d` by `z**2` and resets the doubling, so the
+            //   tracker restarts from the previous block start multiplied by `z**2 * y**(-n)`
+            let weighted_r1_e = weight * r1 * e;
+            let weighted_s1_e = weight * s1 * e;
+            let weighted_e_square = weight * e_square;
+            let weighted_e_square_z = weighted_e_square * z;
+            let two_y_inverse = two * y_inverse;
+            let z_square_y_inverse_n = z_square * y_inverse.pow_vartime([bit_length as u64]);
+            let mut weighted_r1_e_y_inv_i = weighted_r1_e;
+            let mut block_start_d_y = z_square * y_nm;
+            let mut d_y = block_start_d_y;
+            #[allow(clippy::arithmetic_side_effects)]
+            for (i, (s, s_rev, gi_base_scalar, hi_base_scalar)) in izip!(
                 s.iter(),
                 s.iter().rev(),
                 gi_base_scalars.iter_mut(),
-                hi_base_scalars.iter_mut(),
-                d.iter()
-            ) {
-                let g = r1_e * y_inv_i * s;
-                let h = s1_e * s_rev;
-                *gi_base_scalar += weight * (g + e_square_z);
-                *hi_base_scalar += weight * (h - e_square * (d * y_nm_i + z));
-                y_inv_i *= y_inverse;
-                y_nm_i *= y_inverse;
+                hi_base_scalars.iter_mut()
+            )
+            .enumerate()
+            {
+                *gi_base_scalar += weighted_r1_e_y_inv_i * s + weighted_e_square_z;
+                *hi_base_scalar += weighted_s1_e * s_rev - weighted_e_square * d_y - weighted_e_square_z;
+                weighted_r1_e_y_inv_i *= y_inverse;
+                // The bit length is a nonzero power of two and `i + 1` cannot overflow since `i < full_length`
+                if (i + 1) % bit_length == 0 {
+                    block_start_d_y *= z_square_y_inverse_n;
+                    d_y = block_start_d_y;
+                } else {
+                    d_y *= two_y_inverse;
+                }
             }
 
             // Remaining terms
+            let neg_weighted_e_square = -weighted_e_square;
+            let neg_weighted_e_square_y_nm_1 = neg_weighted_e_square * y_nm_1;
             let mut z_even_powers = Scalar::ONE;
-            for minimum_value_promise in minimum_value_promises {
+            for minimum_value_promise in &statement.minimum_value_promises {
                 z_even_powers *= z_square;
-                let weighted = weight * (-e_square * z_even_powers * y_nm_1);
+                let weighted = neg_weighted_e_square_y_nm_1 * z_even_powers;
                 dynamic_scalars.push(weighted);
                 if let Some(minimum_value) = minimum_value_promise {
-                    h_base_scalar -= weighted * Scalar::from(minimum_value);
+                    h_base_scalar -= weighted * Scalar::from(*minimum_value);
                 }
             }
-            dynamic_points.extend(commitments);
+            dynamic_points.extend_from_slice(&statement.commitments);
 
             h_base_scalar += weight * (r1 * y * s1 + e_square * (y_nm_1 * z * d_sum + (z_square - z) * y_sum));
             for (g_base_scalar, d1) in g_base_scalars.iter_mut().zip(d1.iter()) {
@@ -1027,12 +1042,12 @@ where
             dynamic_points.push(a1);
             dynamic_scalars.push(-weight);
             dynamic_points.push(b);
-            dynamic_scalars.push(weight * (-e_square));
+            dynamic_scalars.push(neg_weighted_e_square);
             dynamic_points.push(a);
 
-            dynamic_scalars.extend(challenges_sq.into_iter().map(|c| weight * -e_square * c));
+            dynamic_scalars.extend(challenges_sq.into_iter().map(|c| neg_weighted_e_square * c));
             dynamic_points.extend(li);
-            dynamic_scalars.extend(challenges_sq_inv.into_iter().map(|c| weight * -e_square * c));
+            dynamic_scalars.extend(challenges_sq_inv.into_iter().map(|c| neg_weighted_e_square * c));
             dynamic_points.extend(ri);
         }
         if extract_masks == VerifyAction::RecoverOnly {
@@ -1045,21 +1060,63 @@ where
         dynamic_scalars.push(h_base_scalar);
         dynamic_points.push(h_base.clone());
 
-        // Perform the final check using precomputation
-        let padding = compute_generator_padding(
-            max_statement.generators.bit_length(),
-            max_statement.commitments.len(),
-            max_statement.generators.max_aggregation_factor(),
-        )?;
-        if precomp.vartime_mixed_multiscalar_mul(
-            gi_base_scalars
-                .iter()
-                .interleave(hi_base_scalars.iter())
-                .chain(repeat_n(&Scalar::ZERO, padding)),
-            dynamic_scalars.iter(),
-            dynamic_points.iter(),
-        ) != P::identity()
-        {
+        // Perform the final check, choosing the multiscalar multiplication strategy by estimated cost.
+        //
+        // Evaluation against the precomputed tables (Straus) avoids computing lookup tables for the static
+        // generators, but its per-point cost is constant, whereas Pippenger's per-point cost shrinks as the problem
+        // grows. For large batches Pippenger wins even though it must process the static generators from scratch.
+        // The estimates below count curve operations, mirroring the algorithms in `curve25519-dalek`:
+        // - precomputed Straus: 256 doublings, ~256/9 additions per static scalar (width-8 NAF), and table construction
+        //   (~8 operations) plus ~256/6 additions (width-5 NAF) per dynamic point
+        // - Pippenger: ~256/w + 1 columns, each costing an addition per point plus half a bucket set, with the window
+        //   width `w` chosen by problem size
+        let static_count = max_mn.saturating_mul(2);
+        let dynamic_count = dynamic_scalars.len();
+        let straus_cost = 256usize
+            .saturating_add(static_count.saturating_mul(29))
+            .saturating_add(dynamic_count.saturating_mul(51));
+        let pippenger_cost = {
+            let size = static_count.saturating_add(dynamic_count);
+            let (window, buckets) = if size < 500 {
+                (6usize, 32usize)
+            } else if size < 800 {
+                (7, 64)
+            } else {
+                (8, 128)
+            };
+            #[allow(clippy::arithmetic_side_effects)]
+            let columns = 256 / window + 1;
+            columns.saturating_mul(size.saturating_add(buckets)).saturating_add(256)
+        };
+        let batch_is_valid = if pippenger_cost < straus_cost {
+            P::vartime_multiscalar_mul(
+                gi_base_scalars
+                    .iter()
+                    .interleave(hi_base_scalars.iter())
+                    .chain(dynamic_scalars.iter()),
+                max_statement
+                    .generators
+                    .gi_base_iter()
+                    .take(max_mn)
+                    .interleave(max_statement.generators.hi_base_iter().take(max_mn))
+                    .chain(dynamic_points.iter()),
+            ) == P::identity()
+        } else {
+            let padding = compute_generator_padding(
+                max_statement.generators.bit_length(),
+                max_statement.commitments.len(),
+                max_statement.generators.max_aggregation_factor(),
+            )?;
+            precomp.vartime_mixed_multiscalar_mul(
+                gi_base_scalars
+                    .iter()
+                    .interleave(hi_base_scalars.iter())
+                    .chain(repeat_n(&Scalar::ZERO, padding)),
+                dynamic_scalars.iter(),
+                dynamic_points.iter(),
+            ) == P::identity()
+        };
+        if !batch_is_valid {
             return Err(ProofError::VerificationFailed(
                 "Range proof batch not valid".to_string(),
             ));
@@ -1896,8 +1953,7 @@ mod tests {
             None,
         )
         .unwrap();
-        let proof =
-            RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).unwrap();
+        let proof = RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).unwrap();
 
         // Use a batch that is one larger than the internal chunk size, so it spans two chunks
         let n = MAX_RANGE_PROOF_BATCH_SIZE + 1;
@@ -1906,9 +1962,12 @@ mod tests {
         // With every proof valid, all proofs must be verified and a mask slot returned for each
         let proofs = vec![proof.clone(); n];
         let mut transcripts = vec![Transcript::new(b"Test"); n];
-        let masks =
-            RangeProof::verify_batch(&mut transcripts, &statements, &proofs, VerifyAction::VerifyOnly).unwrap();
-        assert_eq!(masks.len(), n, "a mask slot must be returned for every proof in the batch");
+        let masks = RangeProof::verify_batch(&mut transcripts, &statements, &proofs, VerifyAction::VerifyOnly).unwrap();
+        assert_eq!(
+            masks.len(),
+            n,
+            "a mask slot must be returned for every proof in the batch"
+        );
 
         // Corrupt only the proof beyond the first chunk; the batch must now be rejected
         let mut proofs_bad = vec![proof.clone(); n];
