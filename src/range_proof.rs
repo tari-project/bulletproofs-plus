@@ -737,14 +737,18 @@ where
         // Store masks from all results
         let mut masks = Vec::<Option<ExtendedMask>>::with_capacity(proofs.len());
 
-        // Get chunks of both the statements and proofs
-        let mut chunks = statements
-            .chunks(MAX_RANGE_PROOF_BATCH_SIZE)
-            .zip(proofs.chunks(MAX_RANGE_PROOF_BATCH_SIZE));
+        // Get chunks of the transcripts, statements, and proofs
+        // The transcripts must be chunked alongside the statements and proofs so that each chunk verifies against its
+        // own transcripts; otherwise chunks after the first would incorrectly reuse the leading transcripts
+        let chunks = izip!(
+            transcripts.chunks_mut(MAX_RANGE_PROOF_BATCH_SIZE),
+            statements.chunks(MAX_RANGE_PROOF_BATCH_SIZE),
+            proofs.chunks(MAX_RANGE_PROOF_BATCH_SIZE),
+        );
 
-        // If the batch fails, propagate the error; otherwise, store the masks and keep going
-        if let Some((batch_statements, batch_proofs)) = chunks.next() {
-            let mut result = RangeProof::verify(transcripts, batch_statements, batch_proofs, action)?;
+        // If any batch fails, propagate the error; otherwise, store the masks and keep going
+        for (batch_transcripts, batch_statements, batch_proofs) in chunks {
+            let mut result = RangeProof::verify(batch_transcripts, batch_statements, batch_proofs, action)?;
 
             masks.append(&mut result);
         }
@@ -1102,7 +1106,7 @@ where
             .iter()
             .map(|p| {
                 p.decompress().ok_or(ProofError::InvalidArgument(
-                    "An item in member 'L' was not the canonical encoding of a point".to_string(),
+                    "An item in member 'R' was not the canonical encoding of a point".to_string(),
                 ))
             })
             .collect()
@@ -1871,6 +1875,49 @@ mod tests {
             VerifyAction::VerifyOnly,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn test_batch_larger_than_max_batch_size_is_fully_verified() {
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
+        // Generate a single valid proof to replicate across an oversized batch
+        let params = RangeParameters::init(
+            4,
+            1,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        let proof =
+            RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).unwrap();
+
+        // Use a batch that is one larger than the internal chunk size, so it spans two chunks
+        let n = MAX_RANGE_PROOF_BATCH_SIZE + 1;
+        let statements = vec![statement.clone(); n];
+
+        // With every proof valid, all proofs must be verified and a mask slot returned for each
+        let proofs = vec![proof.clone(); n];
+        let mut transcripts = vec![Transcript::new(b"Test"); n];
+        let masks =
+            RangeProof::verify_batch(&mut transcripts, &statements, &proofs, VerifyAction::VerifyOnly).unwrap();
+        assert_eq!(masks.len(), n, "a mask slot must be returned for every proof in the batch");
+
+        // Corrupt only the proof beyond the first chunk; the batch must now be rejected
+        let mut proofs_bad = vec![proof.clone(); n];
+        proofs_bad[MAX_RANGE_PROOF_BATCH_SIZE].r1 += Scalar::ONE;
+        let mut transcripts = vec![Transcript::new(b"Test"); n];
+        assert!(
+            RangeProof::verify_batch(&mut transcripts, &statements, &proofs_bad, VerifyAction::VerifyOnly).is_err(),
+            "an invalid proof beyond the first chunk must be detected"
+        );
     }
 
     #[test]

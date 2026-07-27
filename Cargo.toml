@@ -1,6 +1,6 @@
 [package]
 name = "tari_bulletproofs_plus"
-version = "0.5.1"
+version = "0.5.2"
 authors = ["The Tari Development Community"]
 edition = "2024"
 license = "BSD-3-Clause"
@@ -12,9 +12,9 @@ byteorder = { version = "1", default-features = false }
 # Pinned exactly: the default caret requirement `5.0.0-pre.6` also permits the newer pre-release
 # `5.0.0-rc.1`, which switches its `ff`/`group` backend from `rustcrypto-ff`/`rustcrypto-group` to the
 # upstream `ff`/`group` crates and breaks the build (see issue #148). Pin until we migrate to the RC.
-curve25519-dalek = { version = "=5.0.0-pre.6", default-features = false, features = ["alloc", "group", "rand_core", "serde", "zeroize"] }
+curve25519-dalek = { version = "5.0.0", default-features = false, features = ["alloc", "group", "rand_core", "serde", "zeroize"] }
 digest = { version = "0.10", default-features = false, features = ["alloc"] }
-ff = { package = "rustcrypto-ff", version = "0.14.0-rc", default-features = false }
+ff = { version = "0.14.0", default-features = false }
 getrandom = { version = "0.4", default-features = false, features = ["sys_rng"], optional = true }
 itertools = { version = "0.12", default-features = false, features = ["use_alloc"] }
 tari_merlin = { version = "4", default-features = false }
