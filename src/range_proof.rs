@@ -86,6 +86,42 @@ const FIXED_PROOF_ELEMENTS: usize = 5;
 /// Assorted serialization constants
 const ENCODED_EXTENSION_SIZE: usize = 1;
 
+/// Estimated curve-operation cost of the batch verification check using evaluation against precomputed tables
+/// (Straus).
+///
+/// Evaluation against the precomputed tables avoids computing lookup tables for the static generators, but its
+/// per-point cost is constant, whereas Pippenger's per-point cost shrinks as the problem grows; for large batches
+/// Pippenger wins even though it must process the static generators from scratch.
+///
+/// The estimate counts curve operations, mirroring `VartimePrecomputedStraus` in `curve25519-dalek` (5.0.0-pre.6):
+/// 256 doublings, ~256/9 additions per static scalar (width-8 NAF), and table construction (~8 operations) plus
+/// ~256/6 additions (width-5 NAF) per dynamic point. If the `curve25519-dalek` algorithms are retuned, these
+/// constants must be revisited; a stale estimate affects only performance, not correctness, since both strategies
+/// compute the same linear combination.
+fn estimate_straus_cost(static_count: usize, dynamic_count: usize) -> usize {
+    256usize
+        .saturating_add(static_count.saturating_mul(29))
+        .saturating_add(dynamic_count.saturating_mul(51))
+}
+
+/// Estimated curve-operation cost of the batch verification check using Pippenger's algorithm over all `size` points.
+///
+/// The estimate counts curve operations, mirroring `Pippenger` in `curve25519-dalek` (5.0.0-pre.6): ~256/w + 1
+/// columns, each costing an addition per point plus half a bucket set, with the window width `w` chosen by problem
+/// size. See [`estimate_straus_cost`] for the consequences of drift against `curve25519-dalek`.
+fn estimate_pippenger_cost(size: usize) -> usize {
+    let (window, buckets) = if size < 500 {
+        (6usize, 32usize)
+    } else if size < 800 {
+        (7, 64)
+    } else {
+        (8, 128)
+    };
+    #[allow(clippy::arithmetic_side_effects)]
+    let columns = 256 / window + 1;
+    columns.saturating_mul(size.saturating_add(buckets)).saturating_add(256)
+}
+
 /// # Example
 /// ```
 /// use curve25519_dalek::scalar::Scalar;
@@ -911,6 +947,14 @@ where
             let y_nm = y.pow_vartime([full_length as u64]);
             let y_nm_1 = y_nm * y;
 
+            // Decompress the proof elements; this validates their encodings, so it must happen even when only
+            // recovering masks
+            let a = proof.a_decompressed()?;
+            let a1 = proof.a1_decompressed()?;
+            let b = proof.b_decompressed()?;
+            let li = proof.li_decompressed()?;
+            let ri = proof.ri_decompressed()?;
+
             // Recover the mask if possible (only for non-aggregated proofs)
             match extract_masks {
                 VerifyAction::VerifyOnly => masks.push(None),
@@ -945,15 +989,7 @@ where
                 },
             }
 
-            // Everything hereafter is only needed for verification, so mask-only recovery skips it entirely,
-            // including the point decompressions
-
-            // Decompress the proof elements
-            let a = proof.a_decompressed()?;
-            let a1 = proof.a1_decompressed()?;
-            let b = proof.b_decompressed()?;
-            let li = proof.li_decompressed()?;
-            let ri = proof.ri_decompressed()?;
+            // Everything hereafter is only needed for verification, so mask-only recovery skips it entirely
 
             // Nonzero batch weight
             let weight = Scalar::random_not_zero(&mut weight_transcript_rng);
@@ -1060,35 +1096,20 @@ where
         dynamic_scalars.push(h_base_scalar);
         dynamic_points.push(h_base.clone());
 
-        // Perform the final check, choosing the multiscalar multiplication strategy by estimated cost.
-        //
-        // Evaluation against the precomputed tables (Straus) avoids computing lookup tables for the static
-        // generators, but its per-point cost is constant, whereas Pippenger's per-point cost shrinks as the problem
-        // grows. For large batches Pippenger wins even though it must process the static generators from scratch.
-        // The estimates below count curve operations, mirroring the algorithms in `curve25519-dalek`:
-        // - precomputed Straus: 256 doublings, ~256/9 additions per static scalar (width-8 NAF), and table construction
-        //   (~8 operations) plus ~256/6 additions (width-5 NAF) per dynamic point
-        // - Pippenger: ~256/w + 1 columns, each costing an addition per point plus half a bucket set, with the window
-        //   width `w` chosen by problem size
+        // Compute the generator padding for the precomputed evaluation. This also guards against any statement's
+        // commitments exceeding the generators' aggregation capacity, so it must run regardless of which multiscalar
+        // multiplication strategy is chosen below
+        let padding = compute_generator_padding(
+            max_statement.generators.bit_length(),
+            max_statement.commitments.len(),
+            max_statement.generators.max_aggregation_factor(),
+        )?;
+
+        // Perform the final check, choosing the multiscalar multiplication strategy by estimated cost
         let static_count = max_mn.saturating_mul(2);
         let dynamic_count = dynamic_scalars.len();
-        let straus_cost = 256usize
-            .saturating_add(static_count.saturating_mul(29))
-            .saturating_add(dynamic_count.saturating_mul(51));
-        let pippenger_cost = {
-            let size = static_count.saturating_add(dynamic_count);
-            let (window, buckets) = if size < 500 {
-                (6usize, 32usize)
-            } else if size < 800 {
-                (7, 64)
-            } else {
-                (8, 128)
-            };
-            #[allow(clippy::arithmetic_side_effects)]
-            let columns = 256 / window + 1;
-            columns.saturating_mul(size.saturating_add(buckets)).saturating_add(256)
-        };
-        let batch_is_valid = if pippenger_cost < straus_cost {
+        let pippenger_cost = estimate_pippenger_cost(static_count.saturating_add(dynamic_count));
+        let batch_is_valid = if pippenger_cost < estimate_straus_cost(static_count, dynamic_count) {
             P::vartime_multiscalar_mul(
                 gi_base_scalars
                     .iter()
@@ -1102,11 +1123,6 @@ where
                     .chain(dynamic_points.iter()),
             ) == P::identity()
         } else {
-            let padding = compute_generator_padding(
-                max_statement.generators.bit_length(),
-                max_statement.commitments.len(),
-                max_statement.generators.max_aggregation_factor(),
-            )?;
             precomp.vartime_mixed_multiscalar_mul(
                 gi_base_scalars
                     .iter()
@@ -1651,7 +1667,7 @@ mod tests {
 
         // Make the second statement's `gi_base` mismatch against the first statement
         let mut gens_mismatch = BulletproofGens::new(4, 1).unwrap();
-        gens_mismatch.g_vec[0][0] = RistrettoPoint::identity();
+        gens_mismatch.g_vec_mut()[0][0] = RistrettoPoint::identity();
         let params_mismatch = RangeParameters {
             bp_gens: gens_mismatch,
             pc_gens: create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
@@ -1673,7 +1689,7 @@ mod tests {
 
         // Make the second statement's `hi_base` mismatch against the first statement
         let mut gens_mismatch = BulletproofGens::new(4, 1).unwrap();
-        gens_mismatch.h_vec[0][0] = RistrettoPoint::identity();
+        gens_mismatch.h_vec_mut()[0][0] = RistrettoPoint::identity();
         let params_mismatch = RangeParameters {
             bp_gens: gens_mismatch,
             pc_gens: create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
@@ -1894,6 +1910,94 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn test_recover_only_rejects_invalid_point_encodings() {
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
+        // Generate a valid proof with a seed nonce so that masks are recoverable
+        let params = RangeParameters::init(
+            4,
+            1,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            Some(Scalar::random_not_zero(&mut rng)),
+        )
+        .unwrap();
+        let mut proof =
+            RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).unwrap();
+
+        // A proof element that is not the canonical encoding of a point must be rejected even when only recovering
+        // masks
+        proof.a = CompressedRistretto([0xFF; 32]);
+        assert!(
+            RangeProof::verify_batch(
+                &mut [Transcript::new(b"Test")],
+                &[statement],
+                &[proof],
+                VerifyAction::RecoverOnly,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn test_batch_rejects_commitments_exceeding_generator_capacity() {
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
+        // Generate a valid aggregated proof against generators that support the aggregation factor
+        let params = RangeParameters::init(
+            4,
+            2,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+        let witness = RangeWitness::init(vec![
+            CommitmentOpening::new(1u64, vec![Scalar::ONE]),
+            CommitmentOpening::new(2u64, vec![Scalar::ONE]),
+        ])
+        .unwrap();
+        let commitments = vec![
+            params.pc_gens().commit(&Scalar::from(1u64), &[Scalar::ONE]).unwrap(),
+            params.pc_gens().commit(&Scalar::from(2u64), &[Scalar::ONE]).unwrap(),
+        ];
+        let mut statement = RangeStatement::init(params, commitments, vec![None, None], None).unwrap();
+        let proof = RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).unwrap();
+
+        // Swap in generators whose aggregation capacity is too small for the commitments; verification must report
+        // the size overflow rather than attempting a multiscalar multiplication with truncated generators
+        statement.generators = RangeParameters::init(
+            4,
+            1,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+        assert!(matches!(
+            RangeProof::verify_batch(
+                &mut [Transcript::new(b"Test")],
+                &[statement],
+                &[proof],
+                VerifyAction::VerifyOnly,
+            ),
+            Err(ProofError::SizeOverflow)
+        ));
+    }
+
+    #[test]
+    fn test_msm_cost_estimates() {
+        // A single 64-bit proof (128 static scalars, a handful of dynamic points) must use the precomputed tables
+        assert!(estimate_straus_cost(128, 16) < estimate_pippenger_cost(128 + 16));
+
+        // A large batch of single proofs must switch to Pippenger
+        let dynamic_count = 257 * 16;
+        assert!(estimate_pippenger_cost(128 + dynamic_count) < estimate_straus_cost(128, dynamic_count));
     }
 
     #[test]
