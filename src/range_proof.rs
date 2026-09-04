@@ -11,7 +11,6 @@ use core::{
     iter::{once, repeat_n},
     marker::PhantomData,
     ops::{Add, Mul, Shr},
-    slice::ChunksExact,
 };
 
 use curve25519_dalek::{
@@ -1231,30 +1230,26 @@ where
     /// Then we parse the remainder of the proof elements, inferring the lengths of `li` and `ri`
     pub fn from_bytes(slice: &[u8]) -> Result<Self, ProofError> {
         // Helper to parse a scalar from a chunk iterator
-        let parse_scalar = |chunks: &mut ChunksExact<'_, u8>| -> Result<Scalar, ProofError> {
-            chunks
-                .next()
-                .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))
-                .and_then(|slice| {
-                    let bytes: [u8; SERIALIZED_ELEMENT_SIZE] = slice
-                        .try_into()
-                        .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
-                    Option::<Scalar>::from(Scalar::from_canonical_bytes(bytes))
-                        .ok_or(ProofError::InvalidArgument("Invalid parsing".to_string()))
-                })
-        };
+        let parse_scalar =
+            |chunks: &mut core::slice::Iter<'_, [u8; SERIALIZED_ELEMENT_SIZE]>| -> Result<Scalar, ProofError> {
+                chunks
+                    .next()
+                    .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))
+                    .and_then(|bytes| {
+                        Option::<Scalar>::from(Scalar::from_canonical_bytes(*bytes))
+                            .ok_or(ProofError::InvalidArgument("Invalid parsing".to_string()))
+                    })
+            };
 
         // Helper to parse a compressed point from a chunk iterator
-        let parse_point = |chunks: &mut ChunksExact<'_, u8>| -> Result<<P as Compressable>::Compressed, ProofError> {
+        let parse_point = |chunks: &mut core::slice::Iter<'_, [u8; SERIALIZED_ELEMENT_SIZE]>| -> Result<
+            <P as Compressable>::Compressed,
+            ProofError,
+        > {
             chunks
                 .next()
                 .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))
-                .and_then(|slice| {
-                    let bytes: [u8; SERIALIZED_ELEMENT_SIZE] = slice
-                        .try_into()
-                        .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
-                    Ok(<P as Compressable>::Compressed::from_fixed_bytes(bytes))
-                })
+                .map(|bytes| <P as Compressable>::Compressed::from_fixed_bytes(*bytes))
         };
 
         // Get the extension degree, which is encoded as a single byte
@@ -1265,10 +1260,11 @@ where
         )?;
 
         // The rest of the serialization is of encoded proof elements
-        let mut chunks = slice
+        let (element_chunks, chunk_remainder) = slice
             .get(ENCODED_EXTENSION_SIZE..)
             .ok_or(ProofError::InvalidLength("Serialized proof is too short".to_string()))?
-            .chunks_exact(SERIALIZED_ELEMENT_SIZE);
+            .as_chunks::<SERIALIZED_ELEMENT_SIZE>();
+        let mut chunks = element_chunks.iter();
 
         // Extract `d1`, whose length is determined by the extension degree
         let d1 = (0..extension_degree as usize)
@@ -1283,26 +1279,20 @@ where
         let s1 = parse_scalar(&mut chunks)?;
 
         // Extract the inner-product folding vectors `li` and `ri`
-        let mut tuples = chunks.by_ref().tuples::<(&[u8], &[u8])>();
+        let mut tuples = chunks
+            .by_ref()
+            .tuples::<(&[u8; SERIALIZED_ELEMENT_SIZE], &[u8; SERIALIZED_ELEMENT_SIZE])>();
         let (li, ri): (
             Vec<<P as Compressable>::Compressed>,
             Vec<<P as Compressable>::Compressed>,
         ) = tuples
             .by_ref()
             .map(|(l, r)| {
-                let bytes_l: [u8; SERIALIZED_ELEMENT_SIZE] = l
-                    .try_into()
-                    .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
-                let bytes_r: [u8; SERIALIZED_ELEMENT_SIZE] = r
-                    .try_into()
-                    .map_err(|_| ProofError::InvalidLength("Unexpected deserialization failure".to_string()))?;
-                Ok((
-                    <P as Compressable>::Compressed::from_fixed_bytes(bytes_l),
-                    <P as Compressable>::Compressed::from_fixed_bytes(bytes_r),
-                ))
+                (
+                    <P as Compressable>::Compressed::from_fixed_bytes(*l),
+                    <P as Compressable>::Compressed::from_fixed_bytes(*r),
+                )
             })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
             .unzip();
 
         // The inner-product folding vectors should not be empty
@@ -1314,7 +1304,7 @@ where
         // To do so, we check two things:
         // - the tuple iterator has no leftover data, meaning an extra proof element
         // - the chunk iterator has no leftover data, meaning extra bytes that don't yield a full proof element
-        if tuples.into_buffer().len() > 0 || !chunks.remainder().is_empty() {
+        if tuples.into_buffer().len() > 0 || !chunk_remainder.is_empty() {
             return Err(ProofError::InvalidLength(
                 "Unused data after deserialization".to_string(),
             ));
