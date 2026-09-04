@@ -93,7 +93,7 @@ const ENCODED_EXTENSION_SIZE: usize = 1;
 /// per-point cost is constant, whereas Pippenger's per-point cost shrinks as the problem grows; for large batches
 /// Pippenger wins even though it must process the static generators from scratch.
 ///
-/// The estimate counts curve operations, mirroring `VartimePrecomputedStraus` in `curve25519-dalek` (5.0.0-pre.6):
+/// The estimate counts curve operations, mirroring `VartimePrecomputedStraus` in `curve25519-dalek` (5.0.0):
 /// 256 doublings, ~256/9 additions per static scalar (width-8 NAF), and table construction (~8 operations) plus
 /// ~256/6 additions (width-5 NAF) per dynamic point. If the `curve25519-dalek` algorithms are retuned, these
 /// constants must be revisited; a stale estimate affects only performance, not correctness, since both strategies
@@ -106,7 +106,7 @@ fn estimate_straus_cost(static_count: usize, dynamic_count: usize) -> usize {
 
 /// Estimated curve-operation cost of the batch verification check using Pippenger's algorithm over all `size` points.
 ///
-/// The estimate counts curve operations, mirroring `Pippenger` in `curve25519-dalek` (5.0.0-pre.6): ~256/w + 1
+/// The estimate counts curve operations, mirroring `Pippenger` in `curve25519-dalek` (5.0.0): ~256/w + 1
 /// columns, each costing an addition per point plus half a bucket set, with the window width `w` chosen by problem
 /// size. See [`estimate_straus_cost`] for the consequences of drift against `curve25519-dalek`.
 fn estimate_pippenger_cost(size: usize) -> usize {
@@ -313,8 +313,8 @@ where
             if &statement
                 .generators
                 .pc_gens
-                .commit(&Scalar::from(opening.v), &opening.r)? !=
-                commitment
+                .commit(&Scalar::from(opening.v), &opening.r)?
+                != commitment
             {
                 return Err(ProofError::InvalidArgument("Witness opening is invalid!".to_string()));
             }
@@ -420,9 +420,9 @@ where
         for opening in &witness.openings {
             z_even_powers *= z_square;
             for (r, alpha1_val) in opening.r.iter().zip(alpha.iter_mut()) {
-                *alpha1_val += z_even_powers *
-                    r *
-                    y_powers
+                *alpha1_val += z_even_powers
+                    * r
+                    * y_powers
                         .get(full_length.checked_add(1).ok_or(ProofError::SizeOverflow)?)
                         .ok_or(ProofError::SizeOverflow)?;
             }
@@ -690,8 +690,8 @@ where
                     "Inconsistent bit length in batch statement".to_string(),
                 ));
             }
-            if extension_degree != statement.generators.extension_degree() ||
-                extension_degree != ExtensionDegree::try_from(proof.d1.len())?
+            if extension_degree != statement.generators.extension_degree()
+                || extension_degree != ExtensionDegree::try_from(proof.d1.len())?
             {
                 return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
             }
@@ -972,11 +972,11 @@ where
                                 residue += challenge_sq * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
                                 residue += challenge_sq_inv * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
                             }
-                            let this_mask = (*d1_val -
-                                nonce(&seed_nonce, "eta", None, Some(k))? -
-                                e * nonce(&seed_nonce, "d", None, Some(k))? -
-                                residue * e_square) *
-                                denominator_inverse;
+                            let this_mask = (*d1_val
+                                - nonce(&seed_nonce, "eta", None, Some(k))?
+                                - e * nonce(&seed_nonce, "d", None, Some(k))?
+                                - residue * e_square)
+                                * denominator_inverse;
                             temp_masks.push(this_mask);
                         }
                         masks.push(Some(ExtendedMask::assign(extension_degree.try_into()?, temp_masks)?));
@@ -1015,8 +1015,8 @@ where
                 let j = 1 << log_i;
                 #[allow(clippy::arithmetic_side_effects)]
                 s.push(
-                    s.get(i - j).ok_or(ProofError::SizeOverflow)? *
-                        challenges_sq.get(rounds - log_i - 1).ok_or(ProofError::SizeOverflow)?,
+                    s.get(i - j).ok_or(ProofError::SizeOverflow)?
+                        * challenges_sq.get(rounds - log_i - 1).ok_or(ProofError::SizeOverflow)?,
                 );
             }
 
@@ -1198,8 +1198,8 @@ where
         // The total proof size: extension degree encoding, fixed elements, vectors
         #[allow(clippy::arithmetic_side_effects)]
         let mut buf = Vec::with_capacity(
-            ENCODED_EXTENSION_SIZE +
-                (self.li.len() + self.ri.len() + FIXED_PROOF_ELEMENTS + self.d1.len()) * SERIALIZED_ELEMENT_SIZE,
+            ENCODED_EXTENSION_SIZE
+                + (self.li.len() + self.ri.len() + FIXED_PROOF_ELEMENTS + self.d1.len()) * SERIALIZED_ELEMENT_SIZE,
         );
 
         // Encode the extension degree as a single byte
@@ -1350,7 +1350,9 @@ where
     P::Compressed: FixedBytesRepr,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: Serializer {
+    where
+        S: Serializer,
+    {
         serializer.serialize_bytes(&self.to_bytes()[..])
     }
 }
@@ -1361,7 +1363,9 @@ where
     P::Compressed: FixedBytesRepr,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where D: Deserializer<'de> {
+    where
+        D: Deserializer<'de>,
+    {
         struct RangeProofVisitor<B>(PhantomData<B>);
 
         impl<'de, T> Visitor<'de> for RangeProofVisitor<T>
@@ -1376,7 +1380,9 @@ where
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<RangeProof<T>, E>
-            where E: serde::de::Error {
+            where
+                E: serde::de::Error,
+            {
                 RangeProof::from_bytes(v).map_err(|_| serde::de::Error::custom("deserialization error"))
             }
         }
@@ -1998,6 +2004,55 @@ mod tests {
         // A large batch of single proofs must switch to Pippenger
         let dynamic_count = 257 * 16;
         assert!(estimate_pippenger_cost(128 + dynamic_count) < estimate_straus_cost(128, dynamic_count));
+    }
+
+    #[test]
+    fn test_large_batch_invalid_proof_is_rejected() {
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309); // for testing only!
+
+        // Generate a single valid proof to replicate across a large batch
+        let params = RangeParameters::init(
+            4,
+            1,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        let proof = RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).unwrap();
+
+        // The batch must be large enough for the cost estimate to choose Pippenger over the precomputed tables, so
+        // that rejection is exercised through the plain multiscalar multiplication path. Each proof contributes its
+        // commitment, `a`, `a1`, `b`, and the `2 * log2(mn)` folding points to the dynamic column; the batch adds the
+        // Pedersen bases once and shares `2 * mn` static generator scalars
+        let n = 100;
+        let dynamic_count = n * 8 + 2;
+        let static_count = 8;
+        assert!(
+            estimate_pippenger_cost(static_count + dynamic_count) < estimate_straus_cost(static_count, dynamic_count),
+            "batch too small to take the Pippenger path"
+        );
+
+        // The valid batch must verify
+        let statements = vec![statement.clone(); n];
+        let proofs = vec![proof.clone(); n];
+        let mut transcripts = vec![Transcript::new(b"Test"); n];
+        RangeProof::verify_batch(&mut transcripts, &statements, &proofs, VerifyAction::VerifyOnly).unwrap();
+
+        // Corrupt a single proof; the batch must be rejected
+        let mut proofs_bad = proofs;
+        proofs_bad[n / 2].r1 += Scalar::ONE;
+        let mut transcripts = vec![Transcript::new(b"Test"); n];
+        assert!(
+            RangeProof::verify_batch(&mut transcripts, &statements, &proofs_bad, VerifyAction::VerifyOnly).is_err(),
+            "an invalid proof in a batch taking the Pippenger path must be detected"
+        );
     }
 
     #[test]
