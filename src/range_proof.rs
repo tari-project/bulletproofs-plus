@@ -313,8 +313,8 @@ where
             if &statement
                 .generators
                 .pc_gens
-                .commit(&Scalar::from(opening.v), &opening.r)?
-                != commitment
+                .commit(&Scalar::from(opening.v), &opening.r)? !=
+                commitment
             {
                 return Err(ProofError::InvalidArgument("Witness opening is invalid!".to_string()));
             }
@@ -420,9 +420,9 @@ where
         for opening in &witness.openings {
             z_even_powers *= z_square;
             for (r, alpha1_val) in opening.r.iter().zip(alpha.iter_mut()) {
-                *alpha1_val += z_even_powers
-                    * r
-                    * y_powers
+                *alpha1_val += z_even_powers *
+                    r *
+                    y_powers
                         .get(full_length.checked_add(1).ok_or(ProofError::SizeOverflow)?)
                         .ok_or(ProofError::SizeOverflow)?;
             }
@@ -690,8 +690,8 @@ where
                     "Inconsistent bit length in batch statement".to_string(),
                 ));
             }
-            if extension_degree != statement.generators.extension_degree()
-                || extension_degree != ExtensionDegree::try_from(proof.d1.len())?
+            if extension_degree != statement.generators.extension_degree() ||
+                extension_degree != ExtensionDegree::try_from(proof.d1.len())?
             {
                 return Err(ProofError::InvalidArgument("Inconsistent extension degree".to_string()));
             }
@@ -972,11 +972,11 @@ where
                                 residue += challenge_sq * nonce(&seed_nonce, "dL", Some(j), Some(k))?;
                                 residue += challenge_sq_inv * nonce(&seed_nonce, "dR", Some(j), Some(k))?;
                             }
-                            let this_mask = (*d1_val
-                                - nonce(&seed_nonce, "eta", None, Some(k))?
-                                - e * nonce(&seed_nonce, "d", None, Some(k))?
-                                - residue * e_square)
-                                * denominator_inverse;
+                            let this_mask = (*d1_val -
+                                nonce(&seed_nonce, "eta", None, Some(k))? -
+                                e * nonce(&seed_nonce, "d", None, Some(k))? -
+                                residue * e_square) *
+                                denominator_inverse;
                             temp_masks.push(this_mask);
                         }
                         masks.push(Some(ExtendedMask::assign(extension_degree.try_into()?, temp_masks)?));
@@ -1015,8 +1015,8 @@ where
                 let j = 1 << log_i;
                 #[allow(clippy::arithmetic_side_effects)]
                 s.push(
-                    s.get(i - j).ok_or(ProofError::SizeOverflow)?
-                        * challenges_sq.get(rounds - log_i - 1).ok_or(ProofError::SizeOverflow)?,
+                    s.get(i - j).ok_or(ProofError::SizeOverflow)? *
+                        challenges_sq.get(rounds - log_i - 1).ok_or(ProofError::SizeOverflow)?,
                 );
             }
 
@@ -1198,8 +1198,8 @@ where
         // The total proof size: extension degree encoding, fixed elements, vectors
         #[allow(clippy::arithmetic_side_effects)]
         let mut buf = Vec::with_capacity(
-            ENCODED_EXTENSION_SIZE
-                + (self.li.len() + self.ri.len() + FIXED_PROOF_ELEMENTS + self.d1.len()) * SERIALIZED_ELEMENT_SIZE,
+            ENCODED_EXTENSION_SIZE +
+                (self.li.len() + self.ri.len() + FIXED_PROOF_ELEMENTS + self.d1.len()) * SERIALIZED_ELEMENT_SIZE,
         );
 
         // Encode the extension degree as a single byte
@@ -1350,9 +1350,7 @@ where
     P::Compressed: FixedBytesRepr,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
+    where S: Serializer {
         serializer.serialize_bytes(&self.to_bytes()[..])
     }
 }
@@ -1363,9 +1361,7 @@ where
     P::Compressed: FixedBytesRepr,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
+    where D: Deserializer<'de> {
         struct RangeProofVisitor<B>(PhantomData<B>);
 
         impl<'de, T> Visitor<'de> for RangeProofVisitor<T>
@@ -1380,9 +1376,7 @@ where
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<RangeProof<T>, E>
-            where
-                E: serde::de::Error,
-            {
+            where E: serde::de::Error {
                 RangeProof::from_bytes(v).map_err(|_| serde::de::Error::custom("deserialization error"))
             }
         }

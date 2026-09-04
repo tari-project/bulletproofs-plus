@@ -88,7 +88,8 @@ mod test {
 
     use super::*;
     use crate::{
-        generators::pedersen_gens::ExtensionDegree, range_parameters::RangeParameters,
+        generators::pedersen_gens::ExtensionDegree,
+        range_parameters::RangeParameters,
         ristretto::create_pedersen_gens_with_extension_degree,
     };
 

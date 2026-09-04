@@ -26,8 +26,7 @@ pub struct RangeParameters<P: Compressable + Precomputable> {
 }
 
 impl<P> RangeParameters<P>
-where
-    P: FromUniformBytes + Compressable + Clone + Precomputable,
+where P: FromUniformBytes + Compressable + Clone + Precomputable
 {
     /// Initialize a new 'RangeParameters' with sanity checks
     pub fn init(
