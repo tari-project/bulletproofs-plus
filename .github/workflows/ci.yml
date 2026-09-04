@@ -1,0 +1,112 @@
+---
+name: CI
+
+'on':
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "ci-*"
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+concurrency:
+  # https://docs.github.com/en/actions/examples/using-concurrency-expressions-and-a-test-matrix
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions: {}
+
+jobs:
+  lints:
+    name: lints
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: toolchain (nightly, for rustfmt)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rustfmt
+      - name: toolchain (stable)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy
+      - name: Cache cargo files and outputs
+        uses: Swatinem/rust-cache@v2
+      - name: cargo format
+        run: cargo +nightly fmt --all -- --check
+      - name: Install cargo-lints
+        run: cargo +stable install cargo-lints --locked
+      - name: Clippy check (with lints)
+        run: cargo +stable lints clippy --all-targets --all-features
+      - name: cargo machete
+        run: |
+          cargo +stable install cargo-machete@0.7.0 --locked
+          cargo machete
+  test-debug:
+    name: cargo test (debug)
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Cache cargo files and outputs
+        uses: Swatinem/rust-cache@v2
+      - name: test/debug (all features)
+        run: cargo +stable test --all-features
+      - name: test/debug (no features)
+        run: cargo +stable test --no-default-features
+  test-release:
+    name: cargo test (release)
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Cache cargo files and outputs
+        uses: Swatinem/rust-cache@v2
+      - name: test/release (all features)
+        run: cargo +stable test --release --all-features
+      - name: test/release (no features)
+        run: cargo +stable test --release --no-default-features
+  wasm:
+    name: cargo build (WASM)
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - name: Cache cargo files and outputs
+        uses: Swatinem/rust-cache@v2
+      - name: build (WASM)
+        run: cargo +stable build --target=wasm32-unknown-unknown --no-default-features
+  docs:
+    name: cargo doc
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Cache cargo files and outputs
+        uses: Swatinem/rust-cache@v2
+      - name: Build documentation
+        run: RUSTDOCFLAGS="-D warnings" cargo +stable doc --no-deps
