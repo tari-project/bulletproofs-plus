@@ -45,11 +45,15 @@ pub struct BulletproofGens<P: Precomputable> {
     /// Number of values or parties
     pub party_capacity: usize,
     /// Precomputed \\(\mathbf G\\) generators for each party.
-    pub(crate) g_vec: Vec<Vec<P>>,
+    ///
+    /// These fields are private (along with `precomp`) to enforce the invariant that the precomputation tables are
+    /// only ever created alongside the generator vectors they were built from; `shares_precomp` relies on this to
+    /// treat pointer equality of the tables as proof that the generator vectors are identical.
+    g_vec: Vec<Vec<P>>,
     /// Precomputed \\(\mathbf H\\) generators for each party.
-    pub(crate) h_vec: Vec<Vec<P>>,
+    h_vec: Vec<Vec<P>>,
     /// Interleaved precomputed generators
-    pub(crate) precomp: Arc<P::Precomputation>,
+    precomp: Arc<P::Precomputation>,
 }
 
 // This manual `Clone` implementation is required since derived cloning requires the curve library precomputation struct
@@ -131,6 +135,46 @@ impl<P: FromUniformBytes + Precomputable> BulletproofGens<P> {
             party_idx: 0,
             gen_idx: 0,
         }
+    }
+
+    /// Return the interleaved precomputation tables.
+    pub(crate) fn precomp(&self) -> Arc<P::Precomputation> {
+        self.precomp.clone()
+    }
+
+    /// Returns `true` if `self` and `other` share the same precomputation tables.
+    ///
+    /// Because the tables are only ever created in [`BulletproofGens::new`] alongside the generator vectors they are
+    /// built from (enforced by field privacy), and cloning shares them, pointer equality guarantees the generator
+    /// vectors are identical without an element-wise comparison. A `false` result is inconclusive.
+    pub(crate) fn shares_precomp(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.precomp, &other.precomp)
+    }
+
+    /// Test-only read access to the per-party G generator vectors.
+    #[cfg(test)]
+    pub(crate) fn g_vec(&self) -> &[Vec<P>] {
+        &self.g_vec
+    }
+
+    /// Test-only read access to the per-party H generator vectors.
+    #[cfg(test)]
+    pub(crate) fn h_vec(&self) -> &[Vec<P>] {
+        &self.h_vec
+    }
+
+    /// Test-only mutable access to the per-party G generator vectors, for constructing intentionally mismatched
+    /// generators. Mutating generators whose precomputation tables are shared with another instance breaks the
+    /// invariant `shares_precomp` relies on, so tests must only mutate freshly created generators.
+    #[cfg(test)]
+    pub(crate) fn g_vec_mut(&mut self) -> &mut [Vec<P>] {
+        &mut self.g_vec
+    }
+
+    /// Test-only mutable access to the per-party H generator vectors; see [`BulletproofGens::g_vec_mut`].
+    #[cfg(test)]
+    pub(crate) fn h_vec_mut(&mut self) -> &mut [Vec<P>] {
+        &mut self.h_vec
     }
 }
 

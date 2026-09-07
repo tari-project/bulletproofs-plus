@@ -37,7 +37,8 @@ static EXTRACT_MASKS: [VerifyAction; 1] = [VerifyAction::VerifyOnly];
 // static BATCHED_SIZES: [usize; 9] = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 // static BIT_LENGTHS: [usize; 3] = [8, 16, 32];
 // static EXTENSION_DEGREE: [ExtensionDegree; 3] = [ExtensionDegree::Zero, ExtensionDegree::Two, ExtensionDegree::Four];
-// static EXTRACT_MASKS: [VerifyAction; 2] =  [VerifyAction::VerifyOnly, VerifyAction::RecoverOnly];
+// static EXTRACT_MASKS: [VerifyAction; 3] =
+//     [VerifyAction::VerifyOnly, VerifyAction::RecoverOnly, VerifyAction::RecoverAndVerify];
 
 #[allow(clippy::arithmetic_side_effects)]
 fn create_aggregated_rangeproof_helper(bit_length: usize, extension_degree: ExtensionDegree, c: &mut Criterion) {

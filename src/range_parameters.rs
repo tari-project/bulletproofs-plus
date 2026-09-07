@@ -109,7 +109,13 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
 
     /// Return the interleaved precomputation tables
     pub fn precomp(&self) -> Arc<P::Precomputation> {
-        self.bp_gens.precomp.clone()
+        self.bp_gens.precomp()
+    }
+
+    /// Returns `true` if `self` and `other` are known to share the same underlying generator data; see
+    /// [`BulletproofGens::shares_precomp`]. A `false` result is inconclusive.
+    pub(crate) fn shares_generator_data(&self, other: &Self) -> bool {
+        self.bp_gens.shares_precomp(&other.bp_gens)
     }
 }
 

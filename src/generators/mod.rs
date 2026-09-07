@@ -30,7 +30,7 @@ mod tests {
         let helper = |n: usize, m: usize| {
             let agg_g: Vec<RistrettoPoint> = gens.g_iter(n, m).copied().collect();
             let flat_g: Vec<RistrettoPoint> = gens
-                .g_vec
+                .g_vec()
                 .iter()
                 .take(m)
                 .flat_map(move |g_j| g_j.iter().take(n))
@@ -39,7 +39,7 @@ mod tests {
 
             let agg_h: Vec<RistrettoPoint> = gens.h_iter(n, m).copied().collect();
             let flat_h: Vec<RistrettoPoint> = gens
-                .h_vec
+                .h_vec()
                 .iter()
                 .take(m)
                 .flat_map(move |h_j| h_j.iter().take(n))
