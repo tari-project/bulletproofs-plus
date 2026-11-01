@@ -8,7 +8,7 @@
 use alloc::{string::ToString, vec, vec::Vec};
 use core::{
     convert::{TryFrom, TryInto},
-    iter::{once, repeat_n},
+    iter::once,
     marker::PhantomData,
     ops::{Add, Mul, Shr},
 };
@@ -367,15 +367,13 @@ where
                 Scalar::random_not_zero(range_proof_transcript.as_mut_rng())
             });
         }
-        let padding = compute_generator_padding(
+        let _padding = compute_generator_padding(
             statement.generators.bit_length(),
             statement.commitments.len(),
             statement.generators.max_aggregation_factor(),
         )?;
         let a = statement.generators.precomp().vartime_mixed_multiscalar_mul(
-            a_li.iter()
-                .interleave(a_ri.iter())
-                .chain(repeat_n(&Scalar::ZERO, padding)),
+            a_li.iter().interleave(a_ri.iter()),
             alpha.iter(),
             statement.generators.g_bases().iter(),
         );
@@ -1095,10 +1093,8 @@ where
         dynamic_scalars.push(h_base_scalar);
         dynamic_points.push(h_base.clone());
 
-        // Compute the generator padding for the precomputed evaluation. This also guards against any statement's
-        // commitments exceeding the generators' aggregation capacity, so it must run regardless of which multiscalar
-        // multiplication strategy is chosen below
-        let padding = compute_generator_padding(
+        // Validate that no statement's commitments exceed the generators' aggregation capacity
+        let _padding = compute_generator_padding(
             max_statement.generators.bit_length(),
             max_statement.commitments.len(),
             max_statement.generators.max_aggregation_factor(),
@@ -1123,10 +1119,7 @@ where
             ) == P::identity()
         } else {
             precomp.vartime_mixed_multiscalar_mul(
-                gi_base_scalars
-                    .iter()
-                    .interleave(hi_base_scalars.iter())
-                    .chain(repeat_n(&Scalar::ZERO, padding)),
+                gi_base_scalars.iter().interleave(hi_base_scalars.iter()),
                 dynamic_scalars.iter(),
                 dynamic_points.iter(),
             ) == P::identity()
