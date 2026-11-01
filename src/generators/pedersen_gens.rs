@@ -111,7 +111,10 @@ where P: Compressable + MultiscalarMul<Point = P> + Clone
     /// Creates a Pedersen commitment using the value scalar and a blinding factor vector
     pub fn commit<T>(&self, value: &T, blindings: &[T]) -> Result<P, ProofError>
     where for<'a> &'a T: Borrow<Scalar> {
-        if blindings.is_empty() || blindings.len() > self.extension_degree as usize {
+        if blindings.is_empty() ||
+            blindings.len() > self.extension_degree as usize ||
+            blindings.len() > self.g_base_vec.len()
+        {
             Err(ProofError::InvalidLength("blinding vector".to_string()))
         } else {
             let scalars = once(value).chain(blindings);
@@ -126,7 +129,10 @@ where P: Compressable + MultiscalarMul<Point = P> + Clone
 mod test {
     use core::convert::TryFrom;
 
+    use curve25519_dalek::Scalar;
+
     use super::ExtensionDegree;
+    use crate::ristretto::create_pedersen_gens_with_extension_degree;
 
     #[test]
     // Test the size range, assuming extension degree values are incremented
@@ -141,5 +147,13 @@ mod test {
 
         // Value is too high
         assert!(ExtensionDegree::try_from(ExtensionDegree::MAXIMUM + 1).is_err());
+    }
+
+    #[test]
+    fn test_commit_rejects_truncated_g_base_vec() {
+        let mut pc_gens = create_pedersen_gens_with_extension_degree(ExtensionDegree::AddTwoBasePoints);
+        pc_gens.g_base_vec.truncate(1);
+        let blindings = [Scalar::ONE, Scalar::ONE];
+        assert!(pc_gens.commit(&Scalar::ONE, &blindings).is_err());
     }
 }

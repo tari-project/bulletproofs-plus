@@ -19,6 +19,10 @@ impl<'a, P> Iterator for AggregatedGensIter<'a, P> {
     type Item = &'a P;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.n == 0 {
+            return None;
+        }
+
         if self.gen_idx >= self.n {
             self.gen_idx = 0;
             self.party_idx = self.party_idx.checked_add(1)?;
@@ -34,10 +38,13 @@ impl<'a, P> Iterator for AggregatedGensIter<'a, P> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.n == 0 || self.party_idx >= self.m {
+            return (0, Some(0));
+        }
         let size = self
             .n
             .saturating_mul(self.m.saturating_sub(self.party_idx))
-            .saturating_sub(self.gen_idx);
+            .saturating_sub(self.gen_idx.min(self.n));
         (size, Some(size))
     }
 }

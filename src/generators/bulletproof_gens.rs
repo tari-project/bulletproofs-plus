@@ -184,11 +184,38 @@ where
     P::Compressed: Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("RangeParameters")
+        f.debug_struct("BulletproofGens")
             .field("gens_capacity", &self.gens_capacity)
             .field("party_capacity", &self.party_capacity)
             .field("g_vec", &self.g_vec)
             .field("h_vec", &self.h_vec)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::format;
+
+    use curve25519_dalek::RistrettoPoint;
+
+    use super::*;
+
+    #[test]
+    fn test_zero_generator_iter_is_empty() {
+        let gens = BulletproofGens::<RistrettoPoint>::new(4, 4).unwrap();
+        let mut g_iter = gens.g_iter(0, 4);
+        assert_eq!(g_iter.size_hint(), (0, Some(0)));
+        assert_eq!(g_iter.next(), None);
+
+        let mut h_iter = gens.h_iter(0, 4);
+        assert_eq!(h_iter.size_hint(), (0, Some(0)));
+        assert_eq!(h_iter.next(), None);
+    }
+
+    #[test]
+    fn test_debug_struct_name() {
+        let gens = BulletproofGens::<RistrettoPoint>::new(1, 1).unwrap();
+        assert!(format!("{gens:?}").starts_with("BulletproofGens"));
     }
 }
