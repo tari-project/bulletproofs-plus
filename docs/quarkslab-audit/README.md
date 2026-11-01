@@ -41,8 +41,7 @@ Developers are in the process of testing an updated version of the fork, in orde
 
 Further, an open [upstream pull request](https://github.com/dalek-cryptography/curve25519-dalek/pull/546) would add partial precomputation support; if it is accepted, the implementation could change its curve library dependency to upstream.
 
-*Update*: The library has removed support for partial precomputation in favor of a different design.
-As a result, the curve library dependency has been changed to upstream.
+*Update*: Upstream `curve25519-dalek` (`5.0.0`) now natively supports partial precomputation, and the library uses the upstream dependency directly without generator zero-padding.
 
 ## `INFO 2`
 
