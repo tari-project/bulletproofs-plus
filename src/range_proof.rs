@@ -796,6 +796,96 @@ where
         Ok(masks)
     }
 
+    /// Verify a batch of proofs, and if verification fails, perform a binary search to identify the first failing
+    /// proof in the batch and return `Err(Some(index))`. If the batch is malformed (e.g., empty, mismatched slice
+    /// lengths, or cross-statement generator inconsistency where no individual proof fails), returns `Err(None)`.
+    ///
+    /// When initial verification of the full batch fails, this performs $O(\log N)$ subsequent batch verifications.
+    pub fn verify_batch_with_first_blame(
+        transcripts: &mut [Transcript],
+        statements: &[RangeStatement<P>],
+        proofs: &[RangeProof<P>],
+        action: VerifyAction,
+    ) -> Result<Vec<Option<ExtendedMask>>, Option<usize>> {
+        if statements.is_empty() || statements.len() != proofs.len() || transcripts.len() != statements.len() {
+            return Err(None);
+        }
+
+        let original_transcripts = transcripts.to_vec();
+        if let Ok(masks) = Self::verify_batch(transcripts, statements, proofs, action) {
+            return Ok(masks);
+        }
+
+        let mut left = 0usize;
+        let mut right = proofs.len();
+
+        while right.saturating_sub(left) > 1 {
+            let mid = left.saturating_add(right.saturating_sub(left) / 2);
+            let mut sub_transcripts = original_transcripts.get(left..mid).ok_or(None)?.to_vec();
+            let sub_statements = statements.get(left..mid).ok_or(None)?;
+            let sub_proofs = proofs.get(left..mid).ok_or(None)?;
+
+            if Self::verify_batch(&mut sub_transcripts, sub_statements, sub_proofs, action).is_err() {
+                right = mid;
+            } else {
+                left = mid;
+            }
+        }
+
+        let mut single_transcript = original_transcripts.get(left..=left).ok_or(None)?.to_vec();
+        let single_statement = statements.get(left..=left).ok_or(None)?;
+        let single_proof = proofs.get(left..=left).ok_or(None)?;
+        if Self::verify_batch(&mut single_transcript, single_statement, single_proof, action).is_err() {
+            Err(Some(left))
+        } else {
+            Err(None)
+        }
+    }
+
+    /// Verify a batch of proofs, and if verification fails, verify each proof in the batch individually and return
+    /// `Err(Some(indices))` containing the indices of all failing proofs. If the batch is malformed (e.g., empty,
+    /// mismatched slice lengths, or cross-statement generator inconsistency where no individual proof fails), returns
+    /// `Err(None)`.
+    ///
+    /// When initial verification of the full batch fails, this performs $O(N)$ subsequent single-proof verifications.
+    pub fn verify_batch_with_full_blame(
+        transcripts: &mut [Transcript],
+        statements: &[RangeStatement<P>],
+        proofs: &[RangeProof<P>],
+        action: VerifyAction,
+    ) -> Result<Vec<Option<ExtendedMask>>, Option<Vec<usize>>> {
+        if statements.is_empty() || statements.len() != proofs.len() || transcripts.len() != statements.len() {
+            return Err(None);
+        }
+
+        let mut original_transcripts = transcripts.to_vec();
+        if let Ok(masks) = Self::verify_batch(transcripts, statements, proofs, action) {
+            return Ok(masks);
+        }
+
+        let mut failures = Vec::new();
+        for (index, (transcript, statement, proof)) in
+            izip!(original_transcripts.iter_mut(), statements.iter(), proofs.iter()).enumerate()
+        {
+            if Self::verify_batch(
+                core::slice::from_mut(transcript),
+                core::slice::from_ref(statement),
+                core::slice::from_ref(proof),
+                action,
+            )
+            .is_err()
+            {
+                failures.push(index);
+            }
+        }
+
+        if failures.is_empty() {
+            return Err(None);
+        }
+
+        Err(Some(failures))
+    }
+
     // Verify a batch of single and/or aggregated range proofs as a public entity, or recover the masks for single
     // range proofs by a party that can supply the optional seed nonces
     fn verify(
@@ -2131,5 +2221,129 @@ mod tests {
                 usize::try_from(i.ilog2()).unwrap()
             );
         }
+    }
+
+    #[test]
+    fn test_verify_batch_with_blame() {
+        let mut rng = ChaCha12Rng::seed_from_u64(8675309);
+        let params = RangeParameters::init(
+            4,
+            1,
+            create_pedersen_gens_with_extension_degree(ExtensionDegree::DefaultPedersen),
+        )
+        .unwrap();
+        let witness = RangeWitness::init(vec![CommitmentOpening::new(1u64, vec![Scalar::ONE])]).unwrap();
+        let statement = RangeStatement::init(
+            params.clone(),
+            vec![params.pc_gens().commit(&Scalar::ONE, &[Scalar::ONE]).unwrap()],
+            vec![None],
+            None,
+        )
+        .unwrap();
+        let valid_proof =
+            RangeProof::prove_with_rng(&mut Transcript::new(b"Test"), &statement, &witness, &mut rng).unwrap();
+        let mut bad_proof = valid_proof.clone();
+        bad_proof.r1 += Scalar::ONE;
+
+        // 1. Valid batch succeeds in both functions
+        let n = 7usize;
+        let statements = vec![statement.clone(); n];
+        let proofs = vec![valid_proof.clone(); n];
+        let mut transcripts = vec![Transcript::new(b"Test"); n];
+        assert!(
+            RangeProof::verify_batch_with_first_blame(
+                &mut transcripts,
+                &statements,
+                &proofs,
+                VerifyAction::VerifyOnly,
+            )
+            .is_ok()
+        );
+        let mut transcripts = vec![Transcript::new(b"Test"); n];
+        assert!(
+            RangeProof::verify_batch_with_full_blame(
+                &mut transcripts,
+                &statements,
+                &proofs,
+                VerifyAction::VerifyOnly,
+            )
+            .is_ok()
+        );
+
+        // 2. Single failing proof at every position 0..n (including first, middle, and last index)
+        for bad_idx in 0..n {
+            let mut proofs_one_bad = vec![valid_proof.clone(); n];
+            proofs_one_bad[bad_idx] = bad_proof.clone();
+
+            let mut transcripts = vec![Transcript::new(b"Test"); n];
+            assert_eq!(
+                RangeProof::verify_batch_with_first_blame(
+                    &mut transcripts,
+                    &statements,
+                    &proofs_one_bad,
+                    VerifyAction::VerifyOnly,
+                ),
+                Err(Some(bad_idx))
+            );
+
+            let mut transcripts = vec![Transcript::new(b"Test"); n];
+            assert_eq!(
+                RangeProof::verify_batch_with_full_blame(
+                    &mut transcripts,
+                    &statements,
+                    &proofs_one_bad,
+                    VerifyAction::VerifyOnly,
+                ),
+                Err(Some(vec![bad_idx]))
+            );
+        }
+
+        // 3. Multiple failing proofs: first_blame identifies the first index, full_blame identifies all indices
+        let mut proofs_multi_bad = vec![valid_proof.clone(); n];
+        proofs_multi_bad[2] = bad_proof.clone();
+        proofs_multi_bad[5] = bad_proof.clone();
+        proofs_multi_bad[6] = bad_proof;
+
+        let mut transcripts = vec![Transcript::new(b"Test"); n];
+        assert_eq!(
+            RangeProof::verify_batch_with_first_blame(
+                &mut transcripts,
+                &statements,
+                &proofs_multi_bad,
+                VerifyAction::VerifyOnly,
+            ),
+            Err(Some(2))
+        );
+
+        let mut transcripts = vec![Transcript::new(b"Test"); n];
+        assert_eq!(
+            RangeProof::verify_batch_with_full_blame(
+                &mut transcripts,
+                &statements,
+                &proofs_multi_bad,
+                VerifyAction::VerifyOnly,
+            ),
+            Err(Some(vec![2, 5, 6]))
+        );
+
+        // 4. Empty or mismatched slice lengths return Err(None)
+        assert_eq!(
+            RangeProof::<RistrettoPoint>::verify_batch_with_first_blame(
+                &mut [],
+                &[],
+                &[],
+                VerifyAction::VerifyOnly,
+            ),
+            Err(None)
+        );
+        assert_eq!(
+            RangeProof::verify_batch_with_full_blame(
+                &mut [Transcript::new(b"Test")],
+                &statements,
+                &proofs,
+                VerifyAction::VerifyOnly,
+            ),
+            Err(None)
+        );
     }
 }
