@@ -65,8 +65,8 @@ impl TranscriptProtocol for Transcript {
     }
 
     fn challenge_scalar(&mut self, label: &'static [u8]) -> Result<Scalar, ProofError> {
-        let mut buf = [0u8; 64];
-        self.challenge_bytes(label, &mut buf);
+        let mut buf = zeroize::Zeroizing::new([0u8; 64]);
+        self.challenge_bytes(label, buf.as_mut_slice());
         let value = Scalar::from_bytes_mod_order_wide(&buf);
         if value == Scalar::ZERO {
             Err(ProofError::VerificationFailed(
