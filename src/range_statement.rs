@@ -60,7 +60,7 @@ impl<P: Compressable + FromUniformBytes + Clone + Precomputable> RangeStatement<
             ));
         }
         let mut commitments_compressed = Vec::with_capacity(commitments.len());
-        for item in commitments.clone() {
+        for item in &commitments {
             commitments_compressed.push(item.compress());
         }
         Ok(Self {

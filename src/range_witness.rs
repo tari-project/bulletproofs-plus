@@ -22,6 +22,11 @@ pub struct RangeWitness {
 impl RangeWitness {
     /// Construct a new 'RangeWitness'
     pub fn init(openings: Vec<CommitmentOpening>) -> Result<RangeWitness, ProofError> {
+        if !openings.len().is_power_of_two() {
+            return Err(ProofError::InvalidLength(
+                "Number of openings must be a power of two".to_string(),
+            ));
+        }
         let first_opening = openings
             .first()
             .ok_or(ProofError::InvalidLength("Vector openings cannot be empty".to_string()))?;
@@ -59,6 +64,14 @@ mod test {
         let openings = vec![
             CommitmentOpening::new(1u64, vec![s]),
             CommitmentOpening::new(1u64, vec![s, s]),
+        ];
+        assert!(RangeWitness::init(openings).is_err());
+
+        // Non-power-of-two openings length
+        let openings = vec![
+            CommitmentOpening::new(1u64, vec![s]),
+            CommitmentOpening::new(1u64, vec![s]),
+            CommitmentOpening::new(1u64, vec![s]),
         ];
         assert!(RangeWitness::init(openings).is_err());
     }

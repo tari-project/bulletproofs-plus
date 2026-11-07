@@ -50,6 +50,12 @@ where P: FromUniformBytes + Compressable + Clone + Precomputable
                 MAX_RANGE_PROOF_BIT_LENGTH
             )));
         }
+        let deg = pc_gens.extension_degree as usize;
+        if pc_gens.g_base_vec.len() != deg || pc_gens.g_base_compressed_vec.len() != deg {
+            return Err(ProofError::InvalidLength(
+                "PedersenGens base vectors must match extension_degree".to_string(),
+            ));
+        }
 
         Ok(Self {
             bp_gens: BulletproofGens::new(bit_length, max_aggregation_factor)?,
