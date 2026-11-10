@@ -69,8 +69,8 @@ pub fn create_pedersen_gens_with_extension_degree(extension_degree: ExtensionDeg
     PedersenGens {
         h_base: RISTRETTO_BASEPOINT_POINT,
         h_base_compressed: RISTRETTO_BASEPOINT_COMPRESSED,
-        g_base_vec: g_base_vec[..].to_owned(),
-        g_base_compressed_vec: g_base_compressed_vec[..].to_owned(),
+        g_base_vec,
+        g_base_compressed_vec,
         extension_degree,
     }
 }
@@ -173,5 +173,26 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_fixed_bytes_and_compression_traits_roundtrip() {
+        let point = RistrettoPoint::hash_from_bytes_sha3_512(b"ristretto-trait-roundtrip");
+        let compressed = <RistrettoPoint as Compressable>::compress(&point);
+        let bytes = *<CompressedRistretto as FixedBytesRepr>::as_fixed_bytes(&compressed);
+        let restored_compressed = <CompressedRistretto as FixedBytesRepr>::from_fixed_bytes(bytes);
+        assert_eq!(compressed, restored_compressed);
+        assert_eq!(
+            <CompressedRistretto as Decompressable>::decompress(&restored_compressed),
+            Some(point)
+        );
+
+        let uniform = [0x5Au8; 64];
+        let p1 = <RistrettoPoint as FromUniformBytes>::from_uniform_bytes(&uniform);
+        assert_ne!(p1, RistrettoPoint::identity());
+        assert!(
+            <CompressedRistretto as Decompressable>::decompress(&CompressedRistretto::from_fixed_bytes([0xFFu8; 32]))
+                .is_none()
+        );
     }
 }
