@@ -89,12 +89,7 @@ where
 
         // Serialize the witness if provided
         let bytes = if let Some(witness) = witness {
-            #[allow(clippy::arithmetic_side_effects)]
-            let size: usize = witness
-                .openings
-                .iter()
-                .map(|o| size_of::<u64>() + o.r.len() * size_of::<Scalar>())
-                .sum();
+            let size = checked_witness_bytes_capacity(witness.openings.iter().map(|o| o.r.len()))?;
             let mut witness_bytes = Zeroizing::new(Vec::<u8>::with_capacity(size));
             for opening in &witness.openings {
                 witness_bytes.extend(opening.v.to_le_bytes());
@@ -197,5 +192,29 @@ where
     /// This is suitable for passing into functions that use it to generate random data.
     pub(crate) fn as_mut_rng(&mut self) -> &mut TranscriptRng {
         &mut self.transcript_rng
+    }
+}
+
+pub(crate) fn checked_witness_bytes_capacity<I>(r_lengths: I) -> Result<usize, ProofError>
+where I: IntoIterator<Item = usize> {
+    r_lengths.into_iter().try_fold(0usize, |acc, r_len| {
+        let r_bytes = r_len.checked_mul(size_of::<Scalar>()).ok_or(ProofError::SizeOverflow)?;
+        let opening_bytes = size_of::<u64>().checked_add(r_bytes).ok_or(ProofError::SizeOverflow)?;
+        acc.checked_add(opening_bytes).ok_or(ProofError::SizeOverflow)
+    })
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_checked_witness_bytes_capacity() {
+        assert_eq!(checked_witness_bytes_capacity([1usize, 2usize]), Ok((8 + 32) + (8 + 64)));
+        assert_eq!(checked_witness_bytes_capacity([usize::MAX]), Err(ProofError::SizeOverflow));
+        assert_eq!(
+            checked_witness_bytes_capacity([usize::MAX / size_of::<Scalar>(), 1]),
+            Err(ProofError::SizeOverflow)
+        );
     }
 }

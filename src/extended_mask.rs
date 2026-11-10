@@ -11,7 +11,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::{errors::ProofError, generators::pedersen_gens::ExtensionDegree};
 
 /// Contains the embedded extended mask for non-aggregated proofs
-#[derive(Debug, PartialEq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct ExtendedMask {
     blindings: Vec<Scalar>, // Do not allow direct assignment of struct member (i.e. should not be public)
 }
