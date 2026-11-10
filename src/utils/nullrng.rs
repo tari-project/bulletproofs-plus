@@ -11,6 +11,7 @@ use zeroize::Zeroize;
 /// This is a null random number generator that exists only for deterministic transcript-based weight generation.
 /// It only produces zero.
 /// This is DANGEROUS in general; don't use this for any other purpose!
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct NullRng;
 
 impl TryRng for NullRng {
@@ -69,5 +70,19 @@ mod test {
         assert_eq!(rng.next_u32(), 0);
         assert_eq!(rng.next_u64(), 0);
         assert_eq!(rng.next_u64(), 0);
+    }
+
+    #[test]
+    fn test_empty_and_large_buffer_zeroization() {
+        let mut rng = NullRng;
+        let copy_rng = rng;
+        assert_eq!(rng, copy_rng);
+
+        let mut empty: [u8; 0] = [];
+        rng.try_fill_bytes(&mut empty).unwrap();
+
+        let mut large = [0xFFu8; 128];
+        rng.fill_bytes(&mut large);
+        assert_eq!(large, [0u8; 128]);
     }
 }
